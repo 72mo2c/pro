@@ -198,6 +198,7 @@ const Sidebar = ({ isOpen, closeSidebar }) => {
       color: 'from-green-500 to-green-600',
       subItems: [
         { title: 'فاتورة جديدة', icon: <FaPlus />, path: '/purchases/new-invoice' },
+        { title: 'فاتورة ذكية', icon: <FaCalculator />, path: '/purchases/smart-invoice' },
         { title: 'سجل الفواتير', icon: <FaList />, path: '/purchases/invoices' },
         { title: 'إدارة الفواتير', icon: <FaFileInvoice />, path: '/purchases/manage' },
         { title: 'مرتجعات المشتريات', icon: <FaUndo />, path: '/purchases/returns' },

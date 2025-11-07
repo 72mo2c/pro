@@ -24,6 +24,7 @@ import ShippingManagement from '../../pages/Warehouses/ShippingManagement';
 
 // Purchases
 import NewPurchaseInvoice from '../../pages/Purchases/NewPurchaseInvoice';
+import SmartPurchaseInvoice from '../../pages/Purchases/SmartPurchaseInvoice';
 import PurchaseInvoices from '../../pages/Purchases/PurchaseInvoices';
 import ManagePurchaseInvoices from '../../pages/Purchases/ManagePurchaseInvoices';
 import NewPurchaseReturn from '../../pages/Purchases/NewPurchaseReturn';
@@ -137,6 +138,7 @@ const getComponentForPath = (path) => {
     
     // Purchases
     '/purchases/new-invoice': NewPurchaseInvoice,
+    '/purchases/smart-invoice': SmartPurchaseInvoice,
     '/purchases/invoices': PurchaseInvoices,
     '/purchases/manage': ManagePurchaseInvoices,
     '/purchases/returns': PurchaseReturns,
