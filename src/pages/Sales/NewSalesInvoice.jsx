@@ -248,9 +248,16 @@ const NewSalesInvoice = () => {
     }
   };
 
-  const filteredCustomers = customers.filter(c =>
-    c.name.toLowerCase().includes(customerSearch.toLowerCase())
-  );
+  const filteredCustomers = customers.filter(c => {
+    const searchTerm = customerSearch.toLowerCase().trim();
+    const customerName = c.name ? c.name.toLowerCase() : '';
+    const customerPhone = c.phone ? c.phone.toLowerCase() : '';
+    const customerPhone1 = c.phone1 ? c.phone1.toLowerCase() : '';
+    
+    return customerName.includes(searchTerm) || 
+           customerPhone.includes(searchTerm) || 
+           customerPhone1.includes(searchTerm);
+  });
 
   // البحث في المنتجات
   const handleProductSearch = (index, value) => {
@@ -707,7 +714,7 @@ const NewSalesInvoice = () => {
                     onChange={(e) => handleCustomerSearch(e.target.value)}
                     onBlur={handleCustomerBlur}
                     className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="ابحث عن العميل..."
+                    placeholder="ابحث بالاسم أو رقم الهاتف..."
                   />
                   <FaSearch className="absolute left-2 top-2.5 text-gray-400 text-xs" />
                 </div>
@@ -730,7 +737,16 @@ const NewSalesInvoice = () => {
                     >
                       <div className="flex justify-between items-center">
                         <span className="font-semibold text-sm text-gray-800">{customer.name}</span>
-                        <span className="text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded">{customer.phone}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded">
+                            {customer.phone || customer.phone1}
+                          </span>
+                          {customer.balance && (
+                            <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded">
+                              رصيد: {customer.balance.toFixed(2)} ج.م
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))}
