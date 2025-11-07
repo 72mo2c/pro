@@ -313,37 +313,38 @@ const SmartSalesInvoice = () => {
 
         <form onSubmit={handleSubmit} className="p-4">
           {/* معلومات الفاتورة */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            {/* العميل */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">العميل *</label>
-              <div className="relative">
-                <input
-                  ref={customerInputRef}
-                  type="text"
-                  value={customerSearch}
-                  onChange={(e) => {
-                    setCustomerSearch(e.target.value);
-                    setShowCustomerSuggestions(true);
-                  }}
-                  onFocus={() => setShowCustomerSuggestions(true)}
-                  onBlur={() => setTimeout(() => setShowCustomerSuggestions(false), 200)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-orange-500"
-                  placeholder="البحث عن عميل..."
-                />
-                {showCustomerSuggestions && filteredCustomers.length > 0 && (
-                  <div className="absolute z-10 w-full bg-white border border-gray-200 rounded shadow-lg mt-1 max-h-48 overflow-y-auto">
-                    {filteredCustomers.map(customer => (
-                      <div
-                        key={customer.id}
-                        onClick={() => {
-                          setFormData({...formData, customerId: customer.id});
-                          setCustomerSearch(customer.name);
-                          setShowCustomerSuggestions(false);
-                        }}
-                        className="px-3 py-2 hover:bg-gray-50 cursor-pointer border-b last:border-b-0"
-                      >
-                        <div className="font-medium">{customer.name}</div>
+          <div className="mb-6">
+            <div className="grid grid-cols-8 gap-3 items-end">
+              {/* العميل */}
+              <div className="col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">العميل *</label>
+                <div className="relative">
+                  <input
+                    ref={customerInputRef}
+                    type="text"
+                    value={customerSearch}
+                    onChange={(e) => {
+                      setCustomerSearch(e.target.value);
+                      setShowCustomerSuggestions(true);
+                    }}
+                    onFocus={() => setShowCustomerSuggestions(true)}
+                    onBlur={() => setTimeout(() => setShowCustomerSuggestions(false), 200)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-orange-500"
+                    placeholder="البحث عن عميل..."
+                  />
+                  {showCustomerSuggestions && filteredCustomers.length > 0 && (
+                    <div className="absolute z-10 w-full bg-white border border-gray-200 rounded shadow-lg mt-1 max-h-48 overflow-y-auto">
+                      {filteredCustomers.map(customer => (
+                        <div
+                          key={customer.id}
+                          onClick={() => {
+                            setFormData({...formData, customerId: customer.id});
+                            setCustomerSearch(customer.name);
+                            setShowCustomerSuggestions(false);
+                          }}
+                          className="px-3 py-2 hover:bg-gray-50 cursor-pointer border-b last:border-b-0"
+                        >
+                          <div className="font-medium">{customer.name}</div>
                         <div className="text-sm text-gray-500">
                           رصيد: {customer.balance || 0} ج.م
                         </div>
@@ -355,6 +356,60 @@ const SmartSalesInvoice = () => {
               {validationErrors.customerId && (
                 <p className="text-red-500 text-xs mt-1">{validationErrors.customerId}</p>
               )}
+            </div>
+
+            {/* نوع الفاتورة */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">نوع الفاتورة *</label>
+              <select
+                value={formData.paymentType}
+                onChange={(e) => setFormData({...formData, paymentType: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-orange-500"
+                required
+              >
+                <option value="main">اختر نوع الفاتورة</option>
+                <option value="cash">نقدي</option>
+                <option value="deferred">آجل</option>
+                <option value="partial">جزئي</option>
+              </select>
+            </div>
+
+            {/* الشاحنة */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">الشاحنة</label>
+              <select
+                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-orange-500"
+              >
+                <option value="">اختر الشاحنة</option>
+                <option value="vehicle1">شاحنة كبيرة - أ 1234 ب</option>
+                <option value="vehicle2">فان - ج 5678 د</option>
+                <option value="vehicle3">شاحنة صغيرة - ه 9012 و</option>
+              </select>
+            </div>
+
+            {/* نوع البيع */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">نوع البيع</label>
+              <select
+                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-orange-500"
+              >
+                <option value="retail">البيع المباشر</option>
+                <option value="wholesale">الجملة</option>
+                <option value="bulk">جملة الجملة</option>
+              </select>
+            </div>
+
+            {/* الوكيل/المندوب */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">الوكيل/المندوب</label>
+              <select
+                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-orange-500"
+              >
+                <option value="">اختر الوكيل</option>
+                <option value="general">عام</option>
+                <option value="fatora">فاتورة</option>
+                <option value="kartona">كرتونة</option>
+              </select>
             </div>
 
             {/* التاريخ */}
@@ -369,7 +424,7 @@ const SmartSalesInvoice = () => {
               />
             </div>
 
-            {/* وقت */}
+            {/* الوقت */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">الوقت *</label>
               <input
@@ -380,7 +435,7 @@ const SmartSalesInvoice = () => {
                 required
               />
             </div>
-          </div>
+            </div>
 
           {/* عرض رصيد العميل */}
           {getSelectedCustomerBalance() !== null && (

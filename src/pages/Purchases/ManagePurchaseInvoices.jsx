@@ -197,22 +197,20 @@ const ManagePurchaseInvoices = () => {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-gradient-to-r from-gray-50 to-blue-50 border-b">
-                <th className="px-3 py-3 text-right text-xs font-bold text-gray-700">رقم الفاتورة</th>
-                <th className="px-3 py-3 text-right text-xs font-bold text-gray-700">المورد</th>
-                <th className="px-3 py-3 text-center text-xs font-bold text-gray-700">التاريخ</th>
-                <th className="px-3 py-3 text-center text-xs font-bold text-gray-700">نوع الدفع</th>
-                <th className="px-3 py-3 text-center text-xs font-bold text-gray-700">المجموع الكلي</th>
-                <th className="px-3 py-3 text-center text-xs font-bold text-gray-700">المدفوع / المتبقي</th>
-                <th className="px-3 py-3 text-center text-xs font-bold text-gray-700">المنتجات</th>
-                <th className="px-3 py-3 text-center text-xs font-bold text-gray-700">الحالة</th>
-                <th className="px-3 py-3 text-center text-xs font-bold text-gray-700">الإجراءات</th>
+              <tr className="bg-gray-100 border-b">
+                <th className="px-3 py-2 text-right text-xs font-semibold text-gray-700">رقم الفاتورة</th>
+                <th className="px-3 py-2 text-right text-xs font-semibold text-gray-700">المورد</th>
+                <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700">التاريخ</th>
+                <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700">نوع الدفع</th>
+                <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700">المجموع</th>
+                <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700">عدد المنتجات</th>
+                <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700">الإجراءات</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {filteredInvoices.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="px-3 py-8 text-center text-gray-500">
+                  <td colSpan="7" className="px-3 py-8 text-center text-gray-500">
                     <FaFileInvoice className="mx-auto mb-2 text-3xl text-gray-300" />
                     <p>لا توجد فواتير</p>
                   </td>
@@ -221,132 +219,74 @@ const ManagePurchaseInvoices = () => {
                 filteredInvoices.map((invoice) => {
                   const supplier = suppliers.find(s => s.id === parseInt(invoice.supplierId));
                   return (
-                    <tr key={invoice.id} className="hover:bg-blue-50 transition-colors">
-                      <td className="px-3 py-3 font-semibold text-blue-600">
-                        <div className="text-lg">#{invoice.id}</div>
-                        <div className="text-xs text-gray-500">
-                          {new Date(invoice.date).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
-                        </div>
+                    <tr key={invoice.id} className="hover:bg-gray-50">
+                      <td className="px-3 py-2 font-semibold text-blue-600">
+                        #{invoice.id}
                       </td>
-                      <td className="px-3 py-3">
-                        <div className="font-semibold text-gray-800">{supplier?.name || 'غير محدد'}</div>
-                        <div className="text-xs text-gray-500 mt-1">
-                          {supplier?.phone && <span>📞 {supplier.phone}</span>}
-                          {supplier?.email && <span className="mr-2">✉️ {supplier.email}</span>}
-                        </div>
-                        {/* عرض رصيد المورد */}
-                        {invoice.paymentType === 'deferred' && (
-                          <div className="text-xs text-orange-600 mt-1">
-                            الرصيد الحالي: {formatCurrency(invoice.remaining || 0)}
-                          </div>
-                        )}
+                      <td className="px-3 py-2">
+                        <div className="font-medium">{supplier?.name || 'غير محدد'}</div>
+                        <div className="text-xs text-gray-500">{supplier?.phone || '-'}</div>
                       </td>
-                      <td className="px-3 py-3 text-center">
-                        <div className="font-semibold text-gray-700">
-                          {new Date(invoice.date).toLocaleDateString('ar-EG')}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {new Date(invoice.date).toLocaleDateString('ar-EG', { weekday: 'long' })}
-                        </div>
+                      <td className="px-3 py-2 text-center">
+                        {new Date(invoice.date).toLocaleDateString('ar-EG')}
                       </td>
-                      <td className="px-3 py-3 text-center">
-                        <span className={`px-3 py-2 rounded-full text-xs font-semibold shadow-sm ${
-                          invoice.paymentType === 'cash' ? 'bg-green-100 text-green-700 border border-green-200' :
-                          invoice.paymentType === 'deferred' ? 'bg-yellow-100 text-yellow-700 border border-yellow-200' :
-                          'bg-blue-100 text-blue-700 border border-blue-200'
+                      <td className="px-3 py-2 text-center">
+                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                          invoice.paymentType === 'cash' ? 'bg-green-100 text-green-700' :
+                          invoice.paymentType === 'deferred' ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-blue-100 text-blue-700'
                         }`}>
                           {paymentTypes[invoice.paymentType] || invoice.paymentType}
                         </span>
                       </td>
-                      <td className="px-3 py-3 text-center">
-                        <div className="font-bold text-lg text-green-600">
-                          {formatCurrency(invoice.total || 0)}
-                        </div>
-                        {invoice.discountAmount > 0 && (
-                          <div className="text-xs text-red-600 mt-1">
-                            خصم: {formatCurrency(invoice.discountAmount)}
-                          </div>
-                        )}
+                      <td className="px-3 py-2 text-center font-bold text-green-600">
+                        {formatCurrency(invoice.total || 0)}
                       </td>
-                      <td className="px-3 py-3 text-center">
-                        <div className="space-y-1">
-                          <div className="text-sm">
-                            <span className="text-gray-600">مدفوع:</span>
-                            <span className="font-semibold text-green-600 ml-1">
-                              {formatCurrency(invoice.paid || 0)}
-                            </span>
-                          </div>
-                          <div className="text-sm">
-                            <span className="text-gray-600">متبقي:</span>
-                            <span className="font-semibold text-orange-600 ml-1">
-                              {formatCurrency(invoice.remaining || 0)}
-                            </span>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-3 py-3 text-center">
-                        <div className="space-y-1">
-                          <span className="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded text-sm font-semibold">
-                            {invoice.items?.length || 0} منتج
-                          </span>
-                          <div className="text-xs text-gray-500">
-                            <div>أساسية: {invoice.items?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0}</div>
-                            <div>فرعية: {invoice.items?.reduce((sum, item) => sum + (item.subQuantity || 0), 0) || 0}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-3 py-3 text-center">
-                        <span className={`px-3 py-2 rounded-full text-xs font-bold shadow-sm ${
-                          invoice.status === 'completed' ? 'bg-green-100 text-green-800 border border-green-200' :
-                          invoice.status === 'pending' ? 'bg-yellow-100 text-yellow-800 border border-yellow-200' :
-                          invoice.status === 'cancelled' ? 'bg-red-100 text-red-800 border border-red-200' :
-                          'bg-gray-100 text-gray-800 border border-gray-200'
-                        }`}>
-                          {invoice.status === 'completed' ? '✅ مكتملة' :
-                           invoice.status === 'pending' ? '⏳ معلقة' :
-                           invoice.status === 'cancelled' ? '❌ ملغية' : invoice.status}
+                      <td className="px-3 py-2 text-center">
+                        <span className="px-2 py-1 bg-gray-100 rounded-full text-xs">
+                          {invoice.items?.length || 0}
                         </span>
                       </td>
-                      <td className="px-3 py-3">
-                        <div className="flex flex-col gap-1">
+                      <td className="px-3 py-2">
+                        <div className="flex justify-center gap-2">
                           {canViewInvoice && (
                             <button
                               onClick={() => handleView(invoice)}
-                              className="p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors text-xs"
-                              title="عرض التفاصيل"
+                              className="p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                              title="عرض"
                             >
-                              <FaFileInvoice className="mx-auto" />
-                              <span className="text-xs mt-1">عرض</span>
+                              <FaFileInvoice />
                             </button>
                           )}
-                          <div className="flex justify-center gap-1">
-                            {canReturnInvoice && (
-                              <button
-                                onClick={() => handleReturn(invoice)}
-                                className="p-1.5 text-orange-600 hover:bg-orange-50 rounded transition-colors"
-                                title="إرجاع"
-                              >
-                                <FaUndo className="text-sm" />
-                              </button>
-                            )}
-                            {canPrintInvoice && (
-                              <button
-                                onClick={() => handlePrint(invoice)}
-                                className="p-1.5 text-green-600 hover:bg-green-50 rounded transition-colors"
-                                title="طباعة"
-                              >
-                                <FaPrint className="text-sm" />
-                              </button>
-                            )}
-                          </div>
+                          {canReturnInvoice && (
+                            <button
+                              onClick={() => handleReturn(invoice)}
+                              className="p-2 text-orange-600 hover:bg-orange-50 rounded transition-colors"
+                              title="إرجاع"
+                            >
+                              <FaUndo />
+                            </button>
+                          )}
+                          {canPrintInvoice && (
+                            <button
+                              onClick={() => handlePrint(invoice)}
+                              className="p-2 text-green-600 hover:bg-green-50 rounded transition-colors"
+                              title="طباعة"
+                            >
+                              <FaPrint />
+                            </button>
+                          )}
                           {canDeleteInvoice && (
                             <button
                               onClick={() => handleDelete(invoice)}
-                              className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                              className="p-2 text-red-600 hover:bg-red-50 rounded transition-colors"
                               title="حذف"
                             >
-                              <FaTrash className="text-sm mx-auto" />
+                              <FaTrash />
                             </button>
+                          )}
+                          {!canViewInvoice && !canReturnInvoice && !canPrintInvoice && !canDeleteInvoice && (
+                            <span className="text-xs text-gray-400">غير متوفر</span>
                           )}
                         </div>
                       </td>
@@ -406,131 +346,49 @@ const ManagePurchaseInvoices = () => {
                 </div>
               </div>
 
-              {/* ملخص المالية */}
+              {/* جدول المنتجات */}
               <div className="mb-6">
-                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                  <h4 className="text-sm font-bold text-gray-800 mb-3">ملخص المالية</h4>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="text-center">
-                      <p className="text-xs text-gray-600 mb-1">المجموع الفرعي</p>
-                      <p className="text-sm font-semibold text-gray-700">
-                        {formatCurrency(selectedInvoice.subtotal || 0)}
-                      </p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-xs text-gray-600 mb-1">الخصم</p>
-                      <p className="text-sm font-semibold text-red-600">
-                        {formatCurrency(selectedInvoice.discountAmount || 0)}
-                      </p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-xs text-gray-600 mb-1">المدفوع</p>
-                      <p className="text-sm font-semibold text-green-600">
-                        {formatCurrency(selectedInvoice.paid || 0)}
-                      </p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-xs text-gray-600 mb-1">المتبقي</p>
-                      <p className="text-sm font-semibold text-orange-600">
-                        {formatCurrency(selectedInvoice.remaining || 0)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* جدول المنتجات المحسّن */}
-              <div className="mb-6">
-                <h4 className="text-sm font-bold text-gray-800 mb-3">المنتجات ({selectedInvoice.items?.length || 0})</h4>
-                <div className="border rounded-lg overflow-hidden shadow-sm">
+                <h4 className="text-sm font-bold text-gray-800 mb-3">المنتجات</h4>
+                <div className="border rounded-lg overflow-hidden">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="bg-gradient-to-r from-blue-50 to-indigo-50">
-                        <th className="px-3 py-3 text-right text-xs font-bold text-gray-700">#</th>
-                        <th className="px-3 py-3 text-right text-xs font-bold text-gray-700">المنتج</th>
-                        <th className="px-3 py-3 text-center text-xs font-bold text-gray-700">الكمية الأساسية</th>
-                        <th className="px-3 py-3 text-center text-xs font-bold text-gray-700">الكمية الفرعية</th>
-                        <th className="px-3 py-3 text-center text-xs font-bold text-gray-700">السعر الأساسي</th>
-                        <th className="px-3 py-3 text-center text-xs font-bold text-gray-700">السعر الفرعي</th>
-                        <th className="px-3 py-3 text-center text-xs font-bold text-gray-700">خصم العنصر</th>
-                        <th className="px-3 py-3 text-center text-xs font-bold text-gray-700">الإجمالي</th>
+                      <tr className="bg-gray-100">
+                        <th className="px-3 py-2 text-right text-xs font-semibold">#</th>
+                        <th className="px-3 py-2 text-right text-xs font-semibold">المنتج</th>
+                        <th className="px-3 py-2 text-center text-xs font-semibold">الكمية</th>
+                        <th className="px-3 py-2 text-center text-xs font-semibold">السعر</th>
+                        <th className="px-3 py-2 text-center text-xs font-semibold">الإجمالي</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="divide-y">
                       {(selectedInvoice.items || []).map((item, index) => {
                         const product = products.find(p => p.id === parseInt(item.productId));
-                        const warehouse = warehouses.find(w => w.id === product?.warehouseId);
-                        
                         // محاولة الحصول على اسم المنتج من مصادر متعددة
                         const productName = product?.name || item.productName || 'غير محدد';
                         const productCategory = product?.category || '-';
-                        const productCode = product?.code || item.productCode || '-';
-                        
-                        // حساب إجمالي العنصر
-                        const itemTotalWithoutDiscount = (item.quantity || 0) * (item.price || 0) + 
-                                                       (item.subQuantity || 0) * (item.subPrice || 0);
-                        const itemTotal = Math.max(0, itemTotalWithoutDiscount - (item.discount || 0));
-                        const itemDiscount = item.discount || 0;
-                        
+                        const itemTotal = (item.quantity || 0) * (item.price || 0) + 
+                                         (item.subQuantity || 0) * (item.subPrice || 0);
                         return (
-                          <tr key={index} className="hover:bg-blue-50 transition-colors">
-                            <td className="px-3 py-3 font-semibold text-blue-600">{index + 1}</td>
-                            <td className="px-3 py-3">
-                              <div className="flex flex-col">
-                                <div className="font-semibold text-gray-800">{productName}</div>
-                                <div className="text-xs text-gray-500 mt-1">
-                                  <span className="bg-gray-100 px-2 py-1 rounded">{productCategory}</span>
-                                  {productCode !== '-' && (
-                                    <span className="bg-blue-100 px-2 py-1 rounded mr-1">كود: {productCode}</span>
-                                  )}
-                                  {warehouse && (
-                                    <span className="bg-green-100 px-2 py-1 rounded mr-1">{warehouse.name}</span>
-                                  )}
-                                </div>
-                                {/* عرض المخزون الفعلي */}
-                                {product && (
-                                  <div className="text-xs text-gray-600 mt-1">
-                                    <span className="bg-yellow-100 px-2 py-1 rounded">
-                                      متوفر: أساسية {product.mainQuantity || 0} | فرعية {product.subQuantity || 0}
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
+                          <tr key={index} className="hover:bg-gray-50">
+                            <td className="px-3 py-2">{index + 1}</td>
+                            <td className="px-3 py-2">
+                              <div className="font-medium">{productName}</div>
+                              <div className="text-xs text-gray-500">{productCategory}</div>
                             </td>
-                            <td className="px-3 py-3 text-center">
-                              <span className="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded text-sm font-semibold">
-                                {item.quantity || 0}
-                              </span>
-                            </td>
-                            <td className="px-3 py-3 text-center">
-                              <span className="inline-block bg-indigo-100 text-indigo-800 px-2 py-1 rounded text-sm font-semibold">
-                                {item.subQuantity || 0}
-                              </span>
-                            </td>
-                            <td className="px-3 py-3 text-center">
-                              <div className="text-green-600 font-semibold">
-                                {formatCurrency(item.price || 0)}
-                              </div>
-                            </td>
-                            <td className="px-3 py-3 text-center">
-                              <div className="text-green-500 text-sm">
-                                {item.subPrice > 0 ? formatCurrency(item.subPrice || 0) : '-'}
-                              </div>
-                            </td>
-                            <td className="px-3 py-3 text-center">
-                              <span className="inline-block bg-red-100 text-red-800 px-2 py-1 rounded text-sm">
-                                {itemDiscount > 0 ? `-${formatCurrency(itemDiscount)}` : '-'}
-                              </span>
-                            </td>
-                            <td className="px-3 py-3 text-center">
-                              <div className="font-bold text-lg text-blue-600">
-                                {formatCurrency(itemTotal)}
-                              </div>
-                              {itemDiscount > 0 && (
-                                <div className="text-xs text-gray-500">
-                                  قبل الخصم: {formatCurrency(itemTotalWithoutDiscount)}
-                                </div>
+                            <td className="px-3 py-2 text-center">
+                              <div>{item.quantity || 0} أساسي</div>
+                              {item.subQuantity > 0 && (
+                                <div className="text-xs text-gray-500">{item.subQuantity} فرعي</div>
                               )}
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              <div>{formatCurrency(item.price || 0)}</div>
+                              {item.subPrice > 0 && (
+                                <div className="text-xs text-gray-500">{formatCurrency(item.subPrice || 0)}</div>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 text-center font-semibold text-blue-600">
+                              {formatCurrency(itemTotal)}
                             </td>
                           </tr>
                         );
@@ -540,77 +398,13 @@ const ManagePurchaseInvoices = () => {
                 </div>
               </div>
 
-              {/* ملاحظات إضافية */}
+              {/* الملاحظات */}
               {selectedInvoice.notes && (
-                <div className="mb-6">
-                  <h4 className="text-sm font-bold text-gray-800 mb-2">ملاحظات</h4>
-                  <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
-                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedInvoice.notes}</p>
-                  </div>
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <p className="text-xs text-gray-600 mb-1">ملاحظات</p>
+                  <p className="text-sm">{selectedInvoice.notes}</p>
                 </div>
               )}
-
-              {/* معلومات إضافية */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <h4 className="text-sm font-bold text-gray-800 mb-2">معلومات إضافية</h4>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">عدد المنتجات:</span>
-                      <span className="font-semibold">{selectedInvoice.items?.length || 0}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">إجمالي الكمية الأساسية:</span>
-                      <span className="font-semibold">
-                        {selectedInvoice.items?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">إجمالي الكمية الفرعية:</span>
-                      <span className="font-semibold">
-                        {selectedInvoice.items?.reduce((sum, item) => sum + (item.subQuantity || 0), 0) || 0}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">إجمالي الخصومات:</span>
-                      <span className="font-semibold text-red-600">
-                        {formatCurrency(selectedInvoice.items?.reduce((sum, item) => sum + (item.discount || 0), 0) || 0)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <h4 className="text-sm font-bold text-gray-800 mb-2">معلومات الدفع</h4>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">نوع الدفع:</span>
-                      <span className="font-semibold">
-                        {paymentTypes[selectedInvoice.paymentType] || selectedInvoice.paymentType}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">الوقت:</span>
-                      <span className="font-semibold">
-                        {new Date(selectedInvoice.date).toLocaleTimeString('ar-EG')}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">الحالة:</span>
-                      <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                        selectedInvoice.status === 'completed' ? 'bg-green-100 text-green-800' :
-                        selectedInvoice.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {selectedInvoice.status === 'completed' ? 'مكتملة' :
-                         selectedInvoice.status === 'pending' ? 'معلقة' : selectedInvoice.status}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-
             </div>
 
             {/* Footer */}

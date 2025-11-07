@@ -693,54 +693,54 @@ const NewSalesInvoice = () => {
       {/* البطاقة الرئيسية */}
       <div className="bg-white rounded-lg shadow-md p-4">
         {/* الصف العلوي: معلومات الفاتورة */}
-        <div className="grid grid-cols-[250px_1fr_1fr_1fr_1fr_1fr] gap-3 mb-4 pb-4 border-b">
-          {/* العميل */}
-          <div className="relative">
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <input
-                  ref={customerInputRef}
-                  type="text"
-                  value={customerSearch}
-                  onChange={(e) => handleCustomerSearch(e.target.value)}
-                  onBlur={handleCustomerBlur}
-                  className=" w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="ابحث عن العميل..."
-                />
-                <FaSearch className="absolute left-2 top-2.5 text-gray-400 text-xs" />
+        <div className="mb-4 pb-4 border-b">
+          <div className="grid grid-cols-8 gap-3 items-end">
+            {/* العميل مع زر عميل جديد */}
+            <div className="col-span-2 relative">
+              <label className="block text-xs font-medium text-gray-700 mb-1">العميل</label>
+              <div className="flex gap-1">
+                <div className="relative flex-1">
+                  <input
+                    ref={customerInputRef}
+                    type="text"
+                    value={customerSearch}
+                    onChange={(e) => handleCustomerSearch(e.target.value)}
+                    onBlur={handleCustomerBlur}
+                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="ابحث عن العميل..."
+                  />
+                  <FaSearch className="absolute left-2 top-2.5 text-gray-400 text-xs" />
+                </div>
+                <button
+                  type="button"
+                  onClick={openQuickCustomerModal}
+                  className="px-2 py-1.5 text-xs bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors flex items-center gap-1 whitespace-nowrap"
+                  title="إضافة عميل جديد سريع"
+                >
+                  <FaUserPlus className="text-xs" />
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={openQuickCustomerModal}
-                className=" w-full px-3 py-1.5 text-xs bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors flex items-center gap-1 whitespace-nowrap"
-                title="إضافة عميل جديد سريع"
-              >
-                <FaUserPlus className="text-xs" />
-                عميل جديد
-              </button>
-            </div>
-            {showCustomerSuggestions && customerSearch.trim().length > 0 && filteredCustomers.length > 0 && (
-              <div className="absolute z-[9999] w-[250px] mt-1 bg-white border-2 border-blue-400 rounded-lg shadow-xl max-h-56 overflow-y-auto">
-                {filteredCustomers.map((customer) => (
-                  <div
-                    key={customer.id}
-                    onClick={() => selectCustomer(customer)}
-                    className="px-4 py-2.5 hover:bg-blue-100 cursor-pointer border-b last:border-b-0 transition-colors"
-                  >
-                    <div className="flex justify-between items-center">
-                      <span className="font-semibold text-sm text-gray-800">{customer.name}</span>
-                      <span className="text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded">{customer.phone}</span>
+              {showCustomerSuggestions && customerSearch.trim().length > 0 && filteredCustomers.length > 0 && (
+                <div className="absolute z-[9999] w-full mt-1 bg-white border-2 border-blue-400 rounded-lg shadow-xl max-h-56 overflow-y-auto">
+                  {filteredCustomers.map((customer) => (
+                    <div
+                      key={customer.id}
+                      onClick={() => selectCustomer(customer)}
+                      className="px-4 py-2.5 hover:bg-blue-100 cursor-pointer border-b last:border-b-0 transition-colors"
+                    >
+                      <div className="flex justify-between items-center">
+                        <span className="font-semibold text-sm text-gray-800">{customer.name}</span>
+                        <span className="text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded">{customer.phone}</span>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
-          {/* نوع الفاتورة والشحن ونوع البيع - بحجم مضغوط */}
-          
             {/* نوع الفاتورة */}
             <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">نوع الفاتورة</label>
               <select
                 name="paymentType"
                 value={formData.paymentType}
@@ -756,23 +756,25 @@ const NewSalesInvoice = () => {
 
             {/* الشاحنة */}
             <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">الشاحنة</label>
               <select
                 name="selectedVehicle"
                 value={formData.selectedVehicle}
                 onChange={handleChange}
                 className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500"
               >
-                <option value="">الشاحنة (اختياري)</option>
+                <option value="">اختر الشاحنة</option>
                 {availableVehicles.filter(v => v.id).map(vehicle => (
                   <option key={vehicle.id} value={vehicle.id}>
-                    {vehicle.name} - {vehicle.driver} ({vehicle.status})
+                    {vehicle.name}
                   </option>
                 ))}
               </select>
             </div>
 
-            {/* نوع البيع - الشرائح السعرية */}
+            {/* نوع البيع */}
             <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">نوع البيع</label>
               <select
                 name="saleType"
                 value={formData.saleType}
@@ -784,11 +786,51 @@ const NewSalesInvoice = () => {
                 <option value="bulk">جملة الجملة</option>
               </select>
             </div>
-          
+
+            {/* الوكيل/المندوب */}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">الوكيل/المندوب</label>
+              <select
+                name="agentType"
+                value={formData.agentType}
+                onChange={handleChange}
+                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">اختر الوكيل</option>
+                <option value="general">عام</option>
+                <option value="fatora">فاتورة</option>
+                <option value="kartona">كرتونة</option>
+              </select>
+            </div>
+
+            {/* التاريخ */}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">التاريخ</label>
+              <input
+                type="date"
+                name="date"
+                value={formData.date}
+                onChange={handleChange}
+                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            {/* الوقت */}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">الوقت</label>
+              <input
+                type="time"
+                name="time"
+                value={formData.time}
+                onChange={handleChange}
+                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
 
           {/* تحذيرات نوع الدفع */}
           {paymentWarning && (
-            <div className={`p-4 rounded-lg mb-4 ${
+            <div className={`mt-3 p-3 rounded-lg ${
               paymentWarning.type === 'error' ? 'bg-red-100 border border-red-300 text-red-700' :
               paymentWarning.type === 'warning' ? 'bg-yellow-100 border border-yellow-300 text-yellow-700' :
               'bg-blue-100 border border-blue-300 text-blue-700'
@@ -801,40 +843,7 @@ const NewSalesInvoice = () => {
               </div>
             </div>
           )}
-          {/* الوكيل/المندوب والتاريخ والوقت - بحجم مضغوط */}
-          <div>
-            <select
-              name="agentType"
-              value={formData.agentType}
-              onChange={handleChange}
-              className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500"
-            >
-              <option value="">الوكيل/المندوب</option>
-              <option value="general">عام</option>
-              <option value="fatora">فاتورة</option>
-              <option value="kartona">كرتونة</option>
-            </select>
-            </div>
-            
-
-          {/* التاريخ والوقت والوكيل - بحجم مضغوط */}
-          <div className=" grid grid-cols-2 gap-2">
-            <input
-              type="date"
-              name="date"
-              value={formData.date}
-              onChange={handleChange}
-              className="w-full px-1 py-1 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500"
-            />
-            <input
-              type="time"
-              name="time"
-              value={formData.time}
-              onChange={handleChange}
-              className="w-full px-1 py-1 text-xs border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500"
-            />
-            </div>
-            </div>
+        </div>
             
 
         {/* جدول المنتجات */}

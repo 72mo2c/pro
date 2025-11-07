@@ -238,122 +238,47 @@ export const printInvoiceDirectly = (invoiceData, type = 'purchase') => {
           ` : ''}
         </table>
 
-        <!-- معلومات إضافية عن الفاتورة -->
-        ${formData.notes ? `
-        <div style="margin: 20px 0; padding: 15px; border: 1px solid #000; background: #f9f9f9;">
-          <h4 style="margin-bottom: 10px; color: #000;">ملاحظات:</h4>
-          <p style="margin: 0; line-height: 1.6;">${formData.notes}</p>
-        </div>
-        ` : ''}
-        
-        <div style="margin: 20px 0; border: 1px solid #000;">
-          <div style="display: table; width: 100%;">
-            <div style="display: table-row;">
-              <div style="display: table-cell; padding: 10px; border: 1px solid #000; font-weight: bold; background: #f5f5f5; width: 50%;">رقم الفاتورة</div>
-              <div style="display: table-cell; padding: 10px; border: 1px solid #000; text-align: center; width: 50%;">#${formData.id || Date.now()}</div>
-            </div>
-            <div style="display: table-row;">
-              <div style="display: table-cell; padding: 10px; border: 1px solid #000; font-weight: bold; background: #f5f5f5;">تاريخ الفاتورة</div>
-              <div style="display: table-cell; padding: 10px; border: 1px solid #000; text-align: center;">${new Date(formData.date).toLocaleDateString('ar-EG')}</div>
-            </div>
-            <div style="display: table-row;">
-              <div style="display: table-cell; padding: 10px; border: 1px solid #000; font-weight: bold; background: #f5f5f5;">نوع الدفع</div>
-              <div style="display: table-cell; padding: 10px; border: 1px solid #000; text-align: center;">${paymentTypes[formData.paymentType] || formData.paymentType}</div>
-            </div>
-            <div style="display: table-row;">
-              <div style="display: table-cell; padding: 10px; border: 1px solid #000; font-weight: bold; background: #f5f5f5;">الحالة</div>
-              <div style="display: table-cell; padding: 10px; border: 1px solid #000; text-align: center;">${formData.status === 'completed' ? 'مكتملة' : formData.status}</div>
-            </div>
-          </div>
-        </div>
-        
-        <!-- جدول المنتجات المحسّن -->
+        <!-- جدول الأصناف -->
+        <table class="items-table">
           <thead>
             <tr>
-              <th style="width: 4%">#</th>
-              <th style="width: 25%">اسم المنتج</th>
-              <th style="width: 8%">كميه أساسية</th>
-              <th style="width: 8%">كميه فرعية</th>
-              <th style="width: 12%">سعر أساسي</th>
-              <th style="width: 12%">سعر فرعي</th>
-              <th style="width: 8%">خصم العنصر</th>
-              <th style="width: 23%">الإجمالي</th>
+              <th style="width: 5%">#</th>
+              <th style="width: 30%">اسم الصنف</th>
+              <th style="width: 20%">المخزن</th>
+              <th style="width: 10%">الكمية</th>
+              <th style="width: 15%">السعر</th>
+              <th style="width: 20%">الإجمالي</th>
             </tr>
           </thead>
           <tbody>
             ${items.map((item, index) => {
               const product = products?.find(p => p.id === parseInt(item.productId));
               const warehouse = warehouses?.find(w => w.id === product?.warehouseId);
-              const itemTotalWithoutDiscount = (item.quantity || 0) * (item.price || 0) + (item.subQuantity || 0) * (item.subPrice || 0);
-              const itemTotal = Math.max(0, itemTotalWithoutDiscount - (item.discount || 0));
-              const itemDiscount = item.discount || 0;
+              const lineTotal = item.quantity * (item.price || 0);
               
               return `
                 <tr>
-                  <td style="font-weight: bold">${index + 1}</td>
-                  <td>
-                    <div style="font-weight: bold">${product?.name || item.productName || '-'}</div>
-                    <div style="font-size: 10px; color: #666;">
-                      الفئة: ${product?.category || '-'}
-                    </div>
-                    <div style="font-size: 10px; color: #666;">
-                      المستودع: ${warehouse?.name || '-'}
-                      ${product?.code ? ` | كود: ${product.code}` : ''}
-                    </div>
-                    <div style="font-size: 10px; color: #999;">
-                      متوفر: ${product?.mainQuantity || 0} أساسية، ${product?.subQuantity || 0} فرعية
-                    </div>
-                  </td>
-                  <td style="text-align: center; font-weight: bold">${item.quantity || 0}</td>
-                  <td style="text-align: center; font-weight: bold">${item.subQuantity || 0}</td>
-                  <td style="text-align: center; font-weight: bold">${parseFloat(item.price || 0).toFixed(2)} ج.م</td>
-                  <td style="text-align: center; color: #666">${item.subPrice > 0 ? `${parseFloat(item.subPrice || 0).toFixed(2)} ج.م` : '-'}</td>
-                  <td style="text-align: center; color: #d32f2f">${itemDiscount > 0 ? `-${itemDiscount.toFixed(2)} ج.م` : '-'}</td>
-                  <td style="text-align: center; font-weight: bold; font-size: 14px">
-                    <div>${itemTotal.toFixed(2)} ج.م</div>
-                    ${itemDiscount > 0 ? `<div style="font-size: 10px; color: #666">قبل الخصم: ${itemTotalWithoutDiscount.toFixed(2)} ج.م</div>` : ''}
-                  </td>
+                  <td>${index + 1}</td>
+                  <td>${product?.name || '-'}</td>
+                  <td>${warehouse?.name || '-'}</td>
+                  <td>${item.quantity}</td>
+                  <td>${parseFloat(item.price || 0).toFixed(2)} ج.م</td>
+                  <td>${lineTotal.toFixed(2)} ج.م</td>
                 </tr>
               `;
             }).join('')}
           </tbody>
         </table>
 
-        <!-- المجاميع المحسّنة -->
+        <!-- المجاميع -->
         <div class="totals-section">
           <div class="total-row">
             <span>المجموع الفرعي:</span>
             <span>${(total || 0).toFixed(2)} ج.م</span>
           </div>
-          ${formData.discountAmount > 0 ? `
-          <div class="total-row" style="color: #d32f2f">
-            <span>الخصم:</span>
-            <span>-${(formData.discountAmount || 0).toFixed(2)} ج.م</span>
-          </div>
-          ` : ''}
-          ${formData.discountType && formData.discountValue ? `
-          <div class="total-row" style="font-size: 12px; color: #666">
-            <span>(${formData.discountType === 'percentage' ? formData.discountValue + '%' : formData.discountValue + ' ج.م'})</span>
-            <span></span>
-          </div>
-          ` : ''}
           <div class="total-row grand-total">
             <span>الإجمالي النهائي:</span>
             <span>${(total || 0).toFixed(2)} ج.م</span>
-          </div>
-          ${formData.paid && formData.paid > 0 ? `
-          <div class="total-row" style="color: #2e7d32">
-            <span>المدفوع:</span>
-            <span>${(formData.paid || 0).toFixed(2)} ج.م</span>
-          </div>
-          <div class="total-row" style="color: #f57c00">
-            <span>المتبقي:</span>
-            <span>${(formData.remaining || 0).toFixed(2)} ج.م</span>
-          </div>
-          ` : ''}
-          <div class="total-row" style="font-size: 12px; color: #666; border-top: 1px solid #000; padding-top: 10px; margin-top: 10px;">
-            <span>عدد المنتجات:</span>
-            <span>${items.length}</span>
           </div>
         </div>
 
