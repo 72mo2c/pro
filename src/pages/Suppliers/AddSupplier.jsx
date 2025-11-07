@@ -9,7 +9,7 @@ import { useNotification } from '../../context/NotificationContext';
 import Card from '../../components/Common/Card';
 import Input from '../../components/Common/Input';
 import Button from '../../components/Common/Button';
-import { FaTruck, FaSave, FaCheckCircle, FaPlus, FaList } from 'react-icons/fa';
+import { FaTruck, FaSave, FaCheckCircle, FaPlus, FaList, FaTimes } from 'react-icons/fa';
 
 const AddSupplier = () => {
   const { addSupplier } = useData();
@@ -74,139 +74,145 @@ const AddSupplier = () => {
   };
 
   return (
-    <div>
-      <h1 className="text-3xl font-bold text-gray-800 mb-6">إضافة مورد جديد</h1>
+    <div className="max-w-lg mx-auto p-3">
+      <Card className="shadow-sm border-0">
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div className="grid grid-cols-1 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">اسم المورد *</label>
+              <input
+                type="text"
+                name="name"
+                value={formData.name}
+                onChange={handleChange}
+                placeholder="أدخل اسم المورد"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
 
-      <Card icon={<FaTruck />}>
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Input
-              label="اسم المورد / الشركة"
-              name="name"
-              value={formData.name}
-              onChange={handleChange}
-              placeholder="أدخل اسم المورد"
-              required
-            />
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">العنوان *</label>
+              <input
+                type="text"
+                name="address"
+                value={formData.address}
+                onChange={handleChange}
+                placeholder="أدخل العنوان"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
 
-            <Input
-              label="العنوان"
-              name="address"
-              value={formData.address}
-              onChange={handleChange}
-              placeholder="أدخل العنوان"
-              required
-            />
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">رقم الهاتف 1 *</label>
+              <input
+                type="tel"
+                name="phone1"
+                value={formData.phone1}
+                onChange={handleChange}
+                placeholder="+20 XXX XXX XXXX"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
 
-            <Input
-              label="رقم الهاتف 1"
-              name="phone1"
-              value={formData.phone1}
-              onChange={handleChange}
-              placeholder="+20 XXX XXX XXXX"
-              required
-            />
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">رقم الهاتف 2</label>
+              <input
+                type="tel"
+                name="phone2"
+                value={formData.phone2}
+                onChange={handleChange}
+                placeholder="+20 XXX XXX XXXX"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
 
-            <Input
-              label="رقم الهاتف 2 (اختياري)"
-              name="phone2"
-              value={formData.phone2}
-              onChange={handleChange}
-              placeholder="+20 XXX XXX XXXX"
-            />
-
-            
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">البريد الإلكتروني</label>
+              <input
+                type="email"
+                name="email"
+                value={formData.email}
+                onChange={handleChange}
+                placeholder="example@email.com"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
           </div>
 
           <div>
-            <label className="label">ملاحظات (اختياري)</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">ملاحظات</label>
             <textarea
               name="notes"
               value={formData.notes}
               onChange={handleChange}
-              rows="3"
-              className="input-field"
-              placeholder="أدخل ملاحظات..."
+              rows="2"
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+              placeholder="ملاحظات إضافية..."
             />
           </div>
 
-          <div className="flex gap-4">
-            <Button type="submit" variant="success" icon={<FaSave />}>
-              حفظ المورد
-            </Button>
-            <Button 
-              type="button" 
-              variant="secondary"
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              className="flex-1 px-4 py-2 text-sm bg-green-600 text-white rounded hover:bg-green-700 flex items-center justify-center gap-2"
+            >
+              <FaSave /> حفظ
+            </button>
+            <button
+              type="button"
               onClick={resetForm}
+              className="flex-1 px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded hover:bg-gray-50"
             >
               إعادة تعيين
-            </Button>
+            </button>
           </div>
         </form>
       </Card>
 
-      {/* نافذة النجاح */}
+      {/* نافذة النجاح المبسطة */}
       {showSuccessModal && lastAddedSupplier && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9998]">
-          <div className="bg-white rounded-lg p-6 max-w-lg w-full mx-4">
-            {/* رمز النجاح */}
-            <div className="flex items-center justify-center mb-4">
-              <div className="bg-green-100 rounded-full p-4">
-                <FaCheckCircle className="text-5xl text-green-600" />
-              </div>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9998] p-3">
+          <div className="bg-white rounded-lg max-w-sm w-full">
+            {/* رأس مبسط */}
+            <div className="flex items-center justify-between p-3 border-b bg-green-50">
+              <h2 className="text-sm font-semibold text-green-800">تم بنجاح</h2>
+              <button
+                onClick={() => {
+                  setShowSuccessModal(false);
+                  setLastAddedSupplier(null);
+                }}
+                className="text-green-400 hover:text-green-600"
+              >
+                <FaTimes />
+              </button>
             </div>
 
-            <h2 className="text-2xl font-bold text-gray-800 mb-4 text-center">
-              تمت الإضافة بنجاح! ✓
-            </h2>
-
-            <div className="bg-green-50 p-4 rounded-lg mb-4 border border-green-200">
-              <p className="text-gray-700 text-center mb-2">
-                تم إضافة المورد <span className="font-bold">"{lastAddedSupplier.name}"</span> بنجاح
+            {/* محتوى مبسط */}
+            <div className="p-3 text-center">
+              <FaCheckCircle className="text-2xl text-green-500 mx-auto mb-2" />
+              <p className="text-sm text-gray-700 mb-2">
+                تم إضافة المورد <span className="font-bold">"{lastAddedSupplier.name}"</span>
               </p>
-            </div>
 
-            {/* تفاصيل المورد */}
-            <div className="bg-gray-50 p-4 rounded-lg mb-6">
-              <h3 className="font-semibold text-gray-700 mb-2">تفاصيل المورد المضاف:</h3>
-              <div className="space-y-2 text-sm">
-                <div>
-                  <span className="text-gray-600">الاسم: </span>
-                  <span className="font-semibold">{lastAddedSupplier.name}</span>
-                </div>
-                {lastAddedSupplier.address && (
-                  <div>
-                    <span className="text-gray-600">العنوان: </span>
-                    <span className="font-semibold">{lastAddedSupplier.address}</span>
-                  </div>
-                )}
-                {lastAddedSupplier.phone1 && (
-                  <div>
-                    <span className="text-gray-600">الهاتف: </span>
-                    <span className="font-semibold">{lastAddedSupplier.phone1}</span>
-                  </div>
-                )}
+              <div className="flex gap-2">
+                <button
+                  onClick={handleAddAnother}
+                  className="flex-1 px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center justify-center gap-1"
+                >
+                  <FaPlus />
+                  إضافة آخر
+                </button>
+                <button
+                  onClick={handleGoToList}
+                  className="flex-1 px-3 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700 flex items-center justify-center gap-1"
+                >
+                  <FaList />
+                  عرض القائمة
+                </button>
               </div>
-            </div>
-
-            <p className="text-gray-600 text-center mb-4">ماذا تريد أن تفعل الآن؟</p>
-
-            {/* الأزرار */}
-            <div className="flex gap-3">
-              <button
-                onClick={handleAddAnother}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
-              >
-                <FaPlus />
-                إضافة مورد آخر
-              </button>
-              <button
-                onClick={handleGoToList}
-                className="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
-              >
-                <FaList />
-                عرض القائمة
-              </button>
             </div>
           </div>
         </div>

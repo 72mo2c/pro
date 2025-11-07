@@ -124,10 +124,8 @@ const ManageSuppliers = () => {
   ];
 
   return (
-    <div>
-      <h1 className="text-3xl font-bold text-gray-800 mb-6">إدارة الموردين</h1>
-
-      <Card icon={<FaList />}>
+    <div className="max-w-4xl mx-auto p-3">
+      <Card className="shadow-sm border-0">
         <Table
           columns={columns}
           data={suppliers}
@@ -136,97 +134,148 @@ const ManageSuppliers = () => {
         />
       </Card>
 
-      {/* نافذة التعديل */}
-      <Modal
-        isOpen={editModal}
-        onClose={() => setEditModal(false)}
-        title="تعديل بيانات المورد"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setEditModal(false)}>إلغاء</Button>
-            <Button variant="success" onClick={handleUpdate}>حفظ التغييرات</Button>
-          </>
-        }
-      >
-        <form onSubmit={handleUpdate} className="space-y-4">
-          <Input label="الاسم" name="name" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} required />
-          <Input label="العنوان" name="address" value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} />
-          <Input label="الهاتف 1" name="phone1" value={formData.phone1} onChange={(e) => setFormData({ ...formData, phone1: e.target.value })} />
-          <Input label="الهاتف 2" name="phone2" value={formData.phone2} onChange={(e) => setFormData({ ...formData, phone2: e.target.value })} />
-          <Input label="البريد" name="email" type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
-        </form>
-      </Modal>
-
-      {/* نافذة تأكيد الحذف */}
-      {deleteModal && supplierToDelete && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9998]">
-          <div className="bg-white rounded-lg p-6 max-w-lg w-full mx-4">
-            {/* رمز التحذير */}
-            <div className="flex items-center justify-center mb-4">
-              <div className="bg-red-100 rounded-full p-4">
-                <FaExclamationTriangle className="text-4xl text-red-600" />
-              </div>
-            </div>
-
-            <h2 className="text-2xl font-bold text-gray-800 mb-4 text-center">
-              تأكيد حذف المورد
-            </h2>
-
-            <div className="bg-yellow-50 p-4 rounded-lg mb-4 border border-yellow-200">
-              <p className="text-gray-700 text-center mb-2">
-                هل أنت متأكد من حذف المورد <span className="font-bold">"{supplierToDelete.name}"</span>؟
-              </p>
-              <p className="text-sm text-red-600 text-center font-semibold">
-                ⚠️ لا يمكن التراجع عن هذا الإجراء
-              </p>
-            </div>
-
-            {/* تفاصيل المورد */}
-            <div className="bg-gray-50 p-4 rounded-lg mb-4">
-              <h3 className="font-semibold text-gray-700 mb-2">تفاصيل المورد:</h3>
-              <div className="space-y-2 text-sm">
-                <div>
-                  <span className="text-gray-600">الاسم: </span>
-                  <span className="font-semibold">{supplierToDelete.name}</span>
-                </div>
-                {supplierToDelete.address && (
-                  <div>
-                    <span className="text-gray-600">العنوان: </span>
-                    <span className="font-semibold">{supplierToDelete.address}</span>
-                  </div>
-                )}
-                {supplierToDelete.phone1 && (
-                  <div>
-                    <span className="text-gray-600">الهاتف: </span>
-                    <span className="font-semibold">{supplierToDelete.phone1}</span>
-                  </div>
-                )}
-                {supplierToDelete.email && (
-                  <div>
-                    <span className="text-gray-600">البريد: </span>
-                    <span className="font-semibold">{supplierToDelete.email}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* الأزرار */}
-            <div className="flex gap-4">
+      {/* نافذة التعديل المبسطة */}
+      {editModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9998] p-3">
+          <div className="bg-white rounded-lg max-w-sm w-full">
+            {/* رأس مبسط */}
+            <div className="flex items-center justify-between p-3 border-b bg-gray-50">
+              <h2 className="text-sm font-semibold text-gray-800">تعديل المورد</h2>
               <button
-                onClick={confirmDelete}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors"
+                onClick={() => setEditModal(false)}
+                className="text-gray-400 hover:text-gray-600"
               >
-                نعم، احذف المورد
+                <FaTimes />
               </button>
+            </div>
+
+            {/* محتوى مبسط */}
+            <div className="p-3">
+              <form onSubmit={handleUpdate} className="space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">الاسم *</label>
+                  <input
+                    type="text"
+                    name="name"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">العنوان</label>
+                  <input
+                    type="text"
+                    name="address"
+                    value={formData.address}
+                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">الهاتف 1</label>
+                  <input
+                    type="tel"
+                    name="phone1"
+                    value={formData.phone1}
+                    onChange={(e) => setFormData({ ...formData, phone1: e.target.value })}
+                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">الهاتف 2</label>
+                  <input
+                    type="tel"
+                    name="phone2"
+                    value={formData.phone2}
+                    onChange={(e) => setFormData({ ...formData, phone2: e.target.value })}
+                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">البريد</label>
+                  <input
+                    type="email"
+                    name="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                {/* أزرار مبسطة */}
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditModal(false)}
+                    className="flex-1 px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded hover:bg-gray-50"
+                  >
+                    إلغاء
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+                  >
+                    حفظ
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* نافذة تأكيد الحذف المبسطة */}
+      {deleteModal && supplierToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9998] p-3">
+          <div className="bg-white rounded-lg max-w-sm w-full">
+            {/* رأس مبسط */}
+            <div className="flex items-center justify-between p-3 border-b bg-red-50">
+              <h2 className="text-sm font-semibold text-red-800">تأكيد الحذف</h2>
               <button
                 onClick={() => {
                   setDeleteModal(false);
                   setSupplierToDelete(null);
                 }}
-                className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-3 px-6 rounded-lg transition-colors"
+                className="text-red-400 hover:text-red-600"
               >
-                إلغاء
+                <FaTimes />
               </button>
+            </div>
+
+            {/* محتوى مبسط */}
+            <div className="p-3">
+              <div className="text-center mb-3">
+                <FaExclamationTriangle className="text-2xl text-red-500 mx-auto mb-2" />
+                <p className="text-sm text-gray-700">
+                  حذف المورد: <span className="font-bold">"{supplierToDelete.name}"</span>
+                </p>
+                <p className="text-xs text-red-600 mt-1">لا يمكن التراجع</p>
+              </div>
+
+              {/* أزرار مبسطة */}
+              <div className="flex gap-2">
+                <button
+                  onClick={confirmDelete}
+                  className="flex-1 px-3 py-1.5 text-sm bg-red-600 text-white rounded hover:bg-red-700"
+                >
+                  حذف
+                </button>
+                <button
+                  onClick={() => {
+                    setDeleteModal(false);
+                    setSupplierToDelete(null);
+                  }}
+                  className="flex-1 px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded hover:bg-gray-50"
+                >
+                  إلغاء
+                </button>
+              </div>
             </div>
           </div>
         </div>
