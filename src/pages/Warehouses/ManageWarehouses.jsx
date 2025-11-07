@@ -12,10 +12,9 @@ import Card from '../../components/Common/Card';
 import Modal from '../../components/Common/Modal';
 import Input from '../../components/Common/Input';
 import Button from '../../components/Common/Button';
-import { FaEdit, FaTrash, FaPlus, FaSearch, FaWarehouse, FaLock } from 'react-icons/fa';
+import { FaEdit, FaTrash, FaSearch, FaWarehouse, FaLock } from 'react-icons/fa';
 
 const ManageWarehouses = () => {
-  const navigate = useNavigate();
   const { warehouses, updateWarehouse, deleteWarehouse, products } = useData();
   const { showSuccess, showError, showWarning } = useNotification();
   const { settings } = useSystemSettings();

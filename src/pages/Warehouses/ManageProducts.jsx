@@ -16,8 +16,7 @@ import {
   FaSearch,
   FaFilter,
   FaWarehouse,
-  FaBarcode,
-  FaExclamationTriangle
+  FaBarcode
 } from 'react-icons/fa';
 
 const ManageProducts = () => {
