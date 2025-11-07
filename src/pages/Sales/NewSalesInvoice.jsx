@@ -71,6 +71,7 @@ const NewSalesInvoice = () => {
   const [quickCustomerForm, setQuickCustomerForm] = useState({
     name: '',
     phone1: '',
+    phone2: '',
     address: '',
     agentType: 'general'
   });
@@ -189,6 +190,7 @@ const NewSalesInvoice = () => {
     setQuickCustomerForm({
       name: '',
       phone1: '',
+      phone2: '',
       address: '',
       agentType: 'general'
     });
@@ -212,7 +214,7 @@ const NewSalesInvoice = () => {
   // إضافة عميل سريع جديد
   const handleAddQuickCustomer = async () => {
     if (!quickCustomerForm.name.trim() || !quickCustomerForm.phone1.trim()) {
-      showError('يجب إدخال الاسم ورقم الهاتف');
+      showError('يجب إدخال الاسم ورقم الهاتف الأول');
       return;
     }
 
@@ -1161,30 +1163,28 @@ const NewSalesInvoice = () => {
       {/* Modal إضافة العميل السريع */}
       {showQuickCustomerModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
-            {/* رأس المودال */}
-            <div className="flex items-center justify-between p-6 border-b">
-              <div className="flex items-center gap-3">
-                <div className="bg-green-100 rounded-full p-2">
-                  <FaUserPlus className="text-green-600 text-lg" />
-                </div>
-                <h2 className="text-xl font-bold text-gray-800">إضافة عميل جديد سريع</h2>
+          <div className="bg-white rounded-lg shadow-xl max-w-sm w-full mx-4">
+            {/* رأس المودال المبسط */}
+            <div className="flex items-center justify-between p-4 border-b bg-green-50">
+              <div className="flex items-center gap-2">
+                <FaUserPlus className="text-green-600 text-sm" />
+                <h2 className="text-lg font-semibold text-gray-800">عميل جديد</h2>
               </div>
               <button
                 onClick={closeQuickCustomerModal}
                 className="text-gray-400 hover:text-gray-600 transition-colors"
                 type="button"
               >
-                <FaTimes className="text-xl" />
+                <FaTimes className="text-sm" />
               </button>
             </div>
 
-            {/* محتوى المودال */}
-            <div className="p-6">
-              <form onSubmit={(e) => { e.preventDefault(); handleAddQuickCustomer(); }} className="space-y-4">
+            {/* محتوى المودال المبسط */}
+            <div className="p-4">
+              <form onSubmit={(e) => { e.preventDefault(); handleAddQuickCustomer(); }} className="space-y-3">
                 {/* اسم العميل */}
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
                     اسم العميل <span className="text-red-500">*</span>
                   </label>
                   <input
@@ -1192,31 +1192,47 @@ const NewSalesInvoice = () => {
                     name="name"
                     value={quickCustomerForm.name}
                     onChange={handleQuickCustomerChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                    placeholder="أدخل اسم العميل"
+                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    placeholder="الاسم"
                     required
+                    autoFocus
                   />
                 </div>
 
-                {/* رقم الهاتف */}
+                {/* رقم الهاتف الأول */}
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    رقم الهاتف <span className="text-red-500">*</span>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    رقم الهاتف الأول <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="tel"
                     name="phone1"
                     value={quickCustomerForm.phone1}
                     onChange={handleQuickCustomerChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-transparent"
                     placeholder="+20 XXX XXX XXXX"
                     required
                   />
                 </div>
 
+                {/* رقم الهاتف الثاني */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    رقم الهاتف الثاني
+                  </label>
+                  <input
+                    type="tel"
+                    name="phone2"
+                    value={quickCustomerForm.phone2}
+                    onChange={handleQuickCustomerChange}
+                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    placeholder="+20 XXX XXX XXXX (اختياري)"
+                  />
+                </div>
+
                 {/* العنوان */}
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
                     العنوان
                   </label>
                   <input
@@ -1224,21 +1240,21 @@ const NewSalesInvoice = () => {
                     name="address"
                     value={quickCustomerForm.address}
                     onChange={handleQuickCustomerChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                    placeholder="أدخل العنوان (اختياري)"
+                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    placeholder="العنوان (اختياري)"
                   />
                 </div>
 
                 {/* نوع الوكيل */}
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    نوع الوكيل / المندوب
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    نوع الوكيل
                   </label>
                   <select
                     name="agentType"
                     value={quickCustomerForm.agentType}
                     onChange={handleQuickCustomerChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-transparent"
                   >
                     <option value="general">عام</option>
                     <option value="fatora">فاتورة</option>
@@ -1246,42 +1262,30 @@ const NewSalesInvoice = () => {
                   </select>
                 </div>
 
-                {/* معلومات إضافية */}
-                <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
-                  <div className="flex items-start gap-2">
-                    <FaInfoCircle className="text-blue-600 text-sm mt-0.5" />
-                    <div className="text-xs text-blue-700">
-                      <p className="font-semibold mb-1">ملاحظة سريعة:</p>
-                      <p>• سيتم إضافة العميل مباشرة لفاتورة المبيعات الحالية</p>
-                      <p>• يمكنك تعديل البيانات لاحقاً من صفحة إدارة العملاء</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* أزرار المودال */}
-                <div className="flex gap-3 pt-4">
+                {/* أزرار المودال المبسطة */}
+                <div className="flex gap-2 pt-2">
                   <button
                     type="button"
                     onClick={closeQuickCustomerModal}
-                    className="flex-1 px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                    className="flex-1 px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded hover:bg-gray-50 transition-colors"
                     disabled={quickCustomerLoading}
                   >
                     إلغاء
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    className="flex-1 px-3 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1"
                     disabled={quickCustomerLoading || !quickCustomerForm.name.trim() || !quickCustomerForm.phone1.trim()}
                   >
                     {quickCustomerLoading ? (
                       <>
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                        جاري الإضافة...
+                        <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        جاري...
                       </>
                     ) : (
                       <>
-                        <FaUserPlus className="text-sm" />
-                        إضافة العميل
+                        <FaUserPlus className="text-xs" />
+                        إضافة
                       </>
                     )}
                   </button>
