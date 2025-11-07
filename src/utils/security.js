@@ -80,10 +80,12 @@ export const sanitizeInput = (input) => {
   return input.trim().replace(/[<>]/g, '');
 };
 
-export default {
+const securityExports = {
   hashPassword,
   verifyPassword,
   generateId,
   checkPasswordStrength,
   sanitizeInput
 };
+
+export default securityExports;

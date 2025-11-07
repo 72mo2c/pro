@@ -15,7 +15,6 @@ const calculateSimilarity = (str1, str2) => {
   if (s1 === s2) return 1;
   
   const longer = s1.length > s2.length ? s1 : s2;
-  const shorter = s1.length > s2.length ? s2 : s1;
   
   if (longer.length === 0) return 1;
   
@@ -294,7 +293,7 @@ export const analyzeInvoiceBeforeAcceptance = (invoice, existingCustomers, exist
   };
 };
 
-export default {
+const autoMatchingExports = {
   matchCustomer,
   matchProduct,
   matchAllItems,
@@ -302,3 +301,5 @@ export default {
   checkInventoryAvailability,
   analyzeInvoiceBeforeAcceptance
 };
+
+export default autoMatchingExports;
