@@ -5,6 +5,7 @@ import {
   FaEdit, 
   FaTrash, 
   FaSearch, 
+  FaFilter,
   FaShippingFast,
   FaCheckCircle,
   FaClock,

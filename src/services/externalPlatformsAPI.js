@@ -293,14 +293,14 @@ export const setupWebhookListeners = async (onNewInvoice) => {
  */
 export const verifyWebhookSignature = (payload, signature, platform) => {
   // في الإنتاج، استخدم crypto للتحقق من التوقيع
-  const platformSecret = platform === 'invoice' 
+  const secret = platform === 'invoice' 
     ? API_CONFIG.INVOICE_PLATFORM.webhookSecret 
     : API_CONFIG.CARTON_PLATFORM.webhookSecret;
 
   // مثال: استخدام HMAC SHA256
   // const crypto = require('crypto');
   // const expectedSignature = crypto
-  //   .createHmac('sha256', platformSecret)
+  //   .createHmac('sha256', secret)
   //   .update(JSON.stringify(payload))
   //   .digest('hex');
   // 
@@ -309,7 +309,7 @@ export const verifyWebhookSignature = (payload, signature, platform) => {
   return true; // للاختبار فقط
 };
 
-const externalPlatformsAPIExports = {
+export default {
   invoicePlatformAPI,
   cartonPlatformAPI,
   fetchAllPendingInvoices,
@@ -318,5 +318,3 @@ const externalPlatformsAPIExports = {
   transformInvoicePlatformData,
   transformCartonPlatformData
 };
-
-export default externalPlatformsAPIExports;

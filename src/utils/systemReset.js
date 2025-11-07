@@ -156,10 +156,8 @@ if (typeof window !== 'undefined') {
   window.migratePasswordsToHashed = migratePasswordsToHashed;
 }
 
-const systemResetExports = {
+export default {
   resetSystemUsers,
   checkUsersIntegrity,
   migratePasswordsToHashed
 };
-
-export default systemResetExports;
