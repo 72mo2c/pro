@@ -706,7 +706,6 @@ const NewSalesInvoice = () => {
           <div className="grid grid-cols-8 gap-3 items-end">
             {/* العميل مع زر عميل جديد */}
             <div className="col-span-2 relative">
-              <label className="block text-xs font-medium text-gray-700 mb-1">العميل</label>
               <div className="flex gap-1">
                 <div className="relative flex-1">
                   <input
@@ -758,7 +757,6 @@ const NewSalesInvoice = () => {
 
             {/* نوع الفاتورة */}
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">نوع الفاتورة</label>
               <select
                 name="paymentType"
                 value={formData.paymentType}
@@ -774,7 +772,6 @@ const NewSalesInvoice = () => {
 
             {/* الشاحنة */}
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">الشاحنة</label>
               <select
                 name="selectedVehicle"
                 value={formData.selectedVehicle}
@@ -792,7 +789,6 @@ const NewSalesInvoice = () => {
 
             {/* نوع البيع */}
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">نوع البيع</label>
               <select
                 name="saleType"
                 value={formData.saleType}
@@ -807,7 +803,6 @@ const NewSalesInvoice = () => {
 
             {/* الوكيل/المندوب */}
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">الوكيل/المندوب</label>
               <select
                 name="agentType"
                 value={formData.agentType}
@@ -823,7 +818,6 @@ const NewSalesInvoice = () => {
 
             {/* التاريخ */}
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">التاريخ</label>
               <input
                 type="date"
                 name="date"
@@ -835,7 +829,6 @@ const NewSalesInvoice = () => {
 
             {/* الوقت */}
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">الوقت</label>
               <input
                 type="time"
                 name="time"

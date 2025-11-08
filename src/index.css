@@ -237,7 +237,7 @@
   }
 
   body {
-    background: white !important;
+    background: rgb(255, 234, 187) !important;
     color: black !important;
     margin: 0;
     padding: 0;
