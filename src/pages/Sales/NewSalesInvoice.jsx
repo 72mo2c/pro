@@ -261,6 +261,45 @@ const NewSalesInvoice = () => {
            customerPhone1.includes(searchTerm);
   });
 
+  // دالة تحديد السعر حسب نوع البيع
+  const getPriceForSaleType = (product, saleType) => {
+    if (product.tierPrices) {
+      // استخدام الشرائح السعرية
+      const tierPrice = product.tierPrices[saleType];
+      if (tierPrice) {
+        return {
+          price: tierPrice.basicPrice || 0,
+          subPrice: tierPrice.subPrice || 0
+        };
+      }
+    }
+    // النظام القديم - استخدام الأسعار الأساسية
+    return {
+      price: product.mainPrice || 0,
+      subPrice: product.subPrice || 0
+    };
+  };
+
+  // تحديث أسعار جميع المنتجات عند تغيير نوع البيع
+  const updateAllPricesForSaleType = (newSaleType) => {
+    const updatedItems = items.map(item => {
+      if (!item.productId) return item;
+      
+      const product = products.find(p => p.id === parseInt(item.productId));
+      if (!product) return item;
+      
+      const priceData = getPriceForSaleType(product, newSaleType);
+      return {
+        ...item,
+        price: priceData.price,
+        subPrice: priceData.subPrice,
+        saleType: newSaleType
+      };
+    });
+    
+    setItems(updatedItems);
+  };
+
   // البحث في المنتجات
   const handleProductSearch = (index, value) => {
     const newSearches = [...productSearches];
@@ -276,15 +315,15 @@ const NewSalesInvoice = () => {
   const selectProduct = (index, product) => {
     const newItems = [...items];
     
-    // اختيار السعر المناسب من الشريحة المختارة
-    const tierPrice = product.tierPrices?.[formData.saleType] || { basicPrice: 0, subPrice: 0 };
+    // تحديد السعر حسب نوع البيع المحدد
+    const priceData = getPriceForSaleType(product, formData.saleType);
     
     newItems[index] = {
       ...newItems[index],
       productId: product.id,
       productName: product.name,
-      price: parseFloat(tierPrice.basicPrice) || 0, // السعر الأساسي للشريحة
-      subPrice: parseFloat(tierPrice.subPrice) || 0, // السعر الفرعي للشريحة
+      price: priceData.price,
+      subPrice: priceData.subPrice,
       saleType: formData.saleType, // حفظ نوع البيع المختار
       discount: 0
     };
@@ -393,8 +432,9 @@ const NewSalesInvoice = () => {
       productName: '',
       quantity: 0, 
       subQuantity: 0,
-      mainPrice: 0,
+      price: 0,
       subPrice: 0,
+      saleType: formData.saleType,
       discount: 0
     }]);
     setProductSearches([...productSearches, '']);
@@ -673,7 +713,9 @@ const NewSalesInvoice = () => {
       agentType: '',
       notes: '',
       discountType: 'percentage',
-      discountValue: 0
+      discountValue: 0,
+      selectedVehicle: '',
+      saleType: 'retail'
     });
     setItems([{ 
       productId: '', 
@@ -792,13 +834,19 @@ const NewSalesInvoice = () => {
               <select
                 name="saleType"
                 value={formData.saleType}
-                onChange={handleChange}
+                onChange={(e) => {
+                  const newSaleType = e.target.value;
+                  setFormData({...formData, saleType: newSaleType});
+                  // تحديث أسعار جميع المنتجات المختارة
+                  updateAllPricesForSaleType(newSaleType);
+                }}
                 className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500"
               >
                 <option value="retail">البيع المباشر</option>
                 <option value="wholesale">الجملة</option>
                 <option value="bulk">جملة الجملة</option>
               </select>
+              
             </div>
 
             {/* الوكيل/المندوب */}

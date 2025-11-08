@@ -17,7 +17,8 @@ import {
   FaFilter,
   FaWarehouse,
   FaBarcode,
-  FaExclamationTriangle
+  FaExclamationTriangle,
+  FaDollarSign
 } from 'react-icons/fa';
 
 const ManageProducts = () => {
@@ -75,7 +76,16 @@ const ManageProducts = () => {
       return;
     }
     setEditingId(product.id);
-    setEditFormData({ ...product });
+    
+    // إنشاء نسخة من بيانات المنتج للتعديل
+    const editData = { ...product };
+    
+    // إذا كان المنتج يستخدم الشرائح السعرية، اربط سعر الجملة بالسعر الأساسي
+    if (product.tierPrices?.wholesale?.basicPrice) {
+      editData.mainPrice = product.tierPrices.wholesale.basicPrice;
+    }
+    
+    setEditFormData(editData);
   };
 
   const handleEditChange = (e) => {
@@ -87,6 +97,8 @@ const ManageProducts = () => {
 
   const handleSaveEdit = () => {
     try {
+      const currentProduct = products.find(p => p.id === editingId);
+      
       const updatedData = {
         ...editFormData,
         mainPrice: parseFloat(editFormData.mainPrice) || 0,
@@ -96,6 +108,17 @@ const ManageProducts = () => {
         unitsInMain: parseInt(editFormData.unitsInMain) || 0,
         warehouseId: parseInt(editFormData.warehouseId),
       };
+      
+      // إذا كان المنتج يستخدم الشرائح السعرية، احتفظ بها
+      if (currentProduct?.tierPrices) {
+        updatedData.tierPrices = {
+          ...currentProduct.tierPrices,
+          wholesale: {
+            ...currentProduct.tierPrices.wholesale,
+            basicPrice: parseFloat(editFormData.mainPrice) || 0
+          }
+        };
+      }
       
       updateProduct(editingId, updatedData);
       showSuccess('تم تحديث المنتج بنجاح');
@@ -261,6 +284,29 @@ const ManageProducts = () => {
                     <tr key={product.id} className="bg-blue-50 border-b">
                       <td className="px-3 py-3" colSpan="8">
                         <div className="space-y-3">
+                          {/* تذكير نظام الأسعار */}
+                          {product.tierPrices ? (
+                            <div className="bg-blue-50 border-l-4 border-blue-500 p-3 rounded">
+                              <div className="flex items-center gap-2">
+                                <FaDollarSign className="text-blue-500" />
+                                <p className="text-sm font-medium text-blue-700">
+                                  هذا المنتج يستخدم نظام الشرائح السعرية الجديد
+                                </p>
+                              </div>
+                              <p className="text-xs text-blue-600 mt-1">
+                                سيتم حفظ سعر الجملة ({formatCurrency(product.tierPrices?.wholesale?.basicPrice || 0)}) كسعر أساسي
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="bg-gray-50 border-l-4 border-gray-400 p-3 rounded">
+                              <div className="flex items-center gap-2">
+                                <FaDollarSign className="text-gray-500" />
+                                <p className="text-sm font-medium text-gray-600">
+                                  هذا المنتج يستخدم النظام التقليدي للأسعار
+                                </p>
+                              </div>
+                            </div>
+                          )}
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <div>
                               <label className="block text-xs font-medium text-gray-700 mb-1">اسم المنتج *</label>
@@ -458,9 +504,19 @@ const ManageProducts = () => {
                       </td>
                       <td className="px-3 py-2">
                         <div>
-                          <p className="font-semibold text-sm">{formatCurrency(product.mainPrice)}</p>
-                          {product.subPrice > 0 && (
-                            <p className="text-xs text-gray-500">{formatCurrency(product.subPrice)}</p>
+                          {/* عرض سعر الجملة فقط */}
+                          <p className="font-semibold text-sm text-blue-600">
+                            {formatCurrency(
+                              product.tierPrices?.wholesale?.basicPrice || 
+                              product.mainPrice || 0
+                            )}
+                          </p>
+                          
+                          {/* النظام القديم للأسعار الفرعية - مخفي */}
+                          {product.subPrice > 0 && !product.tierPrices && (
+                            <p className="text-xs text-gray-500">
+                              فرعي: {formatCurrency(product.subPrice)}
+                            </p>
                           )}
                         </div>
                       </td>
@@ -468,7 +524,9 @@ const ManageProducts = () => {
                         <p className="font-bold text-green-600 text-sm">
                           {(() => {
                           const totalSubQuantity = (product.mainQuantity || 0) * (product.unitsInMain || 0) + (product.subQuantity || 0);
-                          return formatCurrency(product.mainPrice * totalSubQuantity);
+                          // استخدام سعر الجملة إذا توفر، وإلا استخدام السعر الأساسي
+                          const priceToUse = product.tierPrices?.wholesale?.basicPrice || product.mainPrice || 0;
+                          return formatCurrency(priceToUse * totalSubQuantity);
                         })()}
                         </p>
                       </td>

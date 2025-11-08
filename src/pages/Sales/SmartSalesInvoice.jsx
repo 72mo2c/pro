@@ -23,6 +23,7 @@ const SmartSalesInvoice = () => {
     date: new Date().toISOString().split('T')[0],
     time: new Date().toTimeString().slice(0, 5),
     paymentType: 'main',
+    saleType: 'retail', // نوع البيع: retail, wholesale, bulk
     notes: '',
     discountType: 'percentage',
     discountValue: 0
@@ -169,15 +170,38 @@ const SmartSalesInvoice = () => {
     ).slice(0, 5);
   };
 
-  // تحديد منتج
+  // تحديد السعر حسب نوع البيع
+  const getPriceForSaleType = (product, saleType) => {
+    if (product.tierPrices) {
+      // استخدام الشرائح السعرية
+      const tierPrice = product.tierPrices[saleType];
+      if (tierPrice) {
+        return {
+          price: tierPrice.basicPrice || 0,
+          subPrice: tierPrice.subPrice || 0
+        };
+      }
+    }
+    // النظام القديم - استخدام الأسعار الأساسية
+    return {
+      price: product.mainPrice || 0,
+      subPrice: product.subPrice || 0
+    };
+  };
+
+  // تحديد المنتج مع السعر المناسب حسب نوع البيع
   const selectProduct = (index, product) => {
     const newItems = [...items];
+    
+    // تحديد السعر حسب نوع البيع المحدد
+    const priceData = getPriceForSaleType(product, formData.saleType);
+    
     newItems[index] = {
       ...newItems[index],
       productId: product.id,
       productName: product.name,
-      price: product.mainPrice,
-      subPrice: product.subPrice || 0
+      price: priceData.price,
+      subPrice: priceData.subPrice
     };
     setItems(newItems);
 
@@ -190,6 +214,25 @@ const SmartSalesInvoice = () => {
     const newShowProductSuggestions = [...showProductSuggestions];
     newShowProductSuggestions[index] = false;
     setShowProductSuggestions(newShowProductSuggestions);
+  };
+
+  // تحديث أسعار جميع المنتجات عند تغيير نوع البيع
+  const updateAllPricesForSaleType = (newSaleType) => {
+    const updatedItems = items.map(item => {
+      if (!item.productId) return item;
+      
+      const product = getSelectedProduct(item);
+      if (!product) return item;
+      
+      const priceData = getPriceForSaleType(product, newSaleType);
+      return {
+        ...item,
+        price: priceData.price,
+        subPrice: priceData.subPrice
+      };
+    });
+    
+    setItems(updatedItems);
   };
 
   // تحديث عنصر مع فحص المخزون
@@ -283,6 +326,7 @@ const SmartSalesInvoice = () => {
         date: new Date().toISOString().split('T')[0],
         time: new Date().toTimeString().slice(0, 5),
         paymentType: 'main',
+        saleType: 'retail',
         notes: '',
         discountType: 'percentage',
         discountValue: 0
@@ -492,12 +536,23 @@ const SmartSalesInvoice = () => {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">نوع البيع</label>
               <select
+                name="saleType"
+                value={formData.saleType}
+                onChange={(e) => {
+                  const newSaleType = e.target.value;
+                  setFormData({...formData, saleType: newSaleType});
+                  // تحديث أسعار جميع المنتجات المختارة
+                  updateAllPricesForSaleType(newSaleType);
+                }}
                 className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-orange-500"
               >
                 <option value="retail">البيع المباشر</option>
                 <option value="wholesale">الجملة</option>
                 <option value="bulk">جملة الجملة</option>
               </select>
+              <p className="text-xs text-gray-500 mt-1">
+                سيتم تحديث أسعار جميع المنتجات المختارة تلقائياً
+              </p>
             </div>
 
             {/* الوكيل/المندوب */}
