@@ -373,13 +373,8 @@ const Sidebar = ({ isOpen, closeSidebar }) => {
   const handleMouseLeave = (e) => {
     if (!isOpen) {
       const relatedTarget = e.relatedTarget;
-      
-      // التحقق من أن relatedTarget هو عنصر DOM صحيح
-      const isValidNode = relatedTarget && relatedTarget instanceof Node;
-      
-      if (!isValidNode || 
-          (!sidebarRef.current?.contains(relatedTarget) && 
-           !contextMenuRef.current?.contains(relatedTarget))) {
+      if (!sidebarRef.current?.contains(relatedTarget) && 
+          !contextMenuRef.current?.contains(relatedTarget)) {
         hoverTimeoutRef.current = setTimeout(() => {
           setIsHovered(false);
           setActiveMenu(null); // إغلاق القوائم الفرعية أيضاً

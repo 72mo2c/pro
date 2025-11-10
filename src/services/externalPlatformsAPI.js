@@ -309,7 +309,7 @@ export const verifyWebhookSignature = (payload, signature, platform) => {
   return true; // للاختبار فقط
 };
 
-export default {
+const Externalplatformsapi = {
   invoicePlatformAPI,
   cartonPlatformAPI,
   fetchAllPendingInvoices,
@@ -318,3 +318,4 @@ export default {
   transformInvoicePlatformData,
   transformCartonPlatformData
 };
+export default Externalplatformsapi;

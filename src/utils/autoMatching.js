@@ -294,7 +294,7 @@ export const analyzeInvoiceBeforeAcceptance = (invoice, existingCustomers, exist
   };
 };
 
-export default {
+const Automatching = {
   matchCustomer,
   matchProduct,
   matchAllItems,
@@ -302,3 +302,4 @@ export default {
   checkInventoryAvailability,
   analyzeInvoiceBeforeAcceptance
 };
+export default Automatching;
