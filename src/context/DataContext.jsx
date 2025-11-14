@@ -4,7 +4,6 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { updateStockWithSmartPurchase } from '../utils/dataContextUpdates.js';
-import { formatCurrency } from '../utils/currencyUtils.js';
 
 const DataContext = createContext();
 
@@ -2276,276 +2275,6 @@ export const DataProvider = ({ children }) => {
     return `${yearPrefix}${sequence.toString().padStart(3, '0')}`;
   };
 
-  // ==================== دوال إدارة الفواتير الآجلة والسداد المرتبط ====================
-  
-  // الحصول على فواتير العميل الآجلة (غير مسددة بالكامل)
-  const getCustomerDeferredInvoices = (customerId) => {
-    return salesInvoices
-      .filter(invoice => 
-        invoice.customerId === parseInt(customerId) && 
-        (invoice.paymentType === 'deferred' || invoice.paymentType === 'partial') &&
-        invoice.remaining > 0
-      )
-      .map(invoice => ({
-        ...invoice,
-        originalAmount: invoice.total,
-        paidAmount: invoice.paid || 0,
-        remainingAmount: invoice.remaining || invoice.total,
-        paymentStatus: invoice.paymentStatus || 'pending'
-      }))
-      .sort((a, b) => new Date(b.date) - new Date(a.date)); // الأحدث أولاً
-  };
-  
-  // الحصول على فواتير المورد الآجلة (غير مسددة بالكامل)
-  const getSupplierDeferredInvoices = (supplierId) => {
-    return purchaseInvoices
-      .filter(invoice => 
-        invoice.supplierId === parseInt(supplierId) && 
-        (invoice.paymentType === 'deferred' || invoice.paymentType === 'partial') &&
-        invoice.remaining > 0
-      )
-      .map(invoice => ({
-        ...invoice,
-        originalAmount: invoice.total,
-        paidAmount: invoice.paid || 0,
-        remainingAmount: invoice.remaining || invoice.total,
-        paymentStatus: invoice.paymentStatus || 'pending'
-      }))
-      .sort((a, b) => new Date(b.date) - new Date(a.date)); // الأحدث أولاً
-  };
-  
-  // سداد فاتورة محددة جزئياً أو كلياً
-  const payInvoiceAmount = (invoiceId, paymentAmount, paymentData) => {
-    const invoice = salesInvoices.find(inv => inv.id === invoiceId);
-    if (!invoice) {
-      throw new Error('الفاتورة غير موجودة');
-    }
-    
-    const currentPaid = invoice.paid || 0;
-    const currentRemaining = invoice.remaining || invoice.total;
-    const newPaidAmount = currentPaid + paymentAmount;
-    const newRemainingAmount = Math.max(0, currentRemaining - paymentAmount);
-    
-    // تحديد حالة الفاتورة
-    let paymentStatus = 'partial';
-    if (newRemainingAmount <= 0) {
-      paymentStatus = 'paid';
-    }
-    
-    // تحديث الفاتورة
-    const updatedInvoices = salesInvoices.map(inv => {
-      if (inv.id === invoiceId) {
-        return {
-          ...inv,
-          paid: newPaidAmount,
-          remaining: newRemainingAmount,
-          paymentStatus: paymentStatus,
-          lastPaymentDate: new Date().toISOString(),
-          paymentHistory: [
-            ...(inv.paymentHistory || []),
-            {
-              date: new Date().toISOString(),
-              amount: paymentAmount,
-              paymentMethod: paymentData.paymentMethod,
-              receiptNumber: paymentData.receiptNumber,
-              reference: paymentData.reference
-            }
-          ]
-        };
-      }
-      return inv;
-    });
-    
-    setSalesInvoices(updatedInvoices);
-    saveData('bero_sales_invoices', updatedInvoices);
-    
-    return {
-      invoice: updatedInvoices.find(inv => inv.id === invoiceId),
-      previousPaid: currentPaid,
-      newPaid: newPaidAmount,
-      previousRemaining: currentRemaining,
-      newRemaining: newRemainingAmount,
-      isFullyPaid: newRemainingAmount <= 0
-    };
-  };
-  
-  // سداد فاتورة مشتريات محددة جزئياً أو كلياً
-  const payPurchaseInvoiceAmount = (invoiceId, paymentAmount, paymentData) => {
-    const invoice = purchaseInvoices.find(inv => inv.id === invoiceId);
-    if (!invoice) {
-      throw new Error('فاتورة المشتريات غير موجودة');
-    }
-    
-    const currentPaid = invoice.paid || 0;
-    const currentRemaining = invoice.remaining || invoice.total;
-    const newPaidAmount = currentPaid + paymentAmount;
-    const newRemainingAmount = Math.max(0, currentRemaining - paymentAmount);
-    
-    // تحديد حالة الفاتورة
-    let paymentStatus = 'partial';
-    if (newRemainingAmount <= 0) {
-      paymentStatus = 'paid';
-    }
-    
-    // تحديث الفاتورة
-    const updatedInvoices = purchaseInvoices.map(inv => {
-      if (inv.id === invoiceId) {
-        return {
-          ...inv,
-          paid: newPaidAmount,
-          remaining: newRemainingAmount,
-          paymentStatus: paymentStatus,
-          lastPaymentDate: new Date().toISOString(),
-          paymentHistory: [
-            ...(inv.paymentHistory || []),
-            {
-              date: new Date().toISOString(),
-              amount: paymentAmount,
-              paymentMethod: paymentData.paymentMethod,
-              disbursementNumber: paymentData.disbursementNumber,
-              reference: paymentData.reference
-            }
-          ]
-        };
-      }
-      return inv;
-    });
-    
-    setPurchaseInvoices(updatedInvoices);
-    saveData('bero_purchase_invoices', updatedInvoices);
-    
-    return {
-      invoice: updatedInvoices.find(inv => inv.id === invoiceId),
-      previousPaid: currentPaid,
-      newPaid: newPaidAmount,
-      previousRemaining: currentRemaining,
-      newRemaining: newRemainingAmount,
-      isFullyPaid: newRemainingAmount <= 0
-    };
-  };
-  
-  // إضافة إيصال استلام نقدي مع ربط بالفواتير
-  const addCashReceiptWithInvoiceLink = (receiptData) => {
-    const { 
-      fromType, 
-      fromId, 
-      amount, 
-      referenceNumber, 
-      linkedInvoices = [],
-      date,
-      paymentMethod,
-      receiptNumber,
-      description,
-      notes
-    } = receiptData;
-    
-    const paymentAmount = parseFloat(amount);
-    let updatedReceiptData = { ...receiptData };
-    let treasuryIncrease = paymentAmount; // المبلغ الذي سيضاف للخزينة
-    
-    // إذا كان هناك فواتير مرتبطة، قم بسدادها
-    if (linkedInvoices.length > 0 && fromType === 'customer') {
-      let totalInvoicePayments = 0;
-      
-      linkedInvoices.forEach(invoiceInfo => {
-        const { invoiceId, paymentAmount: invoicePayment } = invoiceInfo;
-        const paymentForInvoice = Math.min(invoicePayment, paymentAmount - totalInvoicePayments);
-        
-        if (paymentForInvoice > 0) {
-          try {
-            const paymentResult = payInvoiceAmount(invoiceId, paymentForInvoice, {
-              paymentMethod,
-              receiptNumber,
-              reference: referenceNumber
-            });
-            
-            totalInvoicePayments += paymentForInvoice;
-            treasuryIncrease -= paymentForInvoice;
-            
-            console.log(`تم سداد ${formatCurrency(paymentForInvoice)} من فاتورة ${invoiceId}:`, paymentResult);
-          } catch (error) {
-            console.error(`خطأ في سداد فاتورة ${invoiceId}:`, error);
-            throw new Error(`فشل في سداد فاتورة رقم ${invoiceId}: ${error.message}`);
-          }
-        }
-      });
-    }
-    
-    // إعداد بيانات الإيصال مع التحديثات
-    updatedReceiptData = {
-      ...updatedReceiptData,
-      amount: paymentAmount,
-      treasuryAmount: Math.max(0, treasuryIncrease), // المبلغ الإضافي للخزينة
-      linkedInvoices: linkedInvoices,
-      finalAmount: paymentAmount,
-      balanceReduction: paymentAmount - Math.max(0, treasuryIncrease)
-    };
-    
-    // استدعاء دالة الإيصال الأساسية
-    return addCashReceipt(updatedReceiptData);
-  };
-  
-  // إضافة إيصال صرف نقدي مع ربط بالفواتير
-  const addCashDisbursementWithInvoiceLink = (disbursementData) => {
-    const { 
-      toType, 
-      toId, 
-      amount, 
-      referenceNumber, 
-      linkedInvoices = [],
-      date,
-      paymentMethod,
-      disbursementNumber,
-      description,
-      notes
-    } = disbursementData;
-    
-    const paymentAmount = parseFloat(amount);
-    let updatedDisbursementData = { ...disbursementData };
-    let treasuryDecrease = paymentAmount; // المخصوم من الخزينة
-    
-    // إذا كان هناك فواتير مرتبطة، قم بسدادها
-    if (linkedInvoices.length > 0 && toType === 'supplier') {
-      let totalInvoicePayments = 0;
-      
-      linkedInvoices.forEach(invoiceInfo => {
-        const { invoiceId, paymentAmount: invoicePayment } = invoiceInfo;
-        const paymentForInvoice = Math.min(invoicePayment, paymentAmount - totalInvoicePayments);
-        
-        if (paymentForInvoice > 0) {
-          try {
-            const paymentResult = payPurchaseInvoiceAmount(invoiceId, paymentForInvoice, {
-              paymentMethod,
-              disbursementNumber,
-              reference: referenceNumber
-            });
-            
-            totalInvoicePayments += paymentForInvoice;
-            treasuryDecrease -= paymentForInvoice;
-            
-            console.log(`تم سداد ${formatCurrency(paymentForInvoice)} من فاتورة مشتريات ${invoiceId}:`, paymentResult);
-          } catch (error) {
-            console.error(`خطأ في سداد فاتورة مشتريات ${invoiceId}:`, error);
-            throw new Error(`فشل في سداد فاتورة مشتريات رقم ${invoiceId}: ${error.message}`);
-          }
-        }
-      });
-    }
-    
-    // إعداد بيانات الإيصال مع التحديثات
-    updatedDisbursementData = {
-      ...updatedDisbursementData,
-      amount: paymentAmount,
-      treasuryAmount: Math.max(0, treasuryDecrease), // المخصوم من الخزينة
-      linkedInvoices: linkedInvoices,
-      finalAmount: paymentAmount,
-      balanceReduction: paymentAmount - Math.max(0, treasuryDecrease)
-    };
-    
-    // استدعاء دالة الإيصال الأساسية
-    return addCashDisbursement(updatedDisbursementData);
-  };
-
   const value = {
     warehouses,
     products,
@@ -4389,10 +4118,277 @@ export const DataProvider = ({ children }) => {
       };
     },
 
-
+    // دوال وأقسام إضافية للأصول الثابتة مدمجة في الدوال أعلاه
+    
+    // ==================== دوال إدارة الفواتير الآجلة والسداد المرتبط ====================
     
     // الحصول على فواتير العميل الآجلة (غير مسددة بالكامل)
-
+    const getCustomerDeferredInvoices = (customerId) => {
+      return salesInvoices
+        .filter(invoice => 
+          invoice.customerId === parseInt(customerId) && 
+          (invoice.paymentType === 'deferred' || invoice.paymentType === 'partial') &&
+          invoice.remaining > 0
+        )
+        .map(invoice => ({
+          ...invoice,
+          originalAmount: invoice.total,
+          paidAmount: invoice.paid || 0,
+          remainingAmount: invoice.remaining || invoice.total,
+          paymentStatus: invoice.paymentStatus || 'pending'
+        }))
+        .sort((a, b) => new Date(b.date) - new Date(a.date)); // الأحدث أولاً
+    };
+    
+    // الحصول على فواتير المورد الآجلة (غير مسددة بالكامل)
+    const getSupplierDeferredInvoices = (supplierId) => {
+      return purchaseInvoices
+        .filter(invoice => 
+          invoice.supplierId === parseInt(supplierId) && 
+          (invoice.paymentType === 'deferred' || invoice.paymentType === 'partial') &&
+          invoice.remaining > 0
+        )
+        .map(invoice => ({
+          ...invoice,
+          originalAmount: invoice.total,
+          paidAmount: invoice.paid || 0,
+          remainingAmount: invoice.remaining || invoice.total,
+          paymentStatus: invoice.paymentStatus || 'pending'
+        }))
+        .sort((a, b) => new Date(b.date) - new Date(a.date)); // الأحدث أولاً
+    };
+    
+    // سداد فاتورة محددة جزئياً أو كلياً
+    const payInvoiceAmount = (invoiceId, paymentAmount, paymentData) => {
+      const invoice = salesInvoices.find(inv => inv.id === invoiceId);
+      if (!invoice) {
+        throw new Error('الفاتورة غير موجودة');
+      }
+      
+      const currentPaid = invoice.paid || 0;
+      const currentRemaining = invoice.remaining || invoice.total;
+      const newPaidAmount = currentPaid + paymentAmount;
+      const newRemainingAmount = Math.max(0, currentRemaining - paymentAmount);
+      
+      // تحديد حالة الفاتورة
+      let paymentStatus = 'partial';
+      if (newRemainingAmount <= 0) {
+        paymentStatus = 'paid';
+      }
+      
+      // تحديث الفاتورة
+      const updatedInvoices = salesInvoices.map(inv => {
+        if (inv.id === invoiceId) {
+          return {
+            ...inv,
+            paid: newPaidAmount,
+            remaining: newRemainingAmount,
+            paymentStatus: paymentStatus,
+            lastPaymentDate: new Date().toISOString(),
+            paymentHistory: [
+              ...(inv.paymentHistory || []),
+              {
+                date: new Date().toISOString(),
+                amount: paymentAmount,
+                paymentMethod: paymentData.paymentMethod,
+                receiptNumber: paymentData.receiptNumber,
+                reference: paymentData.reference
+              }
+            ]
+          };
+        }
+        return inv;
+      });
+      
+      setSalesInvoices(updatedInvoices);
+      saveData('bero_sales_invoices', updatedInvoices);
+      
+      return {
+        invoice: updatedInvoices.find(inv => inv.id === invoiceId),
+        previousPaid: currentPaid,
+        newPaid: newPaidAmount,
+        previousRemaining: currentRemaining,
+        newRemaining: newRemainingAmount,
+        isFullyPaid: newRemainingAmount <= 0
+      };
+    };
+    
+    // سداد فاتورة مشتريات محددة جزئياً أو كلياً
+    const payPurchaseInvoiceAmount = (invoiceId, paymentAmount, paymentData) => {
+      const invoice = purchaseInvoices.find(inv => inv.id === invoiceId);
+      if (!invoice) {
+        throw new Error('فاتورة المشتريات غير موجودة');
+      }
+      
+      const currentPaid = invoice.paid || 0;
+      const currentRemaining = invoice.remaining || invoice.total;
+      const newPaidAmount = currentPaid + paymentAmount;
+      const newRemainingAmount = Math.max(0, currentRemaining - paymentAmount);
+      
+      // تحديد حالة الفاتورة
+      let paymentStatus = 'partial';
+      if (newRemainingAmount <= 0) {
+        paymentStatus = 'paid';
+      }
+      
+      // تحديث الفاتورة
+      const updatedInvoices = purchaseInvoices.map(inv => {
+        if (inv.id === invoiceId) {
+          return {
+            ...inv,
+            paid: newPaidAmount,
+            remaining: newRemainingAmount,
+            paymentStatus: paymentStatus,
+            lastPaymentDate: new Date().toISOString(),
+            paymentHistory: [
+              ...(inv.paymentHistory || []),
+              {
+                date: new Date().toISOString(),
+                amount: paymentAmount,
+                paymentMethod: paymentData.paymentMethod,
+                disbursementNumber: paymentData.disbursementNumber,
+                reference: paymentData.reference
+              }
+            ]
+          };
+        }
+        return inv;
+      });
+      
+      setPurchaseInvoices(updatedInvoices);
+      saveData('bero_purchase_invoices', updatedInvoices);
+      
+      return {
+        invoice: updatedInvoices.find(inv => inv.id === invoiceId),
+        previousPaid: currentPaid,
+        newPaid: newPaidAmount,
+        previousRemaining: currentRemaining,
+        newRemaining: newRemainingAmount,
+        isFullyPaid: newRemainingAmount <= 0
+      };
+    };
+    
+    // إضافة إيصال استلام نقدي مع ربط بالفواتير
+    const addCashReceiptWithInvoiceLink = (receiptData) => {
+      const { 
+        fromType, 
+        fromId, 
+        amount, 
+        referenceNumber, 
+        linkedInvoices = [],
+        date,
+        paymentMethod,
+        receiptNumber,
+        description,
+        notes
+      } = receiptData;
+      
+      const paymentAmount = parseFloat(amount);
+      let updatedReceiptData = { ...receiptData };
+      let treasuryIncrease = paymentAmount; // المبلغ الذي سيضاف للخزينة
+      
+      // إذا كان هناك فواتير مرتبطة، قم بسدادها
+      if (linkedInvoices.length > 0 && fromType === 'customer') {
+        let totalInvoicePayments = 0;
+        
+        linkedInvoices.forEach(invoiceInfo => {
+          const { invoiceId, paymentAmount: invoicePayment } = invoiceInfo;
+          const paymentForInvoice = Math.min(invoicePayment, paymentAmount - totalInvoicePayments);
+          
+          if (paymentForInvoice > 0) {
+            try {
+              const paymentResult = payInvoiceAmount(invoiceId, paymentForInvoice, {
+                paymentMethod,
+                receiptNumber,
+                reference: referenceNumber
+              });
+              
+              totalInvoicePayments += paymentForInvoice;
+              treasuryIncrease -= paymentForInvoice;
+              
+              console.log(`تم سداد ${formatCurrency(paymentForInvoice)} من فاتورة ${invoiceId}:`, paymentResult);
+            } catch (error) {
+              console.error(`خطأ في سداد فاتورة ${invoiceId}:`, error);
+              throw new Error(`فشل في سداد فاتورة رقم ${invoiceId}: ${error.message}`);
+            }
+          }
+        });
+      }
+      
+      // إعداد بيانات الإيصال مع التحديثات
+      updatedReceiptData = {
+        ...updatedReceiptData,
+        amount: paymentAmount,
+        treasuryAmount: Math.max(0, treasuryIncrease), // المبلغ الإضافي للخزينة
+        linkedInvoices: linkedInvoices,
+        finalAmount: paymentAmount,
+        balanceReduction: paymentAmount - Math.max(0, treasuryIncrease)
+      };
+      
+      // استدعاء دالة الإيصال الأساسية
+      return addCashReceipt(updatedReceiptData);
+    };
+    
+    // إضافة إيصال صرف نقدي مع ربط بالفواتير
+    const addCashDisbursementWithInvoiceLink = (disbursementData) => {
+      const { 
+        toType, 
+        toId, 
+        amount, 
+        referenceNumber, 
+        linkedInvoices = [],
+        date,
+        paymentMethod,
+        disbursementNumber,
+        description,
+        notes
+      } = disbursementData;
+      
+      const paymentAmount = parseFloat(amount);
+      let updatedDisbursementData = { ...disbursementData };
+      let treasuryDecrease = paymentAmount; // المخصوم من الخزينة
+      
+      // إذا كان هناك فواتير مرتبطة، قم بسدادها
+      if (linkedInvoices.length > 0 && toType === 'supplier') {
+        let totalInvoicePayments = 0;
+        
+        linkedInvoices.forEach(invoiceInfo => {
+          const { invoiceId, paymentAmount: invoicePayment } = invoiceInfo;
+          const paymentForInvoice = Math.min(invoicePayment, paymentAmount - totalInvoicePayments);
+          
+          if (paymentForInvoice > 0) {
+            try {
+              const paymentResult = payPurchaseInvoiceAmount(invoiceId, paymentForInvoice, {
+                paymentMethod,
+                disbursementNumber,
+                reference: referenceNumber
+              });
+              
+              totalInvoicePayments += paymentForInvoice;
+              treasuryDecrease -= paymentForInvoice;
+              
+              console.log(`تم سداد ${formatCurrency(paymentForInvoice)} من فاتورة مشتريات ${invoiceId}:`, paymentResult);
+            } catch (error) {
+              console.error(`خطأ في سداد فاتورة مشتريات ${invoiceId}:`, error);
+              throw new Error(`فشل في سداد فاتورة مشتريات رقم ${invoiceId}: ${error.message}`);
+            }
+          }
+        });
+      }
+      
+      // إعداد بيانات الإيصال مع التحديثات
+      updatedDisbursementData = {
+        ...updatedDisbursementData,
+        amount: paymentAmount,
+        treasuryAmount: Math.max(0, treasuryDecrease), // المخصوم من الخزينة
+        linkedInvoices: linkedInvoices,
+        finalAmount: paymentAmount,
+        balanceReduction: paymentAmount - Math.max(0, treasuryDecrease)
+      };
+      
+      // استدعاء دالة الإيصال الأساسية
+      return addCashDisbursement(updatedDisbursementData);
+    };
   };
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
