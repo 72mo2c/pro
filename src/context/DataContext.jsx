@@ -4,6 +4,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { updateStockWithSmartPurchase } from '../utils/dataContextUpdates.js';
+import { formatCurrency } from '../utils/currencyUtils.js';
 
 const DataContext = createContext();
 
@@ -17,15 +18,6 @@ export const useData = () => {
 };
 
 export const DataProvider = ({ children }) => {
-  // دالة تنسيق العملة المحلية
-  const formatCurrency = (amount = 0) => {
-    const numericAmount = Number(amount) || 0;
-    return numericAmount.toLocaleString('ar-EG', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }) + ' ج.م';
-  };
-
   // ==================== دوال نظام الشحن (مُعرَّفة مبكراً للاستخدام) ====================
   
   // دالة حساب تكلفة الشحن
