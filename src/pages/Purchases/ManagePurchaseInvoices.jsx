@@ -9,6 +9,7 @@ import { useSystemSettings } from '../../hooks/useSystemSettings';
 import { useAuth } from '../../context/AuthContext';
 import { FaFileInvoice, FaEdit, FaTrash, FaPrint, FaSearch, FaFilter, FaUndo, FaExclamationTriangle, FaTimes } from 'react-icons/fa';
 import { printInvoiceDirectly } from '../../utils/printUtils';
+import ConfirmationModal from '../../components/Common/ConfirmationModal';
 
 const ManagePurchaseInvoices = () => {
   const { purchaseInvoices, suppliers, products, warehouses, deletePurchaseInvoice, addPurchaseReturn, purchaseReturns } = useData();
@@ -29,6 +30,40 @@ const ManagePurchaseInvoices = () => {
     }).format(amount);
   };
 
+  // حساب حالة إرجاع الفاتورة
+  const getReturnStatus = (invoice) => {
+    const previousReturns = purchaseReturns.filter(ret => 
+      ret.invoiceId === invoice.id && ret.status !== 'cancelled'
+    );
+    
+    if (previousReturns.length === 0) return { status: 'none', color: 'gray', text: 'لم يتم إرجاع شيء' };
+    
+    let totalOriginalMain = 0, totalOriginalSub = 0;
+    let totalReturnedMain = 0, totalReturnedSub = 0;
+    
+    invoice.items.forEach(item => {
+      totalOriginalMain += parseInt(item.quantity) || 0;
+      totalOriginalSub += parseInt(item.subQuantity) || 0;
+    });
+    
+    previousReturns.forEach(ret => {
+      ret.items.forEach(item => {
+        totalReturnedMain += item.quantity || 0;
+        totalReturnedSub += item.subQuantity || 0;
+      });
+    });
+    
+    const mainComplete = totalReturnedMain >= totalOriginalMain;
+    const subComplete = totalReturnedSub >= totalOriginalSub;
+    
+    if (mainComplete && subComplete) {
+      return { status: 'full', color: 'red', text: 'إرجاع كامل' };
+    } else if (totalReturnedMain > 0 || totalReturnedSub > 0) {
+      return { status: 'partial', color: 'orange', text: 'إرجاع جزئي' };
+    }
+    return { status: 'none', color: 'gray', text: 'لم يتم إرجاع شيء' };
+  };
+
   // فحص الصلاحيات
   const canViewInvoice = hasPermission('view_purchase_invoices');
   const canReturnInvoice = hasPermission('return_purchase');
@@ -42,6 +77,12 @@ const ManagePurchaseInvoices = () => {
   const [paymentTypeFilter, setPaymentTypeFilter] = useState('all');
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [returnInvoice, setReturnInvoice] = useState(null);
+  const [dateFilterFrom, setDateFilterFrom] = useState('');
+  const [dateFilterTo, setDateFilterTo] = useState('');
+  
+  // Confirmation modal states
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [invoiceToDelete, setInvoiceToDelete] = useState(null);
 
   // تصفية الفواتير
   const filteredInvoices = purchaseInvoices.filter(invoice => {
@@ -50,8 +91,26 @@ const ManagePurchaseInvoices = () => {
     const matchesSearch = supplierName.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           invoice.id.toString().includes(searchQuery);
     const matchesFilter = paymentTypeFilter === 'all' || invoice.paymentType === paymentTypeFilter;
-    return matchesSearch && matchesFilter;
+    
+    // فلترة التاريخ
+    let matchesDateFilter = true;
+    if (dateFilterFrom || dateFilterTo) {
+      const invoiceDate = new Date(invoice.date);
+      const fromDate = dateFilterFrom ? new Date(dateFilterFrom) : null;
+      const toDate = dateFilterTo ? new Date(dateFilterTo) : null;
+      
+      if (fromDate && invoiceDate < fromDate) matchesDateFilter = false;
+      if (toDate && invoiceDate > toDate) matchesDateFilter = false;
+    }
+    
+    return matchesSearch && matchesFilter && matchesDateFilter;
   });
+
+  // إعادة تعيين فلاتر التاريخ
+  const clearDateFilters = () => {
+    setDateFilterFrom('');
+    setDateFilterTo('');
+  };
 
   const handleReturn = (invoice) => {
     if (!canReturnInvoice) {
@@ -93,20 +152,29 @@ const ManagePurchaseInvoices = () => {
     }
   };
 
-  const handleDelete = (invoice) => {
+  const handleDeleteClick = (invoice) => {
     if (!canDeleteInvoice) {
       showError('ليس لديك صلاحية لحذف فواتير المشتريات');
       return;
     }
-    
-    if (window.confirm(`هل أنت متأكد من حذف الفاتورة #${invoice.id}؟\nسيتم إعادة الكميات إلى المخزون.`)) {
-      try {
-        deletePurchaseInvoice(invoice.id);
-        showSuccess('تم حذف الفاتورة بنجاح وإعادة الكميات للمخزون');
-      } catch (error) {
-        showError(error.message || 'حدث خطأ في حذف الفاتورة');
-      }
+    setInvoiceToDelete(invoice);
+    setShowDeleteConfirm(true);
+  };
+
+  const handleDeleteConfirm = () => {
+    try {
+      deletePurchaseInvoice(invoiceToDelete.id);
+      showSuccess('تم حذف الفاتورة بنجاح وإعادة الكميات للمخزون');
+      setShowDeleteConfirm(false);
+      setInvoiceToDelete(null);
+    } catch (error) {
+      showError(error.message || 'حدث خطأ في حذف الفاتورة');
     }
+  };
+
+  const handleDeleteCancel = () => {
+    setShowDeleteConfirm(false);
+    setInvoiceToDelete(null);
   };
 
   // دوال معالجة الإرجاع
@@ -154,9 +222,10 @@ const ManagePurchaseInvoices = () => {
 
       {/* شريط البحث والتصفية */}
       <div className="bg-white rounded-lg shadow-md p-4 mb-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-12 gap-3 items-end">
           {/* البحث */}
-          <div className="col-span-2">
+          <div className="col-span-4">
+            <label className="block text-xs font-medium text-gray-700 mb-1">البحث</label>
             <div className="relative">
               <input
                 type="text"
@@ -169,8 +238,31 @@ const ManagePurchaseInvoices = () => {
             </div>
           </div>
 
+          {/* فلترة التاريخ - من */}
+          <div className="col-span-2">
+            <label className="block text-xs font-medium text-gray-700 mb-1">من تاريخ</label>
+            <input
+              type="date"
+              value={dateFilterFrom}
+              onChange={(e) => setDateFilterFrom(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+
+          {/* فلترة التاريخ - إلى */}
+          <div className="col-span-2">
+            <label className="block text-xs font-medium text-gray-700 mb-1">إلى تاريخ</label>
+            <input
+              type="date"
+              value={dateFilterTo}
+              onChange={(e) => setDateFilterTo(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+
           {/* التصفية حسب نوع الدفع */}
-          <div>
+          <div className="col-span-2">
+            <label className="block text-xs font-medium text-gray-700 mb-1">نوع الدفع</label>
             <div className="relative">
               <select
                 value={paymentTypeFilter}
@@ -185,10 +277,51 @@ const ManagePurchaseInvoices = () => {
               <FaFilter className="absolute left-3 top-3 text-gray-400" />
             </div>
           </div>
+
+          {/* زر مسح الفلاتر */}
+          <div className="col-span-2">
+            <label className="block text-xs font-medium text-gray-700 mb-1">إعدادات</label>
+            <button
+              onClick={() => {
+                setSearchQuery('');
+                setPaymentTypeFilter('all');
+                clearDateFilters();
+              }}
+              disabled={!(dateFilterFrom || dateFilterTo || searchQuery || paymentTypeFilter !== 'all')}
+              className={`w-full px-3 py-2 text-sm font-medium rounded-md transition-colors flex items-center justify-center gap-2 ${
+                (dateFilterFrom || dateFilterTo || searchQuery || paymentTypeFilter !== 'all')
+                  ? 'bg-red-600 hover:bg-red-700 text-white cursor-pointer'
+                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              }`}
+              title="مسح جميع الفلاتر"
+            >
+              <FaTimes className="text-xs" />
+              مسح الكل
+            </button>
+          </div>
         </div>
 
-        <div className="mt-3 text-sm text-gray-600">
-          عرض {filteredInvoices.length} من {purchaseInvoices.length} فاتورة
+        <div className="mt-3 text-sm text-gray-600 flex flex-wrap items-center gap-4">
+          <span>عرض {filteredInvoices.length} من {purchaseInvoices.length} فاتورة</span>
+          {(dateFilterFrom || dateFilterTo || searchQuery || paymentTypeFilter !== 'all') && (
+            <div className="flex flex-wrap gap-2">
+              {(dateFilterFrom || dateFilterTo) && (
+                <span className="text-blue-600 bg-blue-50 px-2 py-1 rounded text-xs">
+                  تاريخ: {dateFilterFrom && `${dateFilterFrom} → `}{dateFilterTo || 'الآن'}
+                </span>
+              )}
+              {searchQuery && (
+                <span className="text-green-600 bg-green-50 px-2 py-1 rounded text-xs">
+                  بحث: "{searchQuery}"
+                </span>
+              )}
+              {paymentTypeFilter !== 'all' && (
+                <span className="text-purple-600 bg-purple-50 px-2 py-1 rounded text-xs">
+                  نوع الدفع: {paymentTypes[paymentTypeFilter]}
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -221,7 +354,21 @@ const ManagePurchaseInvoices = () => {
                   return (
                     <tr key={invoice.id} className="hover:bg-gray-50">
                       <td className="px-3 py-2 font-semibold text-blue-600">
-                        #{invoice.id}
+                        <div className="flex items-center gap-2">
+                          #{invoice.id}
+                          {(() => {
+                            const returnStatus = getReturnStatus(invoice);
+                            return returnStatus.status !== 'none' ? (
+                              <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                                returnStatus.color === 'red' ? 'bg-red-100 text-red-700' :
+                                returnStatus.color === 'orange' ? 'bg-orange-100 text-orange-700' :
+                                'bg-gray-100 text-gray-700'
+                              }`}>
+                                {returnStatus.text}
+                              </span>
+                            ) : null;
+                          })()}
+                        </div>
                       </td>
                       <td className="px-3 py-2">
                         <div className="font-medium">{supplier?.name || 'غير محدد'}</div>
@@ -278,7 +425,7 @@ const ManagePurchaseInvoices = () => {
                           )}
                           {canDeleteInvoice && (
                             <button
-                              onClick={() => handleDelete(invoice)}
+                              onClick={() => handleDeleteClick(invoice)}
                               className="p-2 text-red-600 hover:bg-red-50 rounded transition-colors"
                               title="حذف"
                             >
@@ -444,6 +591,20 @@ const ManagePurchaseInvoices = () => {
           showError={showError}
         />
       )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && invoiceToDelete && (
+        <ConfirmationModal
+          isOpen={showDeleteConfirm}
+          title="تأكيد الحذف"
+          message={`هل أنت متأكد من حذف الفاتورة #${invoiceToDelete.id}؟\nسيتم إعادة الكميات إلى المخزون.`}
+          confirmText="حذف"
+          cancelText="إلغاء"
+          onConfirm={handleDeleteConfirm}
+          onCancel={handleDeleteCancel}
+          variant="danger"
+        />
+      )}
     </div>
   );
 };
@@ -463,16 +624,24 @@ const PurchaseReturnModal = ({ invoice, products, suppliers, purchaseReturns, on
         ret.invoiceId === invoice.id && ret.status !== 'cancelled'
       );
       
-      let totalReturnedQty = 0;
+      // حساب الكمية المرتجعة الأساسية والفرعية منفصلة
+      let totalReturnedMainQty = 0;
+      let totalReturnedSubQty = 0;
       previousReturns.forEach(ret => {
         const retItem = ret.items.find(i => i.productId === item.productId);
         if (retItem) {
-          totalReturnedQty += (retItem.quantity || 0) + (retItem.subQuantity || 0);
+          totalReturnedMainQty += (retItem.quantity || 0);
+          totalReturnedSubQty += (retItem.subQuantity || 0);
         }
       });
       
-      const originalQty = parseInt(item.quantity) || 0;
-      const availableQty = originalQty - totalReturnedQty;
+      // الحصول على الكمية الأصلية الأساسية والفرعية
+      const originalMainQty = parseInt(item.quantity) || 0;
+      const originalSubQty = parseInt(item.subQuantity) || 0;
+      
+      // حساب الكمية المتاحة للإرجاع
+      const availableMainQty = originalMainQty - totalReturnedMainQty;
+      const availableSubQty = originalSubQty - totalReturnedSubQty;
       
       // الحصول على اسم المنتج من قائمة المنتجات
       const product = products.find(p => p.id === parseInt(item.productId));
@@ -480,11 +649,15 @@ const PurchaseReturnModal = ({ invoice, products, suppliers, purchaseReturns, on
       return {
         productId: item.productId,
         productName: product?.name || item.productName || 'غير محدد',
-        originalQuantity: originalQty,
-        originalPrice: item.price || 0,
-        returnedQty: totalReturnedQty,
-        availableQty: availableQty,
-        returnQuantity: 0,
+        originalMainQuantity: originalMainQty,
+        originalSubQuantity: originalSubQty,
+        originalMainPrice: item.price || 0,
+        originalSubPrice: item.subPrice || 0,
+        returnedMainQty: totalReturnedMainQty,
+        returnedSubQty: totalReturnedSubQty,
+        availableMainQty: availableMainQty,
+        availableSubQty: availableSubQty,
+        returnMainQuantity: 0,
         returnSubQuantity: 0,
         selected: false
       };
@@ -499,22 +672,36 @@ const PurchaseReturnModal = ({ invoice, products, suppliers, purchaseReturns, on
     
     // إذا تم إلغاء التحديد، إعادة تعيين الكميات
     if (!updated[index].selected) {
-      updated[index].returnQuantity = 0;
+      updated[index].returnMainQuantity = 0;
       updated[index].returnSubQuantity = 0;
     }
     
     setReturnItems(updated);
   };
 
-  const handleQuantityChange = (index, value) => {
+  const handleMainQuantityChange = (index, value) => {
     const updated = [...returnItems];
     const item = updated[index];
     
-    updated[index].returnQuantity = Math.max(0, parseInt(value) || 0);
+    updated[index].returnMainQuantity = Math.max(0, parseInt(value) || 0);
     
     // التحقق من عدم تجاوز الكمية المتاحة
-    if (updated[index].returnQuantity > item.availableQty) {
-      updated[index].returnQuantity = 0;
+    if (updated[index].returnMainQuantity > item.availableMainQty) {
+      updated[index].returnMainQuantity = 0;
+    }
+    
+    setReturnItems(updated);
+  };
+
+  const handleSubQuantityChange = (index, value) => {
+    const updated = [...returnItems];
+    const item = updated[index];
+    
+    updated[index].returnSubQuantity = Math.max(0, parseInt(value) || 0);
+    
+    // التحقق من عدم تجاوز الكمية المتاحة
+    if (updated[index].returnSubQuantity > item.availableSubQty) {
+      updated[index].returnSubQuantity = 0;
     }
     
     setReturnItems(updated);
@@ -523,8 +710,9 @@ const PurchaseReturnModal = ({ invoice, products, suppliers, purchaseReturns, on
   const calculateTotalReturn = () => {
     return returnItems.reduce((total, item) => {
       if (item.selected) {
-        const mainAmount = item.returnQuantity * item.originalPrice;
-        return total + mainAmount;
+        const mainAmount = (item.returnMainQuantity || 0) * (item.originalMainPrice || 0);
+        const subAmount = (item.returnSubQuantity || 0) * (item.originalSubPrice || 0);
+        return total + mainAmount + subAmount;
       }
       return total;
     }, 0);
@@ -542,7 +730,7 @@ const PurchaseReturnModal = ({ invoice, products, suppliers, purchaseReturns, on
 
     // التحقق من الكميات
     const hasInvalidQuantity = selectedItems.some(item => 
-      item.returnQuantity === 0
+      (item.returnMainQuantity === 0 && item.returnSubQuantity === 0)
     );
     
     if (hasInvalidQuantity) {
@@ -562,8 +750,8 @@ const PurchaseReturnModal = ({ invoice, products, suppliers, purchaseReturns, on
         invoiceId: invoice.id,
         items: selectedItems.map(item => ({
           productId: item.productId,
-          quantity: item.returnQuantity,
-          subQuantity: 0
+          quantity: item.returnMainQuantity || 0,
+          subQuantity: item.returnSubQuantity || 0
         })),
         reason,
         notes
@@ -577,7 +765,7 @@ const PurchaseReturnModal = ({ invoice, products, suppliers, purchaseReturns, on
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-lg max-w-3xl w-full max-h-[80vh] overflow-y-auto">
         {/* رأس النافذة */}
         <div className="flex justify-between items-center p-6 border-b">
           <div>
@@ -638,7 +826,7 @@ const PurchaseReturnModal = ({ invoice, products, suppliers, purchaseReturns, on
                           onChange={(e) => {
                             const updated = returnItems.map(item => ({
                               ...item,
-                              selected: e.target.checked && item.availableQty > 0
+                              selected: e.target.checked && (item.availableMainQty > 0 || item.availableSubQty > 0)
                             }));
                             setReturnItems(updated);
                           }}
@@ -647,17 +835,22 @@ const PurchaseReturnModal = ({ invoice, products, suppliers, purchaseReturns, on
                       </th>
                       <th className="px-3 py-2 text-right text-xs font-semibold text-gray-700">المنتج</th>
                       <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700">الكمية الأصلية</th>
+                      <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700">الكميه الفرعية</th>
                       <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700">المرتجع سابقاً</th>
+                      <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700">المرتجع فرعياً</th>
                       <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700">المتاح للإرجاع</th>
+                      <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700">المتاح فرعياً</th>
                       <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700">كمية الإرجاع</th>
+                      <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700">كمية فرعية</th>
                       <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700">المبلغ المرتجع</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
                     {returnItems.map((item, index) => {
                       const product = products.find(p => p.id === parseInt(item.productId));
-                      const returnAmount = item.returnQuantity * item.originalPrice;
-                      const isDisabled = item.availableQty === 0;
+                      const returnAmount = (item.returnMainQuantity || 0) * (item.originalMainPrice || 0) + 
+                                          (item.returnSubQuantity || 0) * (item.originalSubPrice || 0);
+                      const isDisabled = item.availableMainQty === 0 && item.availableSubQty === 0;
                       
                       return (
                         <tr key={index} className={`hover:bg-gray-50 ${isDisabled ? 'opacity-50' : ''}`}>
@@ -675,29 +868,58 @@ const PurchaseReturnModal = ({ invoice, products, suppliers, purchaseReturns, on
                             <div className="text-xs text-gray-500">{product?.category || '-'}</div>
                           </td>
                           <td className="px-3 py-2 text-center">
-                            {item.originalQuantity}
+                            {item.originalMainQuantity}
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            {item.originalSubQuantity || '-'}
                           </td>
                           <td className="px-3 py-2 text-center">
                             <span className="px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs font-semibold">
-                              {item.returnedQty}
+                              {item.returnedMainQty}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <span className="px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs font-semibold">
+                              {item.returnedSubQty || 0}
                             </span>
                           </td>
                           <td className="px-3 py-2 text-center">
                             <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                              item.availableQty > 0 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                              item.availableMainQty > 0 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
                             }`}>
-                              {item.availableQty}
+                              {item.availableMainQty}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                              item.availableSubQty > 0 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                            }`}>
+                              {item.availableSubQty || 0}
                             </span>
                           </td>
                           <td className="px-3 py-2">
                             {item.selected && (
                               <input
                                 type="number"
-                                value={item.returnQuantity}
-                                onChange={(e) => handleQuantityChange(index, e.target.value)}
-                                className="w-20 px-2 py-1 text-xs text-center border border-gray-300 rounded"
+                                value={item.returnMainQuantity}
+                                onChange={(e) => handleMainQuantityChange(index, e.target.value)}
+                                className="w-16 px-1 py-1 text-xs text-center border border-gray-300 rounded"
                                 min="0"
-                                max={item.availableQty}
+                                max={item.availableMainQty}
+                                placeholder="أساسي"
+                              />
+                            )}
+                          </td>
+                          <td className="px-3 py-2">
+                            {item.selected && (
+                              <input
+                                type="number"
+                                value={item.returnSubQuantity}
+                                onChange={(e) => handleSubQuantityChange(index, e.target.value)}
+                                className="w-16 px-1 py-1 text-xs text-center border border-gray-300 rounded"
+                                min="0"
+                                max={item.availableSubQty}
+                                placeholder="فرعي"
                               />
                             )}
                           </td>

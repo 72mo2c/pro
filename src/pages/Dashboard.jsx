@@ -3,7 +3,7 @@
 // ======================================
 
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useTab } from '../contexts/TabContext';
 import { useData } from '../context/DataContext';
 import { 
   FaWarehouse, 
@@ -24,7 +24,7 @@ import {
 } from 'react-icons/fa';
 
 const Dashboard = () => {
-  const navigate = useNavigate();
+  const { openTab } = useTab();
   const { warehouses, products, suppliers, customers, purchaseInvoices, salesInvoices, treasuryBalance } = useData();
 
   // حساب الإحصائيات المحسّنة
@@ -240,7 +240,7 @@ const Dashboard = () => {
             </div>
             <div className="flex gap-3">
               <button
-                onClick={() => navigate('/tools/fix-negative-quantities')}
+                onClick={() => openTab('/tools/fix-negative-quantities', 'إصلاح الكميات السالبة', '🛠️')}
                 className="bg-orange-500 text-white px-6 py-2 rounded-lg font-semibold hover:bg-orange-600 transition-all flex items-center gap-2"
               >
                 <FaTools />
@@ -264,7 +264,7 @@ const Dashboard = () => {
               </div>
             </div>
             <button
-              onClick={() => navigate('/reports/low-stock')}
+              onClick={() => openTab('/reports/low-stock', 'تقرير المخزون المنخفض', '⚠️')}
               className="bg-white text-orange-600 px-6 py-2 rounded-lg font-semibold hover:bg-gray-100 transition-all flex items-center gap-2"
             >
               <span>عرض التقرير</span>
@@ -286,7 +286,7 @@ const Dashboard = () => {
               </div>
             </div>
             <button
-              onClick={() => navigate('/warehouses/inventory')}
+              onClick={() => openTab('/warehouses/inventory', 'مراجعة المخزون', '📦')}
               className="bg-white text-red-600 px-6 py-2 rounded-lg font-semibold hover:bg-gray-100 transition-all flex items-center gap-2"
             >
               <span>مراجعة المخزون</span>
@@ -301,7 +301,22 @@ const Dashboard = () => {
         {systemModules.map((module, index) => (
           <div
             key={index}
-            onClick={() => navigate(module.path)}
+            onClick={() => {
+              // الحصول على أيقونة مناسبة للتبويب
+              const getTabIcon = (path) => {
+                if (path.includes('warehouses')) return '📦';
+                if (path.includes('customers')) return '👥';
+                if (path.includes('suppliers')) return '🚚';
+                if (path.includes('sales')) return '💰';
+                if (path.includes('purchases')) return '🛒';
+                if (path.includes('returns')) return '↩️';
+                if (path.includes('treasury')) return '💵';
+                if (path.includes('reports')) return '📊';
+                return '📄';
+              };
+              
+              openTab(module.path, module.title, getTabIcon(module.path));
+            }}
             className="group cursor-pointer"
           >
             <div className="bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden border-2 border-transparent hover:border-gray-200 h-full flex flex-col">

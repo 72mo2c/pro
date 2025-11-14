@@ -10,7 +10,7 @@ import Button from '../../components/Common/Button';
 import { FaBuilding, FaCheck, FaTimes, FaLink, FaSync, FaHistory, FaChartLine, FaExclamationTriangle } from 'react-icons/fa';
 
 const ExternalPlatforms = () => {
-  const { showSuccess, showError } = useNotification();
+  const { showSuccess, showError, showConfirm } = useNotification();
   
   const [platformCredentials, setPlatformCredentials] = useState({
     fatooraApiKey: '',
@@ -26,8 +26,6 @@ const ExternalPlatforms = () => {
   });
 
   const [activityLog, setActivityLog] = useState([]);
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [platformToDisconnect, setPlatformToDisconnect] = useState(null);
 
   // تحميل البيانات من localStorage
   useEffect(() => {
@@ -108,13 +106,21 @@ const ExternalPlatforms = () => {
   };
 
   const handleDisconnectClick = (platform) => {
-    setPlatformToDisconnect(platform);
-    setShowConfirmModal(true);
+    const platformName = platform === 'fatoora' ? 'فاتورة' : 'كرتونة';
+    
+    showConfirm(
+      'تأكيد قطع الاتصال',
+      `هل أنت متأكد من قطع الاتصال مع منصة ${platformName}؟ سيتم حذف جميع بيانات الاعتماد المحفوظة.`,
+      () => confirmDisconnect(platform),
+      {
+        type: 'warning',
+        confirmText: 'قطع الاتصال',
+        cancelText: 'إلغاء'
+      }
+    );
   };
 
-  const confirmDisconnect = () => {
-    const platform = platformToDisconnect;
-    
+  const confirmDisconnect = (platform) => {
     if (platform === 'fatoora') {
       const updatedData = {
         ...platformCredentials,
@@ -138,9 +144,6 @@ const ExternalPlatforms = () => {
       addActivity('كرتونة', 'قطع الاتصال', 'نجح');
       showSuccess('تم قطع الاتصال مع منصة كرتونة');
     }
-    
-    setShowConfirmModal(false);
-    setPlatformToDisconnect(null);
   };
 
   const handleSync = (platform) => {
@@ -473,49 +476,7 @@ const ExternalPlatforms = () => {
         </Card>
       </div>
 
-      {/* نافذة تأكيد قطع الاتصال */}
-      {showConfirmModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9998]">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <div className="flex items-center justify-center mb-4">
-              <div className="bg-yellow-100 rounded-full p-4">
-                <FaExclamationTriangle className="text-4xl text-yellow-600" />
-              </div>
-            </div>
 
-            <h2 className="text-2xl font-bold text-gray-800 mb-4 text-center">
-              تأكيد قطع الاتصال
-            </h2>
-
-            <div className="bg-yellow-50 p-4 rounded-lg mb-4 border border-yellow-200">
-              <p className="text-gray-700 text-center">
-                هل أنت متأكد من قطع الاتصال مع منصة <span className="font-bold">{platformToDisconnect === 'fatoora' ? 'فاتورة' : 'كرتونة'}</span>؟
-              </p>
-              <p className="text-sm text-gray-600 text-center mt-2">
-                سيتم حذف جميع بيانات الاعتماد المحفوظة
-              </p>
-            </div>
-
-            <div className="flex gap-4">
-              <button
-                onClick={confirmDisconnect}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors"
-              >
-                نعم، قطع الاتصال
-              </button>
-              <button
-                onClick={() => {
-                  setShowConfirmModal(false);
-                  setPlatformToDisconnect(null);
-                }}
-                className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-3 px-6 rounded-lg transition-colors"
-              >
-                إلغاء
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

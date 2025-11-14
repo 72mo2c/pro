@@ -3,6 +3,7 @@
 // ======================================
 
 import React, { createContext, useContext, useState, useCallback } from 'react';
+import ConfirmationModal from '../components/Common/ConfirmationModal';
 
 const NotificationContext = createContext();
 
@@ -18,6 +19,17 @@ export const useNotification = () => {
 export const NotificationProvider = ({ children }) => {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  
+  // حالة نافذة التأكيد
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'confirm',
+    confirmText: 'تأكيد',
+    cancelText: 'إلغاء',
+    onConfirm: null
+  });
 
   // إضافة إشعار جديد
   const addNotification = useCallback((notification) => {
@@ -78,6 +90,32 @@ export const NotificationProvider = ({ children }) => {
     });
   }, [addNotification]);
 
+  // إضافة نافذة تأكيد
+  const showConfirm = useCallback((title, message, onConfirm, options = {}) => {
+    setConfirmModal({
+      isOpen: true,
+      title,
+      message,
+      type: options.type || 'confirm',
+      confirmText: options.confirmText || 'تأكيد',
+      cancelText: options.cancelText || 'إلغاء',
+      onConfirm: onConfirm
+    });
+  }, []);
+
+  // إغلاق نافذة التأكيد
+  const closeConfirmModal = useCallback(() => {
+    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+  }, []);
+
+  // تنفيذ التأكيد
+  const handleConfirm = useCallback(() => {
+    if (confirmModal.onConfirm) {
+      confirmModal.onConfirm();
+    }
+    closeConfirmModal();
+  }, [confirmModal.onConfirm, closeConfirmModal]);
+
   // وضع إشعار كمقروء
   const markAsRead = useCallback((id) => {
     setNotifications(prev => 
@@ -122,6 +160,8 @@ export const NotificationProvider = ({ children }) => {
     showError,
     showWarning,
     showInfo,
+    showConfirm,
+    closeConfirmModal,
     markAsRead,
     markAllAsRead,
     removeNotification,
@@ -131,6 +171,18 @@ export const NotificationProvider = ({ children }) => {
   return (
     <NotificationContext.Provider value={value} style={{ zIndex: 1000 }}>
       {children}
+      
+      {/* نافذة التأكيد */}
+      <ConfirmationModal
+        isOpen={confirmModal.isOpen}
+        onClose={closeConfirmModal}
+        onConfirm={handleConfirm}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        type={confirmModal.type}
+        confirmText={confirmModal.confirmText}
+        cancelText={confirmModal.cancelText}
+      />
     </NotificationContext.Provider>
   );
 };

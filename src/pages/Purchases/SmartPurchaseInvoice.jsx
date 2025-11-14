@@ -5,7 +5,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useData } from '../../context/DataContext';
 import { useNotification } from '../../context/NotificationContext';
-import { FaSave, FaPrint, FaSearch, FaTrash, FaPercent, FaMoneyBillWave, FaExclamationTriangle, FaInfoCircle, FaCalculator } from 'react-icons/fa';
+import { useTab } from '../../contexts/TabContext';
+import { FaSave, FaPrint, FaSearch, FaTrash, FaPercent, FaMoneyBillWave, FaExclamationTriangle, FaInfoCircle, FaCalculator, FaList } from 'react-icons/fa';
 import { 
   calculateTotalSubQuantity, 
   convertSubToMain, 
@@ -17,6 +18,12 @@ import { checkStockAvailability } from '../../utils/dataContextUpdates';
 const SmartPurchaseInvoice = () => {
   const { suppliers, products, warehouses, addPurchaseInvoice, getSupplierBalance } = useData();
   const { showSuccess, showError } = useNotification();
+  const { openTab } = useTab();
+  
+  // دالة لفتح سجل المشتريات في تبويبة جديدة
+  const handleOpenPurchaseRecord = () => {
+    openTab('/purchases/manage', 'سجل فواتير المشتريات', '📋');
+  };
   
   const [formData, setFormData] = useState({
     supplierId: '',
@@ -534,10 +541,21 @@ const SmartPurchaseInvoice = () => {
           </div>
 
           {/* أزرار الحفظ */}
-          <div className="flex gap-4">
+          <div className="flex flex-wrap justify-center gap-3 pt-4 border-t">
+            {/* زر السجل */}
+            <button
+              type="button"
+              onClick={handleOpenPurchaseRecord}
+              className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white px-4 py-2.5 rounded-lg transition-colors font-medium text-sm shadow-sm hover:shadow-md"
+              title="فتح سجل فواتير المشتريات في تبويبة جديدة"
+            >
+              <FaList /> سجل المشتريات
+            </button>
+            
+            {/* زر الحفظ الرئيسي */}
             <button
               type="submit"
-              className="flex-1 bg-green-500 hover:bg-green-600 text-white py-3 px-4 rounded flex items-center justify-center gap-2"
+              className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white px-5 py-2.5 rounded-lg transition-colors font-medium shadow-sm hover:shadow-md"
             >
               <FaSave /> حفظ الفاتورة
             </button>

@@ -5,7 +5,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useData } from '../../context/DataContext';
 import { useNotification } from '../../context/NotificationContext';
-import { FaSave, FaPrint, FaSearch, FaTrash, FaPercent, FaMoneyBillWave, FaExclamationTriangle, FaInfoCircle, FaCalculator, FaCheckCircle, FaUserPlus, FaTimes } from 'react-icons/fa';
+import { useTab } from '../../contexts/TabContext';
+import { FaSave, FaPrint, FaSearch, FaTrash, FaPercent, FaMoneyBillWave, FaExclamationTriangle, FaInfoCircle, FaCalculator, FaCheckCircle, FaUserPlus, FaTimes, FaList } from 'react-icons/fa';
 import { 
   calculateTotalSubQuantity, 
   convertSubToMain, 
@@ -14,9 +15,53 @@ import {
 } from '../../utils/unitConversion';
 import { checkStockAvailability, updateStockWithConversion } from '../../utils/dataContextUpdates';
 
+// دالة للتحقق من أرقام الهواتف المصرية (11 رقم بالضبط)
+const validatePhoneNumber = (phone) => {
+  if (!phone) return { isValid: true, error: null };
+  
+  // إزالة المسافات والشرطات
+  const cleanPhone = phone.replace(/[\s-]/g, '');
+  
+  // التحقق من أن الرقم يبدأ برقم مصري (010, 011, 012, 015, 0100-0199)
+  const egyptianPhoneRegex = /^(010|011|012|015|0100|0101|0102|0103|0104|0105|0106|0107|0108|0109|0110|0111|0112|0113|0114|0115|0116|0117|0118|0119|0120|0121|0122|0123|0124|0125|0126|0127|0128|0129|0150|0151|0152|0153|0154|0155|0156|0157|0158|0159)[0-9]{7}$/;
+  
+  if (!cleanPhone.match(/^[0-9]{11}$/)) {
+    return {
+      isValid: false,
+      error: 'رقم الهاتف يجب أن يكون 11 رقم بالضبط (مثال: 01012345678)',
+    };
+  }
+  
+  if (!egyptianPhoneRegex.test(cleanPhone)) {
+    return {
+      isValid: false,
+      error: 'رقم الهاتف يجب أن يبدأ برقم مصري صحيح (010, 011, 012, 015)',
+    };
+  }
+  
+  return { isValid: true, error: null };
+};
+
+// دالة للتحقق من إدخال رقم هاتف واحد على الأقل
+const validateAtLeastOnePhone = (phone1, phone2) => {
+  if (!phone1 && !phone2) {
+    return {
+      isValid: false,
+      error: 'يجب إدخال رقم هاتف واحد على الأقل',
+    };
+  }
+  return { isValid: true, error: null };
+};
+
 const SmartSalesInvoice = () => {
   const { customers, products, warehouses, addSalesInvoice, getCustomerBalance, addCustomer } = useData();
   const { showSuccess, showError, showWarning } = useNotification();
+  const { openTab } = useTab();
+  
+  // دالة لفتح سجل المبيعات في تبويبة جديدة
+  const handleOpenSalesRecord = () => {
+    openTab('/sales/manage', 'سجل فواتير المبيعات', '📋');
+  };
   
   const [formData, setFormData] = useState({
     customerId: '',
@@ -64,6 +109,7 @@ const SmartSalesInvoice = () => {
     agentType: 'general'
   });
   const [quickCustomerLoading, setQuickCustomerLoading] = useState(false);
+  const [quickCustomerErrors, setQuickCustomerErrors] = useState({});
 
   useEffect(() => {
     customerInputRef.current?.focus();
@@ -377,20 +423,64 @@ const SmartSalesInvoice = () => {
   const closeQuickCustomerModal = () => {
     setShowQuickCustomerModal(false);
     setQuickCustomerLoading(false);
+    setQuickCustomerErrors({}); // مسح الأخطاء
   };
 
   // تحديث بيانات نموذج العميل السريع
   const handleQuickCustomerChange = (e) => {
+    const { name, value } = e.target;
+    
     setQuickCustomerForm({
       ...quickCustomerForm,
-      [e.target.name]: e.target.value
+      [name]: value
     });
+    
+    // التحقق من أرقام الهواتف عند التغيير
+    if (name === 'phone1' || name === 'phone2') {
+      const validation = validatePhoneNumber(value);
+      setQuickCustomerErrors(prev => ({
+        ...prev,
+        [name]: validation.error
+      }));
+    }
   };
 
   // إضافة عميل سريع جديد
   const handleAddQuickCustomer = async () => {
-    if (!quickCustomerForm.name.trim() || !quickCustomerForm.phone1.trim()) {
-      showError('يجب إدخال الاسم ورقم الهاتف الأول');
+    // التحقق من صحة البيانات
+    const newErrors = {};
+    
+    // التحقق من إدخال رقم هاتف واحد على الأقل
+    const phoneValidation = validateAtLeastOnePhone(quickCustomerForm.phone1, quickCustomerForm.phone2);
+    if (!phoneValidation.isValid) {
+      newErrors.phone1 = phoneValidation.error;
+    }
+    
+    // التحقق من رقم الهاتف الأساسي
+    if (quickCustomerForm.phone1) {
+      const phone1Validation = validatePhoneNumber(quickCustomerForm.phone1);
+      if (!phone1Validation.isValid) {
+        newErrors.phone1 = phone1Validation.error;
+      }
+    }
+    
+    // التحقق من رقم الهاتف الثانوي (إذا تم إدخاله)
+    if (quickCustomerForm.phone2) {
+      const phone2Validation = validatePhoneNumber(quickCustomerForm.phone2);
+      if (!phone2Validation.isValid) {
+        newErrors.phone2 = phone2Validation.error;
+      }
+    }
+    
+    // إذا كان هناك أخطاء، عرضها وإيقاف الإرسال
+    if (Object.keys(newErrors).length > 0) {
+      setQuickCustomerErrors(newErrors);
+      showError('يرجى تصحيح أرقام الهواتف قبل الإرسال');
+      return;
+    }
+    
+    if (!quickCustomerForm.name.trim()) {
+      showError('يجب إدخال اسم العميل');
       return;
     }
 
@@ -818,10 +908,21 @@ const SmartSalesInvoice = () => {
           </div>
 
           {/* أزرار الحفظ */}
-          <div className="flex gap-4">
+          <div className="flex flex-wrap justify-center gap-3 pt-4 border-t">
+            {/* زر السجل */}
+            <button
+              type="button"
+              onClick={handleOpenSalesRecord}
+              className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white px-4 py-2.5 rounded-lg transition-colors font-medium text-sm shadow-sm hover:shadow-md"
+              title="فتح سجل فواتير المبيعات في تبويبة جديدة"
+            >
+              <FaList /> سجل المبيعات
+            </button>
+            
+            {/* زر الحفظ الرئيسي */}
             <button
               type="submit"
-              className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-3 px-4 rounded flex items-center justify-center gap-2"
+              className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-5 py-2.5 rounded-lg transition-colors font-medium shadow-sm hover:shadow-md"
               disabled={Object.keys(validationErrors).length > 0}
             >
               <FaSave /> حفظ الفاتورة
@@ -880,7 +981,7 @@ const SmartSalesInvoice = () => {
                     value={quickCustomerForm.phone1}
                     onChange={handleQuickCustomerChange}
                     className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                    placeholder="+20 XXX XXX XXXX"
+                    placeholder="مثال: 01012345678 (11 رقم)"
                     required
                   />
                 </div>
@@ -896,7 +997,7 @@ const SmartSalesInvoice = () => {
                     value={quickCustomerForm.phone2}
                     onChange={handleQuickCustomerChange}
                     className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                    placeholder="+20 XXX XXX XXXX (اختياري)"
+                    placeholder="مثال: 01112345678 (11 رقم)"
                   />
                 </div>
 

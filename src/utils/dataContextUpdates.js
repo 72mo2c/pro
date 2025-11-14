@@ -249,7 +249,7 @@ export const exportProductsWithUnits = (products) => {
 };
 
 // تصدير الدوال
-const Datacontextupdates = {
+export default {
   updateProductsForUnitsInMain,
   addProductWithUnits,
   updateProductWithUnits,
@@ -261,4 +261,3 @@ const Datacontextupdates = {
   calculateProductTotalValue,
   exportProductsWithUnits
 };
-export default Datacontextupdates;

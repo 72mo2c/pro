@@ -6,8 +6,6 @@ import React, { useState } from 'react';
 import { useData } from '../../context/DataContext';
 import { useNotification } from '../../context/NotificationContext';
 import Card from '../../components/Common/Card';
-import Select from '../../components/Common/Select';
-import Input from '../../components/Common/Input';
 import Button from '../../components/Common/Button';
 import { 
   FaExchangeAlt, 
@@ -30,6 +28,7 @@ const Transfer = () => {
     fromWarehouseId: '',
     toWarehouseId: '',
     quantity: '',
+    subQuantity: '',
     notes: ''
   });
 
@@ -64,7 +63,8 @@ const Transfer = () => {
       setFormData(prev => ({
         ...prev,
         productId: '',
-        quantity: ''
+        quantity: '',
+        subQuantity: ''
       }));
       setSelectedProduct(null);
     }
@@ -80,14 +80,22 @@ const Transfer = () => {
     }
 
     // التحقق من الكمية
-    const quantity = parseInt(formData.quantity);
-    if (quantity <= 0) {
-      showError('الكمية يجب أن تكون أكبر من صفر');
+    const quantity = parseInt(formData.quantity) || 0;
+    const subQuantity = parseInt(formData.subQuantity) || 0;
+    
+    if (quantity <= 0 && subQuantity <= 0) {
+      showError('يجب إدخال كمية أساسية أو فرعية أكبر من صفر');
       return;
     }
 
-    if (selectedProduct && quantity > selectedProduct.mainQuantity) {
-      showError(`الكمية المتوفرة فقط ${selectedProduct.mainQuantity}`);
+    // التحقق من الكميات المتاحة
+    if (selectedProduct && quantity > (selectedProduct.mainQuantity || 0)) {
+      showError(`الكمية الأساسية المتوفرة فقط ${selectedProduct.mainQuantity || 0}`);
+      return;
+    }
+
+    if (selectedProduct && subQuantity > (selectedProduct.subQuantity || 0)) {
+      showError(`الكمية الفرعية المتوفرة فقط ${selectedProduct.subQuantity || 0}`);
       return;
     }
 
@@ -97,6 +105,7 @@ const Transfer = () => {
         fromWarehouseId: parseInt(formData.fromWarehouseId),
         toWarehouseId: parseInt(formData.toWarehouseId),
         quantity: quantity,
+        subQuantity: subQuantity,
         notes: formData.notes
       };
 
@@ -118,6 +127,7 @@ const Transfer = () => {
         fromWarehouseId: '',
         toWarehouseId: '',
         quantity: '',
+        subQuantity: '',
         notes: ''
       });
       setSelectedProduct(null);
@@ -133,7 +143,7 @@ const Transfer = () => {
 
   const productOptions = availableProducts().map(p => ({
     value: p.id,
-    label: `${p.name} - ${p.category} (متوفر: ${p.mainQuantity})`
+    label: `${p.name} - ${p.category} (متوفر: ${p.mainQuantity || 0}${p.subQuantity ? ` + ${p.subQuantity}` : ''})`
   }));
 
   // دالة لحساب الوقت المنقضي
@@ -153,81 +163,82 @@ const Transfer = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
 
       {/* Modal تأكيد التحويل */}
       {showSuccessModal && lastTransfer && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9998] p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full transform transition-all">
             {/* Header */}
-            <div className="bg-gradient-to-r from-blue-500 to-indigo-600 p-6 rounded-t-2xl text-white relative">
+            <div className="bg-gradient-to-r from-blue-500 to-indigo-600 p-4 rounded-t-2xl text-white relative">
               <button
                 onClick={() => setShowSuccessModal(false)}
-                className="absolute top-4 left-4 text-white hover:bg-white hover:bg-opacity-20 rounded-full p-2 transition-all"
+                className="absolute top-3 left-3 text-white hover:bg-white hover:bg-opacity-20 rounded-full p-1.5 transition-all"
               >
-                <FaTimes size={20} />
+                <FaTimes size={16} />
               </button>
-              <div className="flex items-center justify-center mb-4">
-                <div className="bg-white bg-opacity-20 rounded-full p-4">
-                  <FaCheckCircle size={48} />
+              <div className="flex items-center justify-center mb-3">
+                <div className="bg-white bg-opacity-20 rounded-full p-3">
+                  <FaCheckCircle size={36} />
                 </div>
               </div>
-              <h2 className="text-2xl font-bold text-center">تم التحويل بنجاح!</h2>
+              <h2 className="text-xl font-bold text-center">تم التحويل بنجاح!</h2>
             </div>
 
             {/* Body */}
-            <div className="p-6 space-y-4">
+            <div className="p-4 space-y-3">
               {/* اسم المنتج */}
-              <div className="bg-gradient-to-r from-orange-50 to-white p-4 rounded-lg border-r-4 border-orange-500">
-                <div className="flex items-center gap-3">
-                  <FaBox className="text-orange-500" size={24} />
+              <div className="bg-gradient-to-r from-orange-50 to-white p-3 rounded-lg border-r-4 border-orange-500">
+                <div className="flex items-center gap-2">
+                  <FaBox className="text-orange-500" size={18} />
                   <div className="flex-1">
-                    <p className="text-sm text-gray-500">المنتج</p>
-                    <p className="text-lg font-bold text-gray-800">{lastTransfer.productName}</p>
+                    <p className="text-xs text-gray-500">المنتج</p>
+                    <p className="text-base font-bold text-gray-800">{lastTransfer.productName}</p>
                   </div>
                 </div>
               </div>
 
               {/* التحويل */}
-              <div className="bg-blue-50 p-4 rounded-lg">
+              <div className="bg-blue-50 p-3 rounded-lg">
                 <div className="flex items-center justify-between">
                   <div className="text-center flex-1">
-                    <FaWarehouse className="text-blue-500 mx-auto mb-2" size={24} />
-                    <p className="text-sm text-gray-500">من المخزن</p>
-                    <p className="font-bold text-gray-800">{lastTransfer.fromWarehouseName}</p>
+                    <FaWarehouse className="text-blue-500 mx-auto mb-1" size={18} />
+                    <p className="text-xs text-gray-500">من المخزن</p>
+                    <p className="font-bold text-gray-800 text-sm">{lastTransfer.fromWarehouseName}</p>
                   </div>
-                  <FaArrowRight className="text-blue-500" size={24} />
+                  <FaArrowRight className="text-blue-500" size={18} />
                   <div className="text-center flex-1">
-                    <FaWarehouse className="text-green-500 mx-auto mb-2" size={24} />
-                    <p className="text-sm text-gray-500">إلى المخزن</p>
-                    <p className="font-bold text-gray-800">{lastTransfer.toWarehouseName}</p>
+                    <FaWarehouse className="text-green-500 mx-auto mb-1" size={18} />
+                    <p className="text-xs text-gray-500">إلى المخزن</p>
+                    <p className="font-bold text-gray-800 text-sm">{lastTransfer.toWarehouseName}</p>
                   </div>
                 </div>
               </div>
 
               {/* الكمية */}
-              <div className="bg-green-50 p-4 rounded-lg">
-                <div className="flex items-center gap-2 mb-2">
-                  <FaExchangeAlt className="text-green-500" />
-                  <p className="text-sm text-gray-500">الكمية المحولة</p>
+              <div className="bg-green-50 p-3 rounded-lg">
+                <div className="flex items-center gap-2 mb-1">
+                  <FaExchangeAlt className="text-green-500" size={16} />
+                  <p className="text-xs text-gray-500">الكمية المحولة</p>
                 </div>
-                <p className="text-2xl font-bold text-green-600">{lastTransfer.quantity}</p>
+                <p className="text-xl font-bold text-green-600">{lastTransfer.quantity}</p>
               </div>
 
               {/* ملاحظات */}
               {lastTransfer.notes && (
-                <div className="bg-gray-50 p-3 rounded-lg">
-                  <p className="text-sm text-gray-500">ملاحظات</p>
-                  <p className="text-gray-800">{lastTransfer.notes}</p>
+                <div className="bg-gray-50 p-2.5 rounded-lg">
+                  <p className="text-xs text-gray-500">ملاحظات</p>
+                  <p className="text-gray-800 text-sm">{lastTransfer.notes}</p>
                 </div>
               )}
             </div>
 
             {/* Footer */}
-            <div className="p-6 bg-gray-50 rounded-b-2xl">
+            <div className="p-4 bg-gray-50 rounded-b-2xl">
               <Button
                 onClick={() => setShowSuccessModal(false)}
                 variant="primary"
+                size="sm"
                 className="w-full"
               >
                 إغلاق
@@ -239,21 +250,27 @@ const Transfer = () => {
 
       {/* نموذج التحويل */}
       <Card icon={<FaExchangeAlt />} title="نموذج التحويل">
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-4">
           {/* اختيار المخازن */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Select
-                label="من المخزن (المصدر)"
+              <label className="text-sm font-medium mb-1 block">من المخزن (المصدر)</label>
+              <select
                 name="fromWarehouseId"
                 value={formData.fromWarehouseId}
                 onChange={handleChange}
-                options={warehouseOptions}
+                className="w-full px-3 py-2 border rounded-lg text-sm"
                 required
-                icon={<FaWarehouse />}
-              />
+              >
+                <option value="">اختر المخزن المصدر</option>
+                {warehouseOptions.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
               {formData.fromWarehouseId && (
-                <p className="text-sm text-gray-500 mt-2">
+                <p className="text-xs text-gray-500 mt-1">
                   <FaInfoCircle className="inline ml-1" />
                   المنتجات المتوفرة: {availableProducts().length}
                 </p>
@@ -261,34 +278,46 @@ const Transfer = () => {
             </div>
 
             <div>
-              <Select
-                label="إلى المخزن (الوجهة)"
+              <label className="text-sm font-medium mb-1 block">إلى المخزن (الوجهة)</label>
+              <select
                 name="toWarehouseId"
                 value={formData.toWarehouseId}
                 onChange={handleChange}
-                options={warehouseOptions}
+                className="w-full px-3 py-2 border rounded-lg text-sm"
                 required
-                icon={<FaWarehouse />}
-              />
+              >
+                <option value="">اختر المخزن الوجهة</option>
+                {warehouseOptions.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
           {/* اختيار المنتج */}
           {formData.fromWarehouseId && (
             <div>
-              <Select
-                label="اختر المنتج"
+              <label className="text-sm font-medium mb-1 block">اختر المنتج</label>
+              <select
                 name="productId"
                 value={formData.productId}
                 onChange={handleChange}
-                options={productOptions}
+                className="w-full px-3 py-2 border rounded-lg text-sm"
                 required
-                icon={<FaBox />}
-              />
+              >
+                <option value="">اختر المنتج</option>
+                {productOptions.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
               {availableProducts().length === 0 && (
-                <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex items-center gap-2">
-                  <FaExclamationTriangle className="text-yellow-600" />
-                  <p className="text-sm text-yellow-700">لا توجد منتجات في هذا المخزن</p>
+                <div className="mt-1 p-2.5 bg-yellow-50 border border-yellow-200 rounded-lg flex items-center gap-2">
+                  <FaExclamationTriangle className="text-yellow-600" size={16} />
+                  <p className="text-xs text-yellow-700">لا توجد منتجات في هذا المخزن</p>
                 </div>
               )}
             </div>
@@ -296,27 +325,31 @@ const Transfer = () => {
 
           {/* معلومات المنتج المختار */}
           {selectedProduct && (
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-lg border border-blue-200">
-              <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
-                <FaInfoCircle className="text-blue-500" />
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-3 rounded-lg border border-blue-200">
+              <h3 className="font-bold text-gray-800 mb-2 flex items-center gap-2">
+                <FaInfoCircle className="text-blue-500" size={16} />
                 معلومات المنتج
               </h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                 <div>
-                  <p className="text-sm text-gray-500">الاسم</p>
-                  <p className="font-semibold text-gray-800">{selectedProduct.name}</p>
+                  <p className="text-xs text-gray-500">الاسم</p>
+                  <p className="font-semibold text-gray-800 text-sm">{selectedProduct.name}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500">الفئة</p>
-                  <p className="font-semibold text-gray-800">{selectedProduct.category}</p>
+                  <p className="text-xs text-gray-500">الفئة</p>
+                  <p className="font-semibold text-gray-800 text-sm">{selectedProduct.category}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500">الكمية المتوفرة</p>
-                  <p className="font-bold text-green-600 text-lg">{selectedProduct.mainQuantity}</p>
+                  <p className="text-xs text-gray-500">الكمية الأساسية</p>
+                  <p className="font-bold text-green-600 text-base">{selectedProduct.mainQuantity || 0}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500">السعر</p>
-                  <p className="font-semibold text-gray-800">{selectedProduct.mainPrice} ج.م</p>
+                  <p className="text-xs text-gray-500">الكمية الفرعية</p>
+                  <p className="font-bold text-blue-600 text-base">{selectedProduct.subQuantity || 0}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">السعر</p>
+                  <p className="font-semibold text-gray-800 text-sm">{selectedProduct.mainPrice} ج.م</p>
                 </div>
               </div>
             </div>
@@ -325,28 +358,52 @@ const Transfer = () => {
           {/* الكمية والملاحظات */}
           {formData.productId && (
             <>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Input
-                  label="الكمية المراد تحويلها"
-                  name="quantity"
-                  type="number"
-                  value={formData.quantity}
-                  onChange={handleChange}
-                  placeholder="أدخل الكمية"
-                  min="1"
-                  max={selectedProduct?.mainQuantity}
-                  required
-                />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium mb-1 block">الكمية الأساسية المراد تحويلها</label>
+                  <input
+                    type="number"
+                    name="quantity"
+                    value={formData.quantity}
+                    onChange={handleChange}
+                    placeholder="أدخل الكمية الأساسية"
+                    min="0"
+                    max={selectedProduct?.mainQuantity}
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                  />
+                </div>
+                
+                <div>
+                  <label className="text-sm font-medium mb-1 block">الكمية الفرعية المراد تحويلها</label>
+                  <input
+                    type="number"
+                    name="subQuantity"
+                    value={formData.subQuantity}
+                    onChange={handleChange}
+                    placeholder="أدخل الكمية الفرعية"
+                    min="0"
+                    max={selectedProduct?.subQuantity}
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                  />
+                </div>
               </div>
 
+              {/* رسالة تحذيرية */}
+              {!formData.quantity && !formData.subQuantity && (
+                <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-2">
+                  <FaInfoCircle className="text-blue-600" size={16} />
+                  <p className="text-xs text-blue-700">يرجى إدخال الكمية الأساسية أو الفرعية أو كلاهما</p>
+                </div>
+              )}
+
               <div>
-                <label className="label">ملاحظات (اختياري)</label>
+                <label className="text-sm font-medium mb-1 block">ملاحظات (اختياري)</label>
                 <textarea
                   name="notes"
                   value={formData.notes}
                   onChange={handleChange}
-                  rows="3"
-                  className="input-field"
+                  rows="2"
+                  className="w-full px-3 py-2 border rounded-lg text-sm"
                   placeholder="أدخل ملاحظات حول عملية التحويل..."
                 />
               </div>
@@ -354,18 +411,20 @@ const Transfer = () => {
           )}
 
           {/* أزرار التحكم */}
-          <div className="flex gap-4">
+          <div className="flex gap-3">
             <Button 
               type="submit" 
               variant="primary" 
+              size="sm"
               icon={<FaExchangeAlt />}
-              disabled={!formData.productId || !formData.fromWarehouseId || !formData.toWarehouseId}
+              disabled={!formData.productId || !formData.fromWarehouseId || !formData.toWarehouseId || (!formData.quantity && !formData.subQuantity)}
             >
               تنفيذ التحويل
             </Button>
             <Button 
               type="button" 
               variant="secondary"
+              size="sm"
               onClick={() => {
                 setFormData({
                   productId: '',
@@ -386,55 +445,55 @@ const Transfer = () => {
       {/* سجل التحويلات الأخيرة */}
       <Card icon={<FaHistory />} title="سجل التحويلات الأخيرة">
         {transfers.length === 0 ? (
-          <div className="text-center py-12">
-            <FaHistory className="text-6xl text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-500 text-lg">لا توجد تحويلات بعد</p>
+          <div className="text-center py-8">
+            <FaHistory className="text-4xl text-gray-300 mx-auto mb-3" />
+            <p className="text-gray-500 text-base">لا توجد تحويلات بعد</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="bg-gradient-to-r from-blue-50 to-white border-b-2 border-blue-200">
-                  <th className="px-4 py-3 text-right text-sm font-bold text-gray-700">التاريخ</th>
-                  <th className="px-4 py-3 text-right text-sm font-bold text-gray-700">المنتج</th>
-                  <th className="px-4 py-3 text-right text-sm font-bold text-gray-700">من المخزن</th>
-                  <th className="px-4 py-3 text-right text-sm font-bold text-gray-700">إلى المخزن</th>
-                  <th className="px-4 py-3 text-right text-sm font-bold text-gray-700">الكمية</th>
-                  <th className="px-4 py-3 text-right text-sm font-bold text-gray-700">ملاحظات</th>
+                <tr className="bg-gradient-to-r from-blue-50 to-white border-b border-blue-200">
+                  <th className="px-3 py-2 text-right text-xs font-bold text-gray-700">التاريخ</th>
+                  <th className="px-3 py-2 text-right text-xs font-bold text-gray-700">المنتج</th>
+                  <th className="px-3 py-2 text-right text-xs font-bold text-gray-700">من المخزن</th>
+                  <th className="px-3 py-2 text-right text-xs font-bold text-gray-700">إلى المخزن</th>
+                  <th className="px-3 py-2 text-right text-xs font-bold text-gray-700">الكمية</th>
+                  <th className="px-3 py-2 text-right text-xs font-bold text-gray-700">ملاحظات</th>
                 </tr>
               </thead>
               <tbody>
                 {transfers.slice(0, 10).map((transfer) => (
                   <tr key={transfer.id} className="border-b hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-2">
                       <div>
-                        <p className="text-sm font-semibold text-gray-800">
+                        <p className="text-xs font-semibold text-gray-800">
                           {new Date(transfer.date).toLocaleDateString('ar-EG')}
                         </p>
                         <p className="text-xs text-gray-500">{getTimeAgo(transfer.date)}</p>
                       </div>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-2">
                       <div className="flex items-center gap-2">
-                        <FaBox className="text-orange-500" />
-                        <span className="font-semibold text-gray-800">{transfer.productName}</span>
+                        <FaBox className="text-orange-500" size={14} />
+                        <span className="font-semibold text-gray-800 text-sm">{transfer.productName}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="text-sm text-gray-700">
+                    <td className="px-3 py-2">
+                      <span className="text-xs text-gray-700">
                         {warehouses.find(w => w.id === transfer.fromWarehouseId)?.name || '-'}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="text-sm text-gray-700">
+                    <td className="px-3 py-2">
+                      <span className="text-xs text-gray-700">
                         {warehouses.find(w => w.id === transfer.toWarehouseId)?.name || '-'}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="font-bold text-blue-600">{transfer.quantity}</span>
+                    <td className="px-3 py-2">
+                      <span className="font-bold text-blue-600 text-sm">{transfer.quantity}</span>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="text-sm text-gray-600">{transfer.notes || '-'}</span>
+                    <td className="px-3 py-2">
+                      <span className="text-xs text-gray-600">{transfer.notes || '-'}</span>
                     </td>
                   </tr>
                 ))}

@@ -17,7 +17,7 @@ import { FaEdit, FaTrash, FaPlus, FaSearch, FaWarehouse, FaLock } from 'react-ic
 const ManageWarehouses = () => {
   const navigate = useNavigate();
   const { warehouses, updateWarehouse, deleteWarehouse, products } = useData();
-  const { showSuccess, showError, showWarning } = useNotification();
+  const { showSuccess, showError, showWarning, showConfirm } = useNotification();
   const { settings } = useSystemSettings();
   const { hasPermission } = useAuth();
 
@@ -47,16 +47,6 @@ const ManageWarehouses = () => {
   // حساب عدد المنتجات لكل مخزن
   const getProductCountForWarehouse = (warehouseId) => {
     return products?.filter(p => p.warehouseId === warehouseId).length || 0;
-  };
-
-  // حساب قيمة المخزون لكل مخزن
-  const getTotalValueForWarehouse = (warehouseId) => {
-    const warehouseProducts = products?.filter(p => p.warehouseId === warehouseId) || [];
-    return warehouseProducts.reduce((total, product) => {
-      const quantity = product.mainQuantity || 0;
-      const price = product.price || 0;
-      return total + (quantity * price);
-    }, 0);
   };
 
   // فلترة المخازن حسب البحث
@@ -174,15 +164,24 @@ const ManageWarehouses = () => {
       return;
     }
 
-    if (window.confirm(`هل أنت متأكد من حذف المخزن "${warehouse.name}"؟`)) {
-      try {
-        deleteWarehouse(warehouse.id);
-        showSuccess('تم حذف المخزن بنجاح');
-      } catch (error) {
-        showError('حدث خطأ في حذف المخزن');
-        console.error('Error deleting warehouse:', error);
+    showConfirm(
+      'حذف المخزن',
+      `هل أنت متأكد من حذف المخزن "${warehouse.name}"؟`,
+      () => {
+        try {
+          deleteWarehouse(warehouse.id);
+          showSuccess('تم حذف المخزن بنجاح');
+        } catch (error) {
+          showError('حدث خطأ في حذف المخزن');
+          console.error('Error deleting warehouse:', error);
+        }
+      },
+      {
+        type: 'danger',
+        confirmText: 'حذف المخزن',
+        cancelText: 'إلغاء'
       }
-    }
+    );
   };
 
   const handleStatusToggle = (warehouse) => {
@@ -242,9 +241,6 @@ const ManageWarehouses = () => {
                   عدد المنتجات
                 </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  قيمة المخزون
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                   الحالة
                 </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -256,8 +252,6 @@ const ManageWarehouses = () => {
               {filteredWarehouses && filteredWarehouses.length > 0 ? (
                 filteredWarehouses.map((warehouse) => {
                   const productCount = getProductCountForWarehouse(warehouse.id);
-                  const totalValue = getTotalValueForWarehouse(warehouse.id);
-
                   return (
                     <tr key={warehouse.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -280,14 +274,7 @@ const ManageWarehouses = () => {
                           {productCount}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
-                        {hasPermission('view_inventory') ? formatCurrency(totalValue) : (
-                          <span className="flex items-center gap-1 text-gray-400">
-                            <FaLock className="text-xs" />
-                            مخفي
-                          </span>
-                        )}
-                      </td>
+
                       <td className="px-6 py-4 whitespace-nowrap">
                         {hasPermission('edit_warehouse') ? (
                           <button

@@ -9,7 +9,45 @@ import { useNotification } from '../../context/NotificationContext';
 import Card from '../../components/Common/Card';
 import Input from '../../components/Common/Input';
 import Button from '../../components/Common/Button';
-import { FaTruck, FaSave, FaCheckCircle, FaPlus, FaList } from 'react-icons/fa';
+import { FaTruck, FaSave, FaCheckCircle, FaPlus, FaList, FaExclamationTriangle } from 'react-icons/fa';
+
+// دالة للتحقق من أرقام الهواتف المصرية (11 رقم بالضبط)
+const validatePhoneNumber = (phone) => {
+  if (!phone) return { isValid: true, error: null };
+  
+  // إزالة المسافات والشرطات
+  const cleanPhone = phone.replace(/[\s-]/g, '');
+  
+  // التحقق من أن الرقم يبدأ برقم مصري (010, 011, 012, 015, 0100-0199)
+  const egyptianPhoneRegex = /^(010|011|012|015|0100|0101|0102|0103|0104|0105|0106|0107|0108|0109|0110|0111|0112|0113|0114|0115|0116|0117|0118|0119|0120|0121|0122|0123|0124|0125|0126|0127|0128|0129|0150|0151|0152|0153|0154|0155|0156|0157|0158|0159)[0-9]{7}$/;
+  
+  if (!cleanPhone.match(/^[0-9]{11}$/)) {
+    return {
+      isValid: false,
+      error: 'رقم الهاتف يجب أن يكون 11 رقم بالضبط (مثال: 01012345678)',
+    };
+  }
+  
+  if (!egyptianPhoneRegex.test(cleanPhone)) {
+    return {
+      isValid: false,
+      error: 'رقم الهاتف يجب أن يبدأ برقم مصري صحيح (010, 011, 012, 015)',
+    };
+  }
+  
+  return { isValid: true, error: null };
+};
+
+// دالة للتحقق من إدخال رقم هاتف واحد على الأقل
+const validateAtLeastOnePhone = (phone1, phone2) => {
+  if (!phone1 && !phone2) {
+    return {
+      isValid: false,
+      error: 'يجب إدخال رقم هاتف واحد على الأقل',
+    };
+  }
+  return { isValid: true, error: null };
+};
 
 const AddSupplier = () => {
   const { addSupplier } = useData();
@@ -18,6 +56,7 @@ const AddSupplier = () => {
   
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [lastAddedSupplier, setLastAddedSupplier] = useState(null);
+  const [errors, setErrors] = useState({});
   const [formData, setFormData] = useState({
     name: '',
     address: '',
@@ -36,17 +75,61 @@ const AddSupplier = () => {
       email: '',
       notes: ''
     });
+    setErrors({}); // مسح الأخطاء
   };
 
   const handleChange = (e) => {
+    const { name, value } = e.target;
+    
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value
+      [name]: value
     });
+    
+    // التحقق من أرقام الهواتف عند التغيير
+    if (name === 'phone1' || name === 'phone2') {
+      const validation = validatePhoneNumber(value);
+      setErrors(prev => ({
+        ...prev,
+        [name]: validation.error
+      }));
+    }
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    
+    // التحقق من صحة البيانات
+    const newErrors = {};
+    
+    // التحقق من إدخال رقم هاتف واحد على الأقل
+    const phoneValidation = validateAtLeastOnePhone(formData.phone1, formData.phone2);
+    if (!phoneValidation.isValid) {
+      newErrors.phone1 = phoneValidation.error;
+    }
+    
+    // التحقق من رقم الهاتف الأساسي
+    if (formData.phone1) {
+      const phone1Validation = validatePhoneNumber(formData.phone1);
+      if (!phone1Validation.isValid) {
+        newErrors.phone1 = phone1Validation.error;
+      }
+    }
+    
+    // التحقق من رقم الهاتف الثانوي (إذا تم إدخاله)
+    if (formData.phone2) {
+      const phone2Validation = validatePhoneNumber(formData.phone2);
+      if (!phone2Validation.isValid) {
+        newErrors.phone2 = phone2Validation.error;
+      }
+    }
+    
+    // إذا كان هناك أخطاء، عرضها وإيقاف الإرسال
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      showError('يرجى تصحيح أرقام الهواتف قبل الإرسال');
+      return;
+    }
     
     try {
       const supplierData = {
@@ -67,6 +150,7 @@ const AddSupplier = () => {
   const handleAddAnother = () => {
     setShowSuccessModal(false);
     setLastAddedSupplier(null);
+    setErrors({}); // مسح الأخطاء
   };
 
   const handleGoToList = () => {
@@ -74,12 +158,12 @@ const AddSupplier = () => {
   };
 
   return (
-    <div>
-      <h1 className="text-3xl font-bold text-gray-800 mb-6">إضافة مورد جديد</h1>
+    <div className="max-w-4xl mx-auto">
+      <h1 className="text-xl font-bold text-gray-800 mb-4">إضافة مورد جديد</h1>
 
       <Card icon={<FaTruck />}>
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input
               label="اسم المورد / الشركة"
               name="name"
@@ -103,8 +187,9 @@ const AddSupplier = () => {
               name="phone1"
               value={formData.phone1}
               onChange={handleChange}
-              placeholder="+20 XXX XXX XXXX"
+              placeholder="مثال: 01012345678 (11 رقم)"
               required
+              error={errors.phone1}
             />
 
             <Input
@@ -112,7 +197,8 @@ const AddSupplier = () => {
               name="phone2"
               value={formData.phone2}
               onChange={handleChange}
-              placeholder="+20 XXX XXX XXXX"
+              placeholder="مثال: 01112345678 (11 رقم)"
+              error={errors.phone2}
             />
 
             
@@ -130,14 +216,15 @@ const AddSupplier = () => {
             />
           </div>
 
-          <div className="flex gap-4">
-            <Button type="submit" variant="success" icon={<FaSave />}>
+          <div className="flex gap-2">
+            <Button type="submit" variant="success" icon={<FaSave />} className="px-4 py-2 text-sm">
               حفظ المورد
             </Button>
             <Button 
               type="button" 
               variant="secondary"
               onClick={resetForm}
+              className="px-4 py-2 text-sm"
             >
               إعادة تعيين
             </Button>
@@ -148,7 +235,7 @@ const AddSupplier = () => {
       {/* نافذة النجاح */}
       {showSuccessModal && lastAddedSupplier && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9998]">
-          <div className="bg-white rounded-lg p-6 max-w-lg w-full mx-4">
+          <div className="bg-white rounded-lg p-4 max-w-md w-full mx-4">
             {/* رمز النجاح */}
             <div className="flex items-center justify-center mb-4">
               <div className="bg-green-100 rounded-full p-4">
@@ -156,20 +243,20 @@ const AddSupplier = () => {
               </div>
             </div>
 
-            <h2 className="text-2xl font-bold text-gray-800 mb-4 text-center">
+            <h2 className="text-lg font-bold text-gray-800 mb-3 text-center">
               تمت الإضافة بنجاح! ✓
             </h2>
 
-            <div className="bg-green-50 p-4 rounded-lg mb-4 border border-green-200">
-              <p className="text-gray-700 text-center mb-2">
+            <div className="bg-green-50 p-3 rounded-lg mb-3 border border-green-200">
+              <p className="text-gray-700 text-center text-sm">
                 تم إضافة المورد <span className="font-bold">"{lastAddedSupplier.name}"</span> بنجاح
               </p>
             </div>
 
             {/* تفاصيل المورد */}
-            <div className="bg-gray-50 p-4 rounded-lg mb-6">
-              <h3 className="font-semibold text-gray-700 mb-2">تفاصيل المورد المضاف:</h3>
-              <div className="space-y-2 text-sm">
+            <div className="bg-gray-50 p-3 rounded-lg mb-4">
+              <h3 className="font-semibold text-gray-700 mb-2 text-sm">تفاصيل المورد المضاف:</h3>
+              <div className="space-y-1 text-xs">
                 <div>
                   <span className="text-gray-600">الاسم: </span>
                   <span className="font-semibold">{lastAddedSupplier.name}</span>
@@ -189,22 +276,22 @@ const AddSupplier = () => {
               </div>
             </div>
 
-            <p className="text-gray-600 text-center mb-4">ماذا تريد أن تفعل الآن؟</p>
+            <p className="text-gray-600 text-center mb-3 text-sm">ماذا تريد أن تفعل الآن؟</p>
 
             {/* الأزرار */}
-            <div className="flex gap-3">
+            <div className="flex gap-2">
               <button
                 onClick={handleAddAnother}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-3 rounded-lg transition-colors flex items-center justify-center gap-1 text-sm"
               >
-                <FaPlus />
+                <FaPlus className="text-xs" />
                 إضافة مورد آخر
               </button>
               <button
                 onClick={handleGoToList}
-                className="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+                className="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-3 rounded-lg transition-colors flex items-center justify-center gap-1 text-sm"
               >
-                <FaList />
+                <FaList className="text-xs" />
                 عرض القائمة
               </button>
             </div>

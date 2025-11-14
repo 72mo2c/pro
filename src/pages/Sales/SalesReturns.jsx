@@ -5,11 +5,14 @@
 import React, { useState } from 'react';
 import { useData } from '../../context/DataContext';
 import { useNotification } from '../../context/NotificationContext';
+import { useSystemSettings } from '../../hooks/useSystemSettings';
 import { FaEye, FaTrash, FaSearch, FaFilter, FaUndo } from 'react-icons/fa';
+import { formatCurrency } from '../../utils/currencyUtils';
 
 const SalesReturns = () => {
   const { salesReturns, salesInvoices, customers, products, deleteSalesReturn } = useData();
   const { showSuccess, showError } = useNotification();
+  const { currency: currentCurrency } = useSystemSettings();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedReturn, setSelectedReturn] = useState(null);
@@ -170,7 +173,7 @@ const SalesReturns = () => {
                         </span>
                       </td>
                       <td className="px-3 py-2 text-center font-bold text-red-600">
-                        {(returnRecord.totalAmount || 0).toFixed(2)} د.ع
+                        {formatCurrency(returnRecord.totalAmount || 0, currentCurrency)}
                       </td>
                       <td className="px-3 py-2 text-center">
                         {getStatusBadge(returnRecord.status)}
@@ -246,7 +249,7 @@ const SalesReturns = () => {
                       <div className="bg-purple-50 p-3 rounded-lg">
                         <p className="text-xs text-gray-600 mb-1">إجمالي المبلغ</p>
                         <p className="font-bold text-lg text-purple-600">
-                          {(selectedReturn.totalAmount || 0).toFixed(2)} د.ع
+                          {formatCurrency(selectedReturn.totalAmount || 0, currentCurrency)}
                         </p>
                       </div>
                     </div>

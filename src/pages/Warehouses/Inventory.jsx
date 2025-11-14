@@ -17,7 +17,8 @@ import {
   FaExclamationTriangle,
   FaTimesCircle,
   FaCheckCircle,
-  FaTimes
+  FaTimes,
+  FaDollarSign
 } from 'react-icons/fa';
 
 const Inventory = () => {
@@ -26,17 +27,27 @@ const Inventory = () => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedWarehouse, setSelectedWarehouse] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedTierFilter, setSelectedTierFilter] = useState('');
   const [showFilters, setShowFilters] = useState(false);
 
   // تصفية المنتجات
   const filteredProducts = () => {
     return products.filter(product => {
-      const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                           product.category.toLowerCase().includes(searchQuery.toLowerCase());
+      // البحث بالاسم أو الباركود أو الفئة
+      const matchesSearch = 
+        product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (product.barcode && product.barcode.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        product.category.toLowerCase().includes(searchQuery.toLowerCase());
       
+      // فلترة المخزن
       const matchesWarehouse = selectedWarehouse === '' || 
                               product.warehouseId === parseInt(selectedWarehouse);
 
+      // فلترة الفئة
+      const matchesCategory = selectedCategory === '' || product.category === selectedCategory;
+
+      // فلترة الحالة
       const matchesStatus = () => {
         const quantity = product.mainQuantity || 0;
         
@@ -47,7 +58,25 @@ const Inventory = () => {
         return true;
       };
 
-      return matchesSearch && matchesWarehouse && matchesStatus();
+      // فلترة الشريحة السعرية
+      const matchesTier = () => {
+        if (selectedTierFilter === '') return true;
+        
+        switch (selectedTierFilter) {
+          case 'purchase':
+            return product.purchasePrices && (product.purchasePrices.basicPrice > 0 || product.purchasePrices.subPrice > 0);
+          case 'retail':
+            return product.tierPrices?.retail && (product.tierPrices.retail.basicPrice > 0 || product.tierPrices.retail.subPrice > 0);
+          case 'wholesale':
+            return product.tierPrices?.wholesale && (product.tierPrices.wholesale.basicPrice > 0 || product.tierPrices.wholesale.subPrice > 0);
+          case 'bulk':
+            return product.tierPrices?.bulk && (product.tierPrices.bulk.basicPrice > 0 || product.tierPrices.bulk.subPrice > 0);
+          default:
+            return true;
+        }
+      };
+
+      return matchesSearch && matchesWarehouse && matchesCategory && matchesStatus() && matchesTier();
     });
   };
 
@@ -62,12 +91,56 @@ const Inventory = () => {
   const resetFilters = () => {
     setSearchQuery('');
     setSelectedWarehouse('');
+    setSelectedCategory('');
+    setSelectedTierFilter('');
     setFilterStatus('all');
+  };
+
+  // الحصول على قائمة الفئات الفريدة
+  const uniqueCategories = Array.from(new Set(products.map(p => p.category))).filter(Boolean).sort();
+
+  // دالة للحصول على السعر المناسب حسب الفلتر المحدد
+  const getProductPrice = (product) => {
+    // إذا كان هناك فلتر للشريحة السعرية، استخدم سعر الشريحة المحدد
+    if (selectedTierFilter !== '') {
+      switch (selectedTierFilter) {
+        case 'purchase':
+          return product.purchasePrices?.basicPrice || 0;
+        case 'retail':
+          return product.tierPrices?.retail?.basicPrice || 0;
+        case 'wholesale':
+          return product.tierPrices?.wholesale?.basicPrice || 0;
+        case 'bulk':
+          return product.tierPrices?.bulk?.basicPrice || 0;
+        default:
+          break;
+      }
+    }
+    
+    // النظام الجديد: الشرائح السعرية (الجملة كافتراضي)
+    if (product.tierPrices?.wholesale?.basicPrice) {
+      return product.tierPrices.wholesale.basicPrice;
+    }
+    // النظام القديم: السعر الأساسي
+    return product.mainPrice || 0;
   };
 
   const warehouseOptions = [
     { value: '', label: 'جميع المخازن' },
     ...warehouses.map(w => ({ value: w.id, label: w.name }))
+  ];
+
+  const categoryOptions = [
+    { value: '', label: 'جميع الفئات' },
+    ...uniqueCategories.map(cat => ({ value: cat, label: cat }))
+  ];
+
+  const tierFilterOptions = [
+    { value: '', label: 'جميع الشرائح' },
+    { value: 'purchase', label: 'سعر الشراء' },
+    { value: 'retail', label: 'البيع المباشر' },
+    { value: 'wholesale', label: 'الجملة' },
+    { value: 'bulk', label: 'جملة الجملة' },
   ];
 
   const statusOptions = [
@@ -106,7 +179,7 @@ const Inventory = () => {
     );
   };
 
-  const hasActiveFilters = searchQuery || selectedWarehouse || filterStatus !== 'all';
+  const hasActiveFilters = searchQuery || selectedWarehouse || selectedCategory || selectedTierFilter || filterStatus !== 'all';
 
   return (
     <div className="max-w-7xl mx-auto p-4 space-y-4">
@@ -120,7 +193,7 @@ const Inventory = () => {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="ابحث بالاسم أو الفئة..."
+                placeholder="ابحث بالاسم أو الباركود أو الفئة..."
                 className="w-full px-3 py-2 pr-10 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
               <FaSearch className="absolute right-3 top-3 text-gray-400" />
@@ -138,7 +211,7 @@ const Inventory = () => {
           </div>
 
           {showFilters && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-3 bg-gray-50 rounded-lg border">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 p-3 bg-gray-50 rounded-lg border">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">تصفية حسب المخزن</label>
                 <select
@@ -147,6 +220,32 @@ const Inventory = () => {
                   className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                 >
                   {warehouseOptions.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">تصفية حسب الفئة</label>
+                <select
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                >
+                  {categoryOptions.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">تصفية حسب الشريحة السعرية</label>
+                <select
+                  value={selectedTierFilter}
+                  onChange={(e) => setSelectedTierFilter(e.target.value)}
+                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                >
+                  {tierFilterOptions.map(opt => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
                 </select>
@@ -201,7 +300,14 @@ const Inventory = () => {
                   <th className="px-3 py-2 text-right text-xs font-semibold text-gray-700">الفئة</th>
                   <th className="px-3 py-2 text-right text-xs font-semibold text-gray-700">المخزن</th>
                   <th className="px-3 py-2 text-right text-xs font-semibold text-gray-700">الكمية</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-700">السعر</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-700">
+                    السعر
+                    {selectedTierFilter && (
+                      <span className="block text-xs text-blue-600 font-medium">
+                        ({tierFilterOptions.find(t => t.value === selectedTierFilter)?.label})
+                      </span>
+                    )}
+                  </th>
                   <th className="px-3 py-2 text-right text-xs font-semibold text-gray-700">القيمة</th>
                   <th className="px-3 py-2 text-right text-xs font-semibold text-gray-700">الحالة</th>
                 </tr>
@@ -209,7 +315,8 @@ const Inventory = () => {
               <tbody>
                 {filteredProducts().map((product, index) => {
                   const quantity = product.mainQuantity || 0;
-                  const totalValue = (product.mainPrice || 0) * quantity;
+                  const productPrice = getProductPrice(product);
+                  const totalValue = productPrice * quantity;
                   
                   return (
                     <tr 
@@ -224,7 +331,14 @@ const Inventory = () => {
                             <FaBox />
                           </div>
                           <div>
-                            <p className="font-semibold text-gray-900 text-sm">{product.name}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="font-semibold text-gray-900 text-sm">{product.name}</p>
+                              {product.tierPrices && (
+                                <span className="px-2 py-0.5 bg-blue-100 text-blue-600 rounded text-xs font-medium">
+                                  نظام متقدم
+                                </span>
+                              )}
+                            </div>
                             {product.barcode && (
                               <p className="text-xs text-gray-500 font-mono">{product.barcode}</p>
                             )}
@@ -246,9 +360,24 @@ const Inventory = () => {
                         </span>
                       </td>
                       <td className="px-3 py-2">
-                        <span className="text-sm text-gray-700">
-                          {(product.mainPrice || 0).toLocaleString('ar-EG')} ج.م
-                        </span>
+                        <div className="flex flex-col">
+                          <span className="text-sm text-gray-700 font-semibold">
+                            {productPrice.toLocaleString('ar-EG')} ج.م
+                          </span>
+                          {selectedTierFilter ? (
+                            <span className="text-xs text-blue-600 flex items-center gap-1">
+                              <FaDollarSign className="text-xs" />
+                              {tierFilterOptions.find(t => t.value === selectedTierFilter)?.label}
+                            </span>
+                          ) : product.tierPrices ? (
+                            <span className="text-xs text-blue-600 flex items-center gap-1">
+                              <FaDollarSign className="text-xs" />
+                              جملة
+                            </span>
+                          ) : (
+                            <span className="text-xs text-gray-500">سعر أساسي</span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 py-2">
                         <span className="font-semibold text-green-600 text-sm">

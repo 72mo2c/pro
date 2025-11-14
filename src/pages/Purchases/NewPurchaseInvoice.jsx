@@ -6,12 +6,19 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useData } from '../../context/DataContext';
 import { useNotification } from '../../context/NotificationContext';
-import { FaSave, FaPrint, FaSearch, FaTrash, FaPercent, FaMoneyBillWave, FaExclamationTriangle, FaInfoCircle } from 'react-icons/fa';
+import { useTab } from '../../contexts/TabContext';
+import { FaSave, FaPrint, FaSearch, FaTrash, FaPercent, FaMoneyBillWave, FaExclamationTriangle, FaInfoCircle, FaList } from 'react-icons/fa';
 import { printInvoiceDirectly } from '../../utils/printUtils';
 
 const NewPurchaseInvoice = () => {
-  const { suppliers, products, warehouses, addPurchaseInvoice, getSupplierBalance } = useData();
+  const { suppliers, products, warehouses, addPurchaseInvoice, getSupplierBalance, updateProduct } = useData();
   const { showSuccess, showError } = useNotification();
+  const { openTab } = useTab();
+  
+  // دالة لفتح سجل المشتريات في تبويبة جديدة
+  const handleOpenPurchaseRecord = () => {
+    openTab('/purchases/invoices', 'سجل فواتير المشتريات', '📋');
+  };
   
   const [formData, setFormData] = useState({
     supplierId: '',
@@ -46,6 +53,16 @@ const NewPurchaseInvoice = () => {
   const [priceErrors, setPriceErrors] = useState([false]);
   const [discountErrors, setDiscountErrors] = useState([false]);
   const [validationErrors, setValidationErrors] = useState({});
+
+  // رسالة التأكيد عند تغيير السعر
+  const [showPriceChangeModal, setShowPriceChangeModal] = useState(false);
+  const [priceChangeData, setPriceChangeData] = useState({
+    index: null,
+    field: '',
+    newPrice: 0,
+    originalPrice: 0,
+    productName: ''
+  });
 
   // مراجع للتركيز التلقائي
   const supplierInputRef = useRef(null);
@@ -96,6 +113,72 @@ const NewPurchaseInvoice = () => {
     const subTotal = calculateSubTotal();
     const discountAmount = calculateDiscountAmount();
     return Math.max(0, subTotal - discountAmount);
+  };
+
+  // تحديث سعر الشراء فقط بدون تطبيق الفرق على الشرائح السعرية
+  const calculateAndApplyPriceDifference = (product, field, newPrice) => {
+    // إنشاء نسخة جديدة من المنتج
+    const updatedProduct = { ...product };
+    
+    // تحديث سعر الشراء فقط
+    updatedProduct.purchasePrices = {
+      ...product.purchasePrices,
+      [field === 'price' ? 'basicPrice' : 'subPrice']: newPrice
+    };
+    
+    return updatedProduct;
+  };
+
+  // تأكيد تغيير السعر
+  const confirmPriceChange = () => {
+    const { index, field, newPrice, productId } = priceChangeData;
+    
+    // جلب المنتج من قاعدة البيانات للحصول على أحدث البيانات
+    const currentProduct = products.find(p => p.id === parseInt(productId));
+    if (!currentProduct) {
+      showError('لم يتم العثور على المنتج');
+      setShowPriceChangeModal(false);
+      return;
+    }
+    
+    // حساب الفرق وتطبيقه على الشرائح
+    const updatedProduct = calculateAndApplyPriceDifference(currentProduct, field, newPrice);
+    
+    // تحديث المنتج في قاعدة البيانات
+    try {
+      if (productId && updateProduct) {
+        // تحديث المنتج بدون الشرائح السعرية
+        updateProduct(parseInt(productId), updatedProduct);
+      }
+    } catch (error) {
+      console.error('خطأ في تحديث المنتج:', error);
+      showError('حدث خطأ في تحديث المنتج');
+    }
+    
+    // تحديث العنصر في الفاتورة
+    const newItems = [...items];
+    newItems[index][field] = newPrice;
+    newItems[index].purchasePrices = updatedProduct.purchasePrices;
+    // newItems[index].tierPrices = updatedProduct.tierPrices; // لا نحتاج لتحديث الشرائح
+    setItems(newItems);
+    
+    // تحديث أخطاء السعر
+    const newPriceErrors = [...priceErrors];
+    newPriceErrors[index] = newPrice < 0;
+    setPriceErrors(newPriceErrors);
+    
+    setShowPriceChangeModal(false);
+    showSuccess(`تم تحديث ${field === 'price' ? 'السعر الأساسي' : 'السعر الفرعي'} للمنتج بنجاح (بدون تأثير على الشرائح السعرية)`);
+  };
+
+  // إلغاء تغيير السعر
+  const cancelPriceChange = () => {
+    setShowPriceChangeModal(false);
+    // إعادة تعيين الحقل للقيمة الأصلية
+    const { index, field, originalPrice } = priceChangeData;
+    const newItems = [...items];
+    newItems[index][field] = originalPrice;
+    setItems(newItems);
   };
 
   // تحذير عند عدم كفاية الرصيد
@@ -178,8 +261,12 @@ const NewPurchaseInvoice = () => {
       ...newItems[index],
       productId: product.id,
       productName: product.name,
-      price: parseFloat(product.mainPrice) || 0,
-      subPrice: parseFloat(product.subPrice) || 0,
+      price: parseFloat(product.purchasePrices?.basicPrice) || 0,
+      subPrice: parseFloat(product.purchasePrices?.subPrice) || 0,
+      purchasePrices: {
+        basicPrice: parseFloat(product.purchasePrices?.basicPrice) || 0,
+        subPrice: parseFloat(product.purchasePrices?.subPrice) || 0
+      },
       discount: 0
     };
     setItems(newItems);
@@ -214,7 +301,8 @@ const NewPurchaseInvoice = () => {
     );
   };
 
-  const handleItemChange = (index, field, value) => {
+  // تحديث فوري للعنصر (يستخدم مع onChange)
+  const handleImmediateUpdate = (index, field, value) => {
     const newItems = [...items];
     newItems[index][field] = value;
     setItems(newItems);
@@ -241,6 +329,38 @@ const NewPurchaseInvoice = () => {
       newDiscountErrors[index] = value < 0;
       setDiscountErrors(newDiscountErrors);
     }
+  };
+
+  // التحقق من السعر عند مغادرة الحقل (onBlur)
+  const handlePriceBlur = (index, field, currentValue) => {
+    const currentItem = items[index];
+    const newValue = parseFloat(currentValue) || 0;
+    
+    // التحقق من تغيير السعر مع تحديد منتج
+    if ((field === 'price' || field === 'subPrice') && currentItem.productId) {
+      // تحقق من أن السعر تم تغييره من السعر الأصلي
+      const originalAutoPrice = field === 'price' 
+        ? parseFloat(currentItem.purchasePrices?.basicPrice) || 0 
+        : parseFloat(currentItem.purchasePrices?.subPrice) || 0;
+      
+      if (originalAutoPrice !== 0 && newValue !== originalAutoPrice) {
+        // تم تغيير السعر، أظهر رسالة التأكيد
+        setPriceChangeData({
+          index,
+          field,
+          newPrice: newValue,
+          originalPrice: originalAutoPrice,
+          productName: currentItem.productName || 'المنتج المحدد',
+          productId: currentItem.productId || null
+        });
+        setShowPriceChangeModal(true);
+      }
+    }
+  };
+
+  // دالة للتعامل مع تغيير العنصر (تستخدم للحقول غير السعر)
+  const handleItemChange = (index, field, value) => {
+    handleImmediateUpdate(index, field, value);
   };
 
   const addItem = () => {
@@ -642,7 +762,8 @@ const NewPurchaseInvoice = () => {
                       type="number"
                       step="0.01"
                       value={item.price}
-                      onChange={(e) => handleItemChange(index, 'price', parseFloat(e.target.value) || 0)}
+                      onChange={(e) => handleImmediateUpdate(index, 'price', parseFloat(e.target.value) || 0)}
+                      onBlur={(e) => handlePriceBlur(index, 'price', e.target.value)}
                       className={`w-full px-2 py-1.5 text-sm text-center border rounded-md focus:ring-2 focus:ring-blue-500 ${
                         priceErrors[index] ? 'border-red-500 bg-red-50' : 'border-gray-300'
                       }`}
@@ -656,7 +777,8 @@ const NewPurchaseInvoice = () => {
                       type="number"
                       step="0.01"
                       value={item.subPrice}
-                      onChange={(e) => handleItemChange(index, 'subPrice', parseFloat(e.target.value) || 0)}
+                      onChange={(e) => handleImmediateUpdate(index, 'subPrice', parseFloat(e.target.value) || 0)}
+                      onBlur={(e) => handlePriceBlur(index, 'subPrice', e.target.value)}
                       className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
                       min="0"
                     />
@@ -788,13 +910,24 @@ const NewPurchaseInvoice = () => {
           </div>
         </div>
 
-        {/* الأزرار - تم نقلها إلى الأسفل */}
+        {/* الأزرار */}
         <div className="mt-6 pt-4 border-t">
-          <div className="flex justify-center gap-3">
+          <div className="flex flex-wrap justify-center gap-3">
+            {/* زر السجل */}
+            <button
+              type="button"
+              onClick={handleOpenPurchaseRecord}
+              className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white px-4 py-2.5 rounded-lg transition-colors font-medium text-sm shadow-sm hover:shadow-md"
+              title="فتح سجل فواتير المشتريات في تبويبة جديدة"
+            >
+              <FaList /> سجل المشتريات
+            </button>
+            
+            {/* أزرار العمليات الرئيسية */}
             <button
               type="button"
               onClick={resetForm}
-              className="flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg transition-colors font-medium"
+              className="flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white px-5 py-2.5 rounded-lg transition-colors font-medium shadow-sm hover:shadow-md"
               title="إعادة تعيين الفاتورة بالكامل"
             >
               <FaTrash /> إعادة تعيين
@@ -802,19 +935,85 @@ const NewPurchaseInvoice = () => {
             <button
               type="button"
               onClick={(e) => handleSubmit(e, false)}
-              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg transition-colors font-medium"
+              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-lg transition-colors font-medium shadow-sm hover:shadow-md"
             >
               <FaSave /> حفظ الفاتورة
             </button>
             <button
               type="button"
               onClick={(e) => handleSubmit(e, true)}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition-colors font-medium"
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg transition-colors font-medium shadow-sm hover:shadow-md"
             >
               <FaPrint /> حفظ وطباعة
             </button>
           </div>
         </div>
+
+        {/* Modal رسالة تأكيد تغيير السعر */}
+        {showPriceChangeModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9998] p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full transform transition-all">
+              {/* Header */}
+              <div className="bg-gradient-to-r from-orange-500 to-red-600 p-4 rounded-t-2xl text-white">
+                <div className="flex items-center justify-center mb-2">
+                  <div className="bg-white bg-opacity-20 rounded-full p-3">
+                    <FaExclamationTriangle size={32} />
+                  </div>
+                </div>
+                <h2 className="text-lg font-bold text-center">تأكيد تغيير السعر</h2>
+              </div>
+
+              {/* Body */}
+              <div className="p-4">
+                <div className="text-center">
+                  <div className="bg-yellow-50 p-3 rounded-lg border-r-4 border-yellow-500 mb-3">
+                    <p className="text-sm font-semibold text-gray-800 mb-2">
+                      المنتج: {priceChangeData.productName}
+                    </p>
+                    
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">السعر الحالي:</span>
+                        <span className="text-green-600 font-medium">{priceChangeData.originalPrice.toFixed(2)} ج.م</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">السعر الجديد:</span>
+                        <span className="text-orange-600 font-medium">{priceChangeData.newPrice.toFixed(2)} ج.م</span>
+                      </div>
+                      <div className="flex justify-between pt-1 border-t">
+                        <span className="text-gray-600">الفرق:</span>
+                        <span className={`font-bold ${priceChangeData.newPrice > priceChangeData.originalPrice ? 'text-red-600' : 'text-green-600'}`}>
+                          {priceChangeData.newPrice > priceChangeData.originalPrice ? '+' : ''}
+                          {(priceChangeData.newPrice - priceChangeData.originalPrice).toFixed(2)} ج.م
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="text-xs text-blue-600 bg-blue-50 p-2 rounded">
+                    سيتم تحديث سعر الشراء ({priceChangeData.field === 'price' ? 'الأساسي' : 'الفرعي'}) فقط - لن يتم تغيير الشرائح السعرية
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="p-4 bg-gray-50 rounded-b-2xl flex gap-3">
+                <button
+                  onClick={cancelPriceChange}
+                  className="flex-1 bg-gray-600 hover:bg-gray-700 text-white px-3 py-2 rounded-lg transition-colors text-sm font-semibold"
+                >
+                  إلغاء
+                </button>
+                <button
+                  onClick={confirmPriceChange}
+                  className="flex-1 bg-orange-600 hover:bg-orange-700 text-white px-3 py-2 rounded-lg transition-colors text-sm font-semibold"
+                >
+                  تأكيد
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* اختصارات الكيبورد */}
         <div className="mt-4 pt-3 border-t text-xs text-gray-500 text-center">

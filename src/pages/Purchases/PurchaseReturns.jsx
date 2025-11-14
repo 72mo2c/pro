@@ -5,16 +5,24 @@
 import React, { useState } from 'react';
 import { useData } from '../../context/DataContext';
 import { useNotification } from '../../context/NotificationContext';
+import { useSystemSettings } from '../../hooks/useSystemSettings';
 import { FaEye, FaTrash, FaSearch, FaFilter, FaUndo } from 'react-icons/fa';
+import { formatCurrency } from '../../utils/currencyUtils';
+import ConfirmationModal from '../../components/Common/ConfirmationModal';
 
 const PurchaseReturns = () => {
   const { purchaseReturns, purchaseInvoices, suppliers, products, deletePurchaseReturn } = useData();
   const { showSuccess, showError } = useNotification();
+  const { currency: currentCurrency } = useSystemSettings();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedReturn, setSelectedReturn] = useState(null);
   const [showViewModal, setShowViewModal] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
+  
+  // Confirmation modal states
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [returnToDelete, setReturnToDelete] = useState(null);
 
   // تصفية المرتجعات
   const filteredReturns = purchaseReturns.filter(returnRecord => {
@@ -36,15 +44,25 @@ const PurchaseReturns = () => {
     setShowViewModal(true);
   };
 
-  const handleDelete = (returnRecord) => {
-    if (window.confirm(`هل أنت متأكد من حذف سجل الإرجاع #${returnRecord.id}؟\nسيتم إعادة الكميات للمخزون.`)) {
-      try {
-        deletePurchaseReturn(returnRecord.id);
-        showSuccess('تم حذف المرتجع بنجاح وإعادة الكميات للمخزون');
-      } catch (error) {
-        showError(error.message || 'حدث خطأ في حذف المرتجع');
-      }
+  const handleDeleteClick = (returnRecord) => {
+    setReturnToDelete(returnRecord);
+    setShowDeleteConfirm(true);
+  };
+
+  const handleDeleteConfirm = () => {
+    try {
+      deletePurchaseReturn(returnToDelete.id);
+      showSuccess('تم حذف المرتجع بنجاح وإعادة الكميات للمخزون');
+      setShowDeleteConfirm(false);
+      setReturnToDelete(null);
+    } catch (error) {
+      showError(error.message || 'حدث خطأ في حذف المرتجع');
     }
+  };
+
+  const handleDeleteCancel = () => {
+    setShowDeleteConfirm(false);
+    setReturnToDelete(null);
   };
 
   const getReasonText = (reason) => {
@@ -121,13 +139,14 @@ const PurchaseReturns = () => {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-100 border-b">
-                <th className="px-3 py-2 text-right text-xs font-semibold text-gray-700">رقم الإرجاع</th>
-                <th className="px-3 py-2 text-right text-xs font-semibold text-gray-700">رقم الفاتورة</th>
+                <th className="px-3 py-2 text-right text-xs font-semibold text-gray-700">#</th>
+                <th className="px-3 py-2 text-right text-xs font-semibold text-gray-700">رقم الفاتورة الأصلية</th>
                 <th className="px-3 py-2 text-right text-xs font-semibold text-gray-700">المورد</th>
+                <th className="px-3 py-2 text-right text-xs font-semibold text-gray-700">هاتف المورد</th>
                 <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700">التاريخ</th>
                 <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700">السبب</th>
                 <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700">عدد المنتجات</th>
-                <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700">المبلغ</th>
+                <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700">المبلغ الكلي</th>
                 <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700">الحالة</th>
                 <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700">الإجراءات</th>
               </tr>
@@ -158,6 +177,11 @@ const PurchaseReturns = () => {
                         <div className="text-xs text-gray-500">{supplier?.phone || '-'}</div>
                       </td>
                       <td className="px-3 py-2 text-center">
+                        <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs">
+                          {supplier?.phone || 'غير متوفر'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-center">
                         {new Date(returnRecord.date).toLocaleDateString('ar-EG')}
                       </td>
                       <td className="px-3 py-2 text-center">
@@ -171,7 +195,7 @@ const PurchaseReturns = () => {
                         </span>
                       </td>
                       <td className="px-3 py-2 text-center font-bold text-red-600">
-                        {(returnRecord.totalAmount || 0).toFixed(2)} د.ع
+                        {formatCurrency(returnRecord.totalAmount || 0, currentCurrency)}
                       </td>
                       <td className="px-3 py-2 text-center">
                         {getStatusBadge(returnRecord.status)}
@@ -180,17 +204,17 @@ const PurchaseReturns = () => {
                         <div className="flex justify-center gap-2">
                           <button
                             onClick={() => handleView(returnRecord)}
-                            className="p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                            className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors"
                             title="عرض"
                           >
-                            <FaEye />
+                            <FaEye className="text-xs" />
                           </button>
                           <button
-                            onClick={() => handleDelete(returnRecord)}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded transition-colors"
+                            onClick={() => handleDeleteClick(returnRecord)}
+                            className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
                             title="حذف"
                           >
-                            <FaTrash />
+                            <FaTrash className="text-xs" />
                           </button>
                         </div>
                       </td>
@@ -228,10 +252,10 @@ const PurchaseReturns = () => {
                 
                 return (
                   <>
-                    {/* معلومات الإرجاع */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                    {/* معلومات الإرجاع الأساسية */}
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
                       <div className="bg-red-50 p-3 rounded-lg">
-                        <p className="text-xs text-gray-600 mb-1">رقم الفاتورة الأصلية</p>
+                        <p className="text-xs text-gray-600 mb-1">رقم الفاتورة</p>
                         <p className="font-semibold text-sm">#{selectedReturn.invoiceId}</p>
                       </div>
                       <div className="bg-blue-50 p-3 rounded-lg">
@@ -246,36 +270,30 @@ const PurchaseReturns = () => {
                       </div>
                       <div className="bg-purple-50 p-3 rounded-lg">
                         <p className="text-xs text-gray-600 mb-1">إجمالي المبلغ</p>
-                        <p className="font-bold text-lg text-purple-600">
-                          {(selectedReturn.totalAmount || 0).toFixed(2)} د.ع
+                        <p className="font-bold text-sm text-purple-600">
+                          {formatCurrency(selectedReturn.totalAmount || 0, currentCurrency)}
                         </p>
+                      </div>
+                      <div className="bg-orange-50 p-3 rounded-lg">
+                        <p className="text-xs text-gray-600 mb-1">سبب الإرجاع</p>
+                        <p className="font-semibold text-sm">{getReasonText(selectedReturn.reason)}</p>
+                      </div>
+                      <div className="bg-gray-50 p-3 rounded-lg">
+                        <p className="text-xs text-gray-600 mb-1">عدد المنتجات</p>
+                        <p className="font-semibold text-sm">{selectedReturn.items?.length || 0}</p>
                       </div>
                     </div>
 
-                    {/* سبب الإرجاع */}
-                    <div className="bg-orange-50 p-4 rounded-lg mb-6">
-                      <p className="text-xs text-gray-600 mb-1">سبب الإرجاع</p>
-                      <p className="font-semibold">{getReasonText(selectedReturn.reason)}</p>
-                      {selectedReturn.notes && (
-                        <>
-                          <p className="text-xs text-gray-600 mt-2 mb-1">ملاحظات</p>
-                          <p className="text-sm">{selectedReturn.notes}</p>
-                        </>
-                      )}
-                    </div>
-
                     {/* جدول المنتجات المرتجعة */}
-                    <div className="mb-6">
+                    <div className="mb-4">
                       <h4 className="text-sm font-bold text-gray-800 mb-3">المنتجات المرتجعة</h4>
                       <div className="border rounded-lg overflow-hidden">
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="bg-gray-100">
-                              <th className="px-3 py-2 text-right text-xs font-semibold">#</th>
-                              <th className="px-3 py-2 text-right text-xs font-semibold">المنتج</th>
-                              <th className="px-3 py-2 text-center text-xs font-semibold">الكمية</th>
-                              <th className="px-3 py-2 text-center text-xs font-semibold">السعر</th>
-                              <th className="px-3 py-2 text-center text-xs font-semibold">الإجمالي</th>
+                              <th className="px-2 py-2 text-right text-xs font-semibold">المنتج</th>
+                              <th className="px-2 py-2 text-center text-xs font-semibold">الكمية</th>
+                              <th className="px-2 py-2 text-center text-xs font-semibold">المبلغ</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y">
@@ -287,26 +305,17 @@ const PurchaseReturns = () => {
                               
                               return (
                                 <tr key={index} className="hover:bg-gray-50">
-                                  <td className="px-3 py-2">{index + 1}</td>
-                                  <td className="px-3 py-2">
+                                  <td className="px-2 py-2">
                                     <div className="font-medium">{product?.name || 'غير محدد'}</div>
                                     <div className="text-xs text-gray-500">{product?.category || '-'}</div>
                                   </td>
-                                  <td className="px-3 py-2 text-center">
+                                  <td className="px-2 py-2 text-center">
                                     <div>{item.quantity || 0} أساسي</div>
                                     {item.subQuantity > 0 && (
                                       <div className="text-xs text-gray-500">{item.subQuantity} فرعي</div>
                                     )}
                                   </td>
-                                  <td className="px-3 py-2 text-center">
-                                    <div>{(originalItem?.price || 0).toFixed(2)}</div>
-                                    {originalItem?.subPrice > 0 && (
-                                      <div className="text-xs text-gray-500">
-                                        {(originalItem?.subPrice || 0).toFixed(2)}
-                                      </div>
-                                    )}
-                                  </td>
-                                  <td className="px-3 py-2 text-center font-semibold text-red-600">
+                                  <td className="px-2 py-2 text-center font-semibold text-red-600">
                                     {itemTotal.toFixed(2)}
                                   </td>
                                 </tr>
@@ -316,6 +325,14 @@ const PurchaseReturns = () => {
                         </table>
                       </div>
                     </div>
+                    
+                    {/* ملاحظات إذا وجدت */}
+                    {selectedReturn.notes && (
+                      <div className="bg-gray-50 p-3 rounded-lg">
+                        <p className="text-xs text-gray-600 mb-1">ملاحظات</p>
+                        <p className="text-sm">{selectedReturn.notes}</p>
+                      </div>
+                    )}
                   </>
                 );
               })()}
@@ -332,6 +349,20 @@ const PurchaseReturns = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && returnToDelete && (
+        <ConfirmationModal
+          isOpen={showDeleteConfirm}
+          title="تأكيد الحذف"
+          message={`هل أنت متأكد من حذف سجل الإرجاع #${returnToDelete.id}؟\nسيتم إعادة الكميات للمخزون.`}
+          confirmText="حذف"
+          cancelText="إلغاء"
+          onConfirm={handleDeleteConfirm}
+          onCancel={handleDeleteCancel}
+          variant="danger"
+        />
       )}
     </div>
   );

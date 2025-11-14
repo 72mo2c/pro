@@ -6,6 +6,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { FaSearch, FaBox, FaUser, FaTruck, FaFileInvoice, FaWarehouse, FaTimes, FaShoppingCart, FaChartLine } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../../context/DataContext';
+import { isClickOutsideRefs } from '../../utils/domUtils.js';
 
 const GlobalSearch = ({ isMobile = false, onClose }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -53,8 +54,11 @@ const GlobalSearch = ({ isMobile = false, onClose }) => {
     // البحث في العملاء
     const matchedCustomers = customers.filter(c => 
       c.name?.toLowerCase().includes(query) || 
-      c.phone?.includes(query) ||
-      c.email?.toLowerCase().includes(query)
+      c.phone1?.includes(query) ||
+      c.phone2?.includes(query) ||
+      c.address?.toLowerCase().includes(query) ||
+      c.area?.toLowerCase().includes(query) ||
+      c.agentType?.toLowerCase().includes(query)
     ).slice(0, 5);
     
     matchedCustomers.forEach(customer => {
@@ -62,7 +66,7 @@ const GlobalSearch = ({ isMobile = false, onClose }) => {
         id: `customer-${customer.id}`,
         type: 'customer',
         title: customer.name,
-        subtitle: customer.phone || customer.email,
+        subtitle: customer.phone1 || customer.phone2 || 'لا يوجد هاتف',
         icon: <FaUser />,
         color: 'pink',
         path: '/customers/manage',
@@ -73,8 +77,10 @@ const GlobalSearch = ({ isMobile = false, onClose }) => {
     // البحث في الموردين
     const matchedSuppliers = suppliers.filter(s => 
       s.name?.toLowerCase().includes(query) || 
-      s.phone?.includes(query) ||
-      s.email?.toLowerCase().includes(query)
+      s.phone1?.includes(query) ||
+      s.phone2?.includes(query) ||
+      s.email?.toLowerCase().includes(query) ||
+      s.address?.toLowerCase().includes(query)
     ).slice(0, 5);
     
     matchedSuppliers.forEach(supplier => {
@@ -82,7 +88,7 @@ const GlobalSearch = ({ isMobile = false, onClose }) => {
         id: `supplier-${supplier.id}`,
         type: 'supplier',
         title: supplier.name,
-        subtitle: supplier.phone || supplier.email,
+        subtitle: supplier.phone1 || supplier.phone2 || supplier.email || 'لا يوجد تواصل',
         icon: <FaTruck />,
         color: 'cyan',
         path: '/suppliers/manage',
@@ -155,7 +161,8 @@ const GlobalSearch = ({ isMobile = false, onClose }) => {
   // إغلاق النتائج عند النقر خارجها
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (searchRef.current && !searchRef.current.contains(event.target)) {
+      // استخدام الدالة الآمنة للتحقق من النقر خارج
+      if (isClickOutsideRefs([searchRef], event)) {
         setShowResults(false);
       }
     };

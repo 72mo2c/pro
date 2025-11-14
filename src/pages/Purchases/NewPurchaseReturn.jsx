@@ -6,13 +6,16 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useData } from '../../context/DataContext';
 import { useNotification } from '../../context/NotificationContext';
+import { useSystemSettings } from '../../hooks/useSystemSettings';
 import { FaSave, FaArrowLeft, FaUndo } from 'react-icons/fa';
+import { formatCurrency } from '../../utils/currencyUtils';
 
 const NewPurchaseReturn = () => {
   const { invoiceId } = useParams();
   const navigate = useNavigate();
   const { purchaseInvoices, products, suppliers, addPurchaseReturn, purchaseReturns } = useData();
   const { showSuccess, showError } = useNotification();
+  const { currency: currentCurrency } = useSystemSettings();
 
   const [invoice, setInvoice] = useState(null);
   const [returnItems, setReturnItems] = useState([]);
@@ -177,7 +180,7 @@ const NewPurchaseReturn = () => {
         </div>
         <button
           onClick={() => navigate('/purchases/manage')}
-          className="flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors"
+          className="flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white px-3 py-2 rounded-lg transition-colors"
         >
           <FaArrowLeft /> رجوع
         </button>
@@ -205,7 +208,7 @@ const NewPurchaseReturn = () => {
           </div>
           <div className="bg-purple-50 p-3 rounded-lg">
             <p className="text-xs text-gray-600 mb-1">المجموع الكلي</p>
-            <p className="font-bold text-lg text-purple-600">{invoice.total.toFixed(2)} د.ع</p>
+            <p className="font-bold text-lg text-purple-600">{formatCurrency(invoice.total, currentCurrency)}</p>
           </div>
         </div>
       </div>
@@ -216,10 +219,10 @@ const NewPurchaseReturn = () => {
         <div className="bg-white rounded-lg shadow-md p-4 mb-4">
           <h3 className="text-sm font-bold text-gray-800 mb-3">المنتجات المراد إرجاعها</h3>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-xs">
               <thead>
                 <tr className="bg-gray-100 border-b">
-                  <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700 w-10">
+                  <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700 w-8">
                     <input
                       type="checkbox"
                       onChange={(e) => {
@@ -235,7 +238,7 @@ const NewPurchaseReturn = () => {
                   <th className="px-3 py-2 text-right text-xs font-semibold text-gray-700">المنتج</th>
                   <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700">الكمية الأصلية</th>
                   <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700">المرتجع سابقاً</th>
-                  <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700">المتاح للإرجاع</th>
+                  <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700">المتاح</th>
                   <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700">كمية الإرجاع</th>
                   <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700">المبلغ المرتجع</th>
                 </tr>
@@ -282,12 +285,12 @@ const NewPurchaseReturn = () => {
                       </td>
                       <td className="px-3 py-2">
                         {item.selected && (
-                          <div className="flex gap-2 justify-center">
+                          <div className="flex gap-1 justify-center">
                             <input
                               type="number"
                               value={item.returnQuantity}
                               onChange={(e) => handleQuantityChange(index, 'returnQuantity', e.target.value)}
-                              className="w-16 px-2 py-1 text-xs text-center border border-gray-300 rounded"
+                              className="w-12 px-1 py-1 text-xs text-center border border-gray-300 rounded"
                               min="0"
                               max={item.availableQty}
                               placeholder="أساسي"
@@ -297,7 +300,7 @@ const NewPurchaseReturn = () => {
                                 type="number"
                                 value={item.returnSubQuantity}
                                 onChange={(e) => handleQuantityChange(index, 'returnSubQuantity', e.target.value)}
-                                className="w-16 px-2 py-1 text-xs text-center border border-gray-300 rounded"
+                                className="w-12 px-1 py-1 text-xs text-center border border-gray-300 rounded"
                                 min="0"
                                 max={item.availableQty}
                                 placeholder="فرعي"
@@ -319,7 +322,7 @@ const NewPurchaseReturn = () => {
 
         {/* سبب الإرجاع والملاحظات */}
         <div className="bg-white rounded-lg shadow-md p-4 mb-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 سبب الإرجاع <span className="text-red-500">*</span>
@@ -356,15 +359,15 @@ const NewPurchaseReturn = () => {
         <div className="bg-white rounded-lg shadow-md p-4 mb-4">
           <div className="flex justify-between items-center">
             <div>
-              <p className="text-sm text-gray-600">عدد المنتجات المحددة</p>
+              <p className="text-sm text-gray-600">عدد المنتجات</p>
               <p className="text-2xl font-bold text-blue-600">
                 {returnItems.filter(i => i.selected).length}
               </p>
             </div>
             <div className="text-right">
-              <p className="text-sm text-gray-600">إجمالي المبلغ المرتجع</p>
+              <p className="text-sm text-gray-600">إجمالي المرتجع</p>
               <p className="text-2xl font-bold text-red-600">
-                {calculateTotalReturn().toFixed(2)} د.ع
+                {formatCurrency(calculateTotalReturn(), currentCurrency)}
               </p>
             </div>
           </div>

@@ -51,6 +51,7 @@ import ManageCashDisbursements from '../../pages/Treasury/ManageCashDisbursement
 import TreasuryMovement from '../../pages/Treasury/TreasuryMovement';
 import CustomerBalances from '../../pages/Treasury/CustomerBalances';
 import SupplierBalances from '../../pages/Treasury/SupplierBalances';
+import InvoicePaymentTracking from '../../pages/Treasury/InvoicePaymentTracking';
 
 // Settings
 import AddUser from '../../pages/Settings/AddUser';
@@ -162,6 +163,7 @@ const getComponentForPath = (path) => {
     '/treasury/movement': TreasuryMovement,
     '/treasury/customer-balances': CustomerBalances,
     '/treasury/supplier-balances': SupplierBalances,
+    '/treasury/invoice-payment-tracking': InvoicePaymentTracking,
     
     // Integrations
     '/integrations/external-platforms': ExternalPlatforms,

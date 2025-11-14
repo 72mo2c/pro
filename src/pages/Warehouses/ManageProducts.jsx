@@ -1,5 +1,9 @@
 // ======================================
 // Manage Products - إدارة وسجل البضائع (محسّنة)
+// الميزات:
+// - النقر المزدوج على المنتج لفتح نافذة التعديل مباشرة
+// - البحث والفلترة المتقدمة
+// - التعديل المباشر في الجدول
 // ======================================
 
 import React, { useState, useMemo } from 'react';
@@ -23,7 +27,7 @@ import {
 
 const ManageProducts = () => {
   const { products, categories, warehouses, updateProduct, deleteProduct } = useData();
-  const { showSuccess, showError } = useNotification();
+  const { showSuccess, showError, showConfirm } = useNotification();
   const { settings } = useSystemSettings();
   const { hasPermission } = useAuth();
   
@@ -48,6 +52,16 @@ const ManageProducts = () => {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     }).format(amount);
+  };
+
+  // دالة للحصول على السعر المناسب للعرض حسب نوع الشريحة
+  const getPriceForDisplay = (product, tier = 'wholesale') => {
+    // إذا كان المنتج يستخدم الشرائح السعرية الجديدة
+    if (product.tierPrices && product.tierPrices[tier]) {
+      return product.tierPrices[tier].basicPrice || 0;
+    }
+    // إذا كان المنتج يستخدم النظام القديم
+    return product.mainPrice || 0;
   };
 
   // فحص الصلاحيات
@@ -80,45 +94,89 @@ const ManageProducts = () => {
     // إنشاء نسخة من بيانات المنتج للتعديل
     const editData = { ...product };
     
-    // إذا كان المنتج يستخدم الشرائح السعرية، اربط سعر الجملة بالسعر الأساسي
-    if (product.tierPrices?.wholesale?.basicPrice) {
-      editData.mainPrice = product.tierPrices.wholesale.basicPrice;
+    // إعداد بيانات الشرائح السعرية للتعديل
+    if (product.tierPrices) {
+      editData.tierPrices = { ...product.tierPrices };
+    } else {
+      // إذا كان المنتج قديم، قم بإنشاء هيكل الشرائح السعرية
+      editData.tierPrices = {
+        retail: { basicPrice: '', subPrice: '' },
+        wholesale: { basicPrice: product.mainPrice || '', subPrice: '' },
+        bulk: { basicPrice: '', subPrice: '' }
+      };
     }
     
     setEditFormData(editData);
   };
 
   const handleEditChange = (e) => {
-    setEditFormData({
-      ...editFormData,
-      [e.target.name]: e.target.value
-    });
+    const { name, value } = e.target;
+    
+    // التعامل مع أسعار الشراء
+    if (name.startsWith('purchase_')) {
+      const priceType = name.replace('purchase_', '');
+      setEditFormData({
+        ...editFormData,
+        purchasePrices: {
+          ...editFormData.purchasePrices,
+          [priceType]: value
+        }
+      });
+    }
+    // التعامل مع خانات الشرائح السعرية
+    else if (name.startsWith('tier_')) {
+      const [_, tier, priceType] = name.split('_'); // tier_retail_basicPrice
+      setEditFormData({
+        ...editFormData,
+        tierPrices: {
+          ...editFormData.tierPrices,
+          [tier]: {
+            ...editFormData.tierPrices[tier],
+            [priceType]: value
+          }
+        }
+      });
+    } else {
+      setEditFormData({
+        ...editFormData,
+        [name]: value
+      });
+    }
   };
 
   const handleSaveEdit = () => {
     try {
       const currentProduct = products.find(p => p.id === editingId);
       
+      // معالجة أسعار الشراء
+      const processedPurchasePrices = {
+        basicPrice: parseFloat(editFormData.purchasePrices?.basicPrice) || 0,
+        subPrice: parseFloat(editFormData.purchasePrices?.subPrice) || 0
+      };
+
+      // معالجة الشرائح السعرية
+      const processedTierPrices = {};
+      if (editFormData.tierPrices) {
+        Object.keys(editFormData.tierPrices).forEach(tier => {
+          processedTierPrices[tier] = {
+            basicPrice: parseFloat(editFormData.tierPrices[tier].basicPrice) || 0,
+            subPrice: parseFloat(editFormData.tierPrices[tier].subPrice) || 0
+          };
+        });
+      }
+      
       const updatedData = {
         ...editFormData,
-        mainPrice: parseFloat(editFormData.mainPrice) || 0,
-        subPrice: parseFloat(editFormData.subPrice) || 0,
+        purchasePrices: processedPurchasePrices,
+        tierPrices: processedTierPrices,
         mainQuantity: parseInt(editFormData.mainQuantity) || 0,
         subQuantity: parseInt(editFormData.subQuantity) || 0,
         unitsInMain: parseInt(editFormData.unitsInMain) || 0,
         warehouseId: parseInt(editFormData.warehouseId),
+        // احتفاظ بالسعر الأساسي القديم للتوافق
+        mainPrice: processedTierPrices.wholesale?.basicPrice || 0,
+        subPrice: processedTierPrices.wholesale?.subPrice || 0,
       };
-      
-      // إذا كان المنتج يستخدم الشرائح السعرية، احتفظ بها
-      if (currentProduct?.tierPrices) {
-        updatedData.tierPrices = {
-          ...currentProduct.tierPrices,
-          wholesale: {
-            ...currentProduct.tierPrices.wholesale,
-            basicPrice: parseFloat(editFormData.mainPrice) || 0
-          }
-        };
-      }
       
       updateProduct(editingId, updatedData);
       showSuccess('تم تحديث المنتج بنجاح');
@@ -140,14 +198,23 @@ const ManageProducts = () => {
       return;
     }
     
-    if (window.confirm(`هل أنت متأكد من حذف المنتج "${name}"؟\nسيتم حذف جميع البيانات المرتبطة به.`)) {
-      try {
-        deleteProduct(id);
-        showSuccess('تم حذف المنتج بنجاح');
-      } catch (error) {
-        showError('حدث خطأ في الحذف');
+    showConfirm(
+      'حذف المنتج',
+      `هل أنت متأكد من حذف المنتج "${name}"؟ سيتم حذف جميع البيانات المرتبطة به.`,
+      () => {
+        try {
+          deleteProduct(id);
+          showSuccess('تم حذف المنتج بنجاح');
+        } catch (error) {
+          showError('حدث خطأ في الحذف');
+        }
+      },
+      {
+        type: 'danger',
+        confirmText: 'حذف المنتج',
+        cancelText: 'إلغاء'
       }
-    }
+    );
   };
 
   // الحصول على اسم المخزن
@@ -234,7 +301,10 @@ const ManageProducts = () => {
           )}
 
           <div className="flex items-center justify-between text-xs text-gray-600">
-            <span>عرض {filteredProducts.length} من {products.length} منتج</span>
+            <div className="flex items-center gap-4">
+              <span>عرض {filteredProducts.length} من {products.length} منتج</span>
+              <span className="text-blue-600 font-medium">💡 نصيحة: انقر مزدوجاً على أي منتج للتعديل</span>
+            </div>
             {(searchTerm || filterCategory || filterWarehouse) && (
               <button
                 onClick={() => {
@@ -271,8 +341,10 @@ const ManageProducts = () => {
                   <th className="px-3 py-2 text-right text-xs font-semibold text-gray-700">الفئة</th>
                   <th className="px-3 py-2 text-right text-xs font-semibold text-gray-700">المخزن</th>
                   <th className="px-3 py-2 text-right text-xs font-semibold text-gray-700">الكمية</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-700">السعر</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-700">القيمة</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-700">سعر التجزئة</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-700">سعر الجملة</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-700">سعر جملة الجملة</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-700">القيمة الإجمالية</th>
                   <th className="px-3 py-2 text-right text-xs font-semibold text-gray-700">الباركود</th>
                   <th className="px-3 py-2 text-center text-xs font-semibold text-gray-700">الإجراءات</th>
                 </tr>
@@ -282,7 +354,7 @@ const ManageProducts = () => {
                   editingId === product.id ? (
                     // صف التعديل
                     <tr key={product.id} className="bg-blue-50 border-b">
-                      <td className="px-3 py-3" colSpan="8">
+                      <td className="px-3 py-3" colSpan="10">
                         <div className="space-y-3">
                           {/* تذكير نظام الأسعار */}
                           {product.tierPrices ? (
@@ -293,9 +365,6 @@ const ManageProducts = () => {
                                   هذا المنتج يستخدم نظام الشرائح السعرية الجديد
                                 </p>
                               </div>
-                              <p className="text-xs text-blue-600 mt-1">
-                                سيتم حفظ سعر الجملة ({formatCurrency(product.tierPrices?.wholesale?.basicPrice || 0)}) كسعر أساسي
-                              </p>
                             </div>
                           ) : (
                             <div className="bg-gray-50 border-l-4 border-gray-400 p-3 rounded">
@@ -348,15 +417,153 @@ const ManageProducts = () => {
                               </select>
                             </div>
                           </div>
+
+                          {/* أسعار الشراء */}
+                          <div className="p-3 bg-green-50 rounded-lg border border-green-200">
+                            <h4 className="text-sm font-semibold text-green-700 mb-3">أسعار الشراء</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">سعر الشراء الأساسي</label>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  name="purchase_basicPrice"
+                                  value={editFormData.purchasePrices?.basicPrice || ''}
+                                  onChange={handleEditChange}
+                                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-green-500"
+                                  placeholder="0.00"
+                                  min="0"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">سعر الشراء الفرعي</label>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  name="purchase_subPrice"
+                                  value={editFormData.purchasePrices?.subPrice || ''}
+                                  onChange={handleEditChange}
+                                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-green-500"
+                                  placeholder="0.00"
+                                  min="0"
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* الشرائح السعرية */}
+                          <div className="space-y-3">
+                            <h4 className="text-sm font-semibold text-gray-700">الشرائح السعرية</h4>
+                            
+                            {/* البيع المباشر */}
+                            <div className="p-3 bg-orange-50 rounded-lg border border-orange-200">
+                              <h5 className="text-xs font-semibold text-orange-700 mb-2">البيع المباشر (تجزئة)</h5>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">السعر الأساسي</label>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    name="tier_retail_basicPrice"
+                                    value={editFormData.tierPrices?.retail?.basicPrice || ''}
+                                    onChange={handleEditChange}
+                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-orange-500"
+                                    placeholder="0.00"
+                                    min="0"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">السعر الفرعي</label>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    name="tier_retail_subPrice"
+                                    value={editFormData.tierPrices?.retail?.subPrice || ''}
+                                    onChange={handleEditChange}
+                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-orange-500"
+                                    placeholder="0.00"
+                                    min="0"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* الجملة */}
+                            <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                              <h5 className="text-xs font-semibold text-blue-700 mb-2">الجملة</h5>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">السعر الأساسي</label>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    name="tier_wholesale_basicPrice"
+                                    value={editFormData.tierPrices?.wholesale?.basicPrice || ''}
+                                    onChange={handleEditChange}
+                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                                    placeholder="0.00"
+                                    min="0"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">السعر الفرعي</label>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    name="tier_wholesale_subPrice"
+                                    value={editFormData.tierPrices?.wholesale?.subPrice || ''}
+                                    onChange={handleEditChange}
+                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                                    placeholder="0.00"
+                                    min="0"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* جملة الجملة */}
+                            <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
+                              <h5 className="text-xs font-semibold text-purple-700 mb-2">جملة الجملة</h5>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">السعر الأساسي</label>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    name="tier_bulk_basicPrice"
+                                    value={editFormData.tierPrices?.bulk?.basicPrice || ''}
+                                    onChange={handleEditChange}
+                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
+                                    placeholder="0.00"
+                                    min="0"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">السعر الفرعي</label>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    name="tier_bulk_subPrice"
+                                    value={editFormData.tierPrices?.bulk?.subPrice || ''}
+                                    onChange={handleEditChange}
+                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-purple-500"
+                                    placeholder="0.00"
+                                    min="0"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <div>
-                              <label className="block text-xs font-medium text-gray-700 mb-1">الكمية الأساسية *</label>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">الكمية الأساسية (كرتونة) *</label>
                               <input
                                 type="number"
                                 name="mainQuantity"
                                 value={editFormData.mainQuantity}
                                 onChange={handleEditChange}
                                 className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                                min="0"
                                 required
                               />
                             </div>
@@ -374,48 +581,25 @@ const ManageProducts = () => {
                               />
                             </div>
                             <div>
-                              <label className="block text-xs font-medium text-gray-700 mb-1">الكمية الفرعية</label>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">الكمية الفرعية (قطع إضافية)</label>
                               <input
                                 type="number"
                                 name="subQuantity"
                                 value={editFormData.subQuantity}
                                 onChange={handleEditChange}
                                 className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                                min="0"
                               />
                             </div>
                             <div>
-                              <label className="block text-xs font-medium text-gray-700 mb-1">الباركود</label>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">الباركود *</label>
                               <input
                                 type="text"
                                 name="barcode"
                                 value={editFormData.barcode || ''}
                                 onChange={handleEditChange}
                                 className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                              />
-                            </div>
-                          </div>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                            <div>
-                              <label className="block text-xs font-medium text-gray-700 mb-1">السعر الأساسي * ({settings?.currency || 'EGP'})</label>
-                              <input
-                                type="number"
-                                step="0.01"
-                                name="mainPrice"
-                                value={editFormData.mainPrice}
-                                onChange={handleEditChange}
-                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                                 required
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-xs font-medium text-gray-700 mb-1">السعر الفرعي ({settings?.currency || 'EGP'})</label>
-                              <input
-                                type="number"
-                                step="0.01"
-                                name="subPrice"
-                                value={editFormData.subPrice}
-                                onChange={handleEditChange}
-                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                               />
                             </div>
                             <div>
@@ -429,6 +613,7 @@ const ManageProducts = () => {
                               />
                             </div>
                           </div>
+
                           <div className="flex gap-2">
                             {canEdit && (
                               <>
@@ -454,9 +639,11 @@ const ManageProducts = () => {
                     // صف عادي
                     <tr 
                       key={product.id} 
-                      className={`border-b hover:bg-gray-50 transition-colors ${
+                      className={`border-b hover:bg-gray-50 transition-colors cursor-pointer ${
                         product.mainQuantity < 10 ? 'bg-yellow-50' : ''
                       }`}
+                      onDoubleClick={() => handleEdit(product)}
+                      title="انقر مزدوجاً لتعديل المنتج"
                     >
                       <td className="px-3 py-2">
                         <div className="flex items-center gap-2">
@@ -504,28 +691,31 @@ const ManageProducts = () => {
                       </td>
                       <td className="px-3 py-2">
                         <div>
-                          {/* عرض سعر الجملة فقط */}
-                          <p className="font-semibold text-sm text-blue-600">
-                            {formatCurrency(
-                              product.tierPrices?.wholesale?.basicPrice || 
-                              product.mainPrice || 0
-                            )}
+                          <p className="font-semibold text-sm text-orange-600">
+                            {formatCurrency(getPriceForDisplay(product, 'retail'))}
                           </p>
-                          
-                          {/* النظام القديم للأسعار الفرعية - مخفي */}
-                          {product.subPrice > 0 && !product.tierPrices && (
-                            <p className="text-xs text-gray-500">
-                              فرعي: {formatCurrency(product.subPrice)}
-                            </p>
-                          )}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2">
+                        <div>
+                          <p className="font-semibold text-sm text-blue-600">
+                            {formatCurrency(getPriceForDisplay(product, 'wholesale'))}
+                          </p>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2">
+                        <div>
+                          <p className="font-semibold text-sm text-purple-600">
+                            {formatCurrency(getPriceForDisplay(product, 'bulk'))}
+                          </p>
                         </div>
                       </td>
                       <td className="px-3 py-2">
                         <p className="font-bold text-green-600 text-sm">
                           {(() => {
                           const totalSubQuantity = (product.mainQuantity || 0) * (product.unitsInMain || 0) + (product.subQuantity || 0);
-                          // استخدام سعر الجملة إذا توفر، وإلا استخدام السعر الأساسي
-                          const priceToUse = product.tierPrices?.wholesale?.basicPrice || product.mainPrice || 0;
+                          // استخدام سعر الجملة للحساب
+                          const priceToUse = getPriceForDisplay(product, 'wholesale');
                           return formatCurrency(priceToUse * totalSubQuantity);
                         })()}
                         </p>

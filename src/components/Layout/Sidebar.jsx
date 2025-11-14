@@ -7,6 +7,12 @@ import { useLocation } from 'react-router-dom';
 import { useTab } from '../../contexts/TabContext';
 import { useAuth } from '../../context/AuthContext';
 import { 
+  isValidNode, 
+  isOutsideContainers, 
+  isClickOutsideRefs, 
+  isMouseOutsideRefs 
+} from '../../utils/domUtils.js';
+import { 
   FaHome, 
   FaWarehouse, 
   FaShoppingCart, 
@@ -121,8 +127,8 @@ const Sidebar = ({ isOpen, closeSidebar }) => {
   // Close submenu when clicking outside or when location changes
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (sidebarRef.current && !sidebarRef.current.contains(event.target) &&
-          contextMenuRef.current && !contextMenuRef.current.contains(event.target)) {
+      // استخدام الدالة الآمنة للتحقق من النقر خارج العناصر
+      if (isClickOutsideRefs([sidebarRef, contextMenuRef], event)) {
         setActiveMenu(null);
       }
     };
@@ -249,6 +255,7 @@ const Sidebar = ({ isOpen, closeSidebar }) => {
         { title: 'حركة الخزينة', icon: <FaChartLine />, path: '/treasury/movement' },
         { title: 'أرصدة العملاء', icon: <FaUsers />, path: '/treasury/customer-balances' },
         { title: 'أرصدة الموردين', icon: <FaTruck />, path: '/treasury/supplier-balances' },
+        { title: 'تتبع مدفوعات الفواتير', icon: <FaFileInvoice />, path: '/treasury/invoice-payment-tracking' },
         { title: 'دليل الحسابات', icon: <FaBookOpen />, path: '/accounting/chart-of-accounts' },
         { title: 'القيود اليومية', icon: <FaFileInvoice />, path: '/accounting/journal-entry' },
         { title: 'إدارة الموظفين', icon: <FaUserPlus />, path: '/hr/employees' },
@@ -372,9 +379,8 @@ const Sidebar = ({ isOpen, closeSidebar }) => {
 
   const handleMouseLeave = (e) => {
     if (!isOpen) {
-      const relatedTarget = e.relatedTarget;
-      if (!sidebarRef.current?.contains(relatedTarget) && 
-          !contextMenuRef.current?.contains(relatedTarget)) {
+      // استخدام الدالة الآمنة للتحقق من الماوس خارج العناصر
+      if (isMouseOutsideRefs([sidebarRef, contextMenuRef], e)) {
         hoverTimeoutRef.current = setTimeout(() => {
           setIsHovered(false);
           setActiveMenu(null); // إغلاق القوائم الفرعية أيضاً

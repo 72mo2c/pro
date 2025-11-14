@@ -16,7 +16,42 @@ export const useData = () => {
   return context;
 };
 
+// دالة تنسيق العملة العامة - متاحة في كامل الملف
+const formatCurrency = (amount = 0) => {
+  const numericAmount = Number(amount) || 0;
+  return numericAmount.toLocaleString('ar-EG', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }) + ' ج.م';
+};
+
 export const DataProvider = ({ children }) => {
+
+  // ==================== دوال نظام الشحن (مُعرَّفة مبكراً للاستخدام) ====================
+  
+  // دالة حساب تكلفة الشحن
+  const calculateShipmentCost = (shipmentData) => {
+    const { vehicleId, totalWeight = 100, deliveryDays = 1, sameDay = false } = shipmentData;
+    
+    let baseCost = 50; // تكلفة أساسية
+    
+    // تكلفة حسب نوع الشاحنة (من البيانات المُخزنة)
+    // سيتم حسابها بناءً على vehicleId لاحقاً
+    if (vehicleId) {
+      // استخدام تكلفة افتراضية للشاحنة
+      baseCost = 60;
+    }
+    
+    // تكلفة إضافية للوزن
+    const weightCost = totalWeight > 100 ? (totalWeight - 100) * 0.5 : 0;
+    
+    // تكلفة إضافية للتسليم في نفس اليوم
+    const sameDayCost = sameDay ? 25 : 0;
+    
+    return baseCost + weightCost + sameDayCost;
+  };
+  
+  // ==================== بيانات المخازن ====================
   // بيانات المخازن
   const [warehouses, setWarehouses] = useState([]);
   const [products, setProducts] = useState([]);
@@ -42,6 +77,7 @@ export const DataProvider = ({ children }) => {
   const [treasuryBalance, setTreasuryBalance] = useState(0);
   const [cashReceipts, setCashReceipts] = useState([]); // إيصالات الاستلام النقدي
   const [cashDisbursements, setCashDisbursements] = useState([]); // إيصالات الصرف النقدي
+  const [treasuryMovements, setTreasuryMovements] = useState([]); // سجلات حركة الخزينة التفصيلية
   
   // بيانات التحويلات بين المخازن
   const [transfers, setTransfers] = useState([]);
@@ -90,6 +126,11 @@ export const DataProvider = ({ children }) => {
   const [assetDisposals, setAssetDisposals] = useState([]);  // التصرفات في الأصول
   const [assetTransfers, setAssetTransfers] = useState([]);  // نقل الأصول
   const [assetAcquisitions, setAssetAcquisitions] = useState([]);  // اقتناء الأصول
+
+  // بيانات نظام الشحن والتوصيل
+  const [shippingVehicles, setShippingVehicles] = useState([]);  // شاحنات الشحن
+  const [shipments, setShipments] = useState([]);  // شحنات التوصيل
+  const [shippingRecords, setShippingRecords] = useState([]);  // سجلات الشحن
 
   // تحميل البيانات من LocalStorage
   useEffect(() => {
@@ -168,6 +209,137 @@ export const DataProvider = ({ children }) => {
     loadData('bero_asset_disposals', setAssetDisposals);
     loadData('bero_asset_transfers', setAssetTransfers);
     loadData('bero_asset_acquisitions', setAssetAcquisitions);
+
+    // تحميل بيانات نظام الشحن
+    loadData('bero_shipping_vehicles', setShippingVehicles);
+    loadData('bero_shipments', setShipments);
+    loadData('bero_shipping_records', setShippingRecords);
+
+    // إضافة بيانات تجريبية للشاحنات إذا لم تكن موجودة
+    if (!localStorage.getItem('bero_shipping_vehicles')) {
+      const sampleVehicles = [
+        {
+          id: 1,
+          vehicleType: 'شاحنة كبيرة',
+          vehicleNumber: 'أ 1234 ب',
+          driver: 'أحمد محمد',
+          capacity: '5 طن',
+          status: 'متاح',
+          currentLocation: 'المخزن الرئيسي',
+          phone: '01012345678',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        },
+        {
+          id: 2,
+          vehicleType: 'فان',
+          vehicleNumber: 'ج 5678 د',
+          driver: 'محمد علي',
+          capacity: '2 طن',
+          status: 'مشغول',
+          currentLocation: 'العملاء - المنطقة الشمالية',
+          phone: '01087654321',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        },
+        {
+          id: 3,
+          vehicleType: 'شاحنة صغيرة',
+          vehicleNumber: 'ه 9012 و',
+          driver: 'علي أحمد',
+          capacity: '3 طن',
+          status: 'صيانة',
+          currentLocation: 'ورشة الصيانة',
+          phone: '01012345679',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }
+      ];
+      setShippingVehicles(sampleVehicles);
+      saveData('bero_shipping_vehicles', sampleVehicles);
+    }
+
+    // إضافة بيانات تجريبية للشحنات إذا لم تكن موجودة
+    if (!localStorage.getItem('bero_shipments')) {
+      const sampleShipments = [
+        {
+          id: 1,
+          invoiceId: 1001,
+          customerId: 1,
+          customerName: 'متجر الكبير للأثاث',
+          customerPhone: '01012345678',
+          customerAddress: 'شارع النيل - القاهرة',
+          pickupAddress: 'المخزن الرئيسي',
+          deliveryAddress: 'شارع النيل - القاهرة',
+          vehicleId: 1,
+          vehicleName: 'شاحنة كبيرة - أ 1234 ب',
+          driverName: 'أحمد محمد',
+          totalWeight: 500,
+          deliveryDays: 1,
+          sameDayDelivery: false,
+          cost: 100,
+          priority: 'عادي',
+          specialInstructions: 'التسليم في الطابق الثالث',
+          deliveryDate: new Date().toISOString().split('T')[0],
+          status: 'awaiting_pickup',
+          trackingNumber: 'SHIP-2025001',
+          createdAt: new Date().toISOString(),
+          estimatedDelivery: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+          actualDelivery: null,
+          currentLocation: 'المخزن الرئيسي',
+          history: [
+            {
+              status: 'awaiting_pickup',
+              location: 'المخزن الرئيسي',
+              timestamp: new Date().toISOString(),
+              notes: 'تم إنشاء الشحنة'
+            }
+          ]
+        },
+        {
+          id: 2,
+          invoiceId: 1002,
+          customerId: 2,
+          customerName: 'معرض الزينة الذهبية',
+          customerPhone: '01087654321',
+          customerAddress: 'شارع التحرير - الجيزة',
+          pickupAddress: 'المخزن الرئيسي',
+          deliveryAddress: 'شارع التحرير - الجيزة',
+          vehicleId: 2,
+          vehicleName: 'فان - ج 5678 د',
+          driverName: 'محمد علي',
+          totalWeight: 200,
+          deliveryDays: 2,
+          sameDayDelivery: false,
+          cost: 60,
+          priority: 'سريع',
+          specialInstructions: 'حذر من الهشاشة',
+          deliveryDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          status: 'in_transit',
+          trackingNumber: 'SHIP-2025002',
+          createdAt: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
+          estimatedDelivery: new Date(Date.now() + 20 * 60 * 60 * 1000).toISOString(),
+          actualDelivery: null,
+          currentLocation: 'طريق القاهرة - الجيزة',
+          history: [
+            {
+              status: 'awaiting_pickup',
+              location: 'المخزن الرئيسي',
+              timestamp: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
+              notes: 'تم إنشاء الشحنة'
+            },
+            {
+              status: 'in_transit',
+              location: 'تم تحميل الشحنة',
+              timestamp: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+              notes: 'تم تحميل الشحنة على الشاحنة'
+            }
+          ]
+        }
+      ];
+      setShipments(sampleShipments);
+      saveData('bero_shipments', sampleShipments);
+    }
   };
 
   // حفض البيانات في LocalStorage
@@ -740,7 +912,7 @@ export const DataProvider = ({ children }) => {
   // ==================== دوال فواتير المبيعات ====================
   
   const addSalesInvoice = (invoice) => {
-    // التحقق من توفر الكميات قبل البيع (فصل أساسي وفرعي)
+    // التحقق من توفر الكميات قبل البيع (القواعد الذكية)
     if (invoice.items && Array.isArray(invoice.items)) {
       for (const item of invoice.items) {
         const product = products.find(p => p.id === parseInt(item.productId));
@@ -753,19 +925,29 @@ export const DataProvider = ({ children }) => {
         const subQty = parseInt(item.subQuantity) || 0;
         const availableMainQty = product.mainQuantity || 0;
         const availableSubQty = product.subQuantity || 0;
+        const unitsInMain = product.unitsInMain || 0;
         
-        // المنطق الذكي للتحقق من توفر المخزون
+        // القاعدة الذكية 1: منع طلب فرعية أكثر من العدد المسموح
+        const maxAllowedSubUnits = availableMainQty * unitsInMain;
+        if (subQty > maxAllowedSubUnits) {
+          throw new Error(
+            `لا يمكن طلب ${subQty} قطعة فرعية من "${product.name}". ` +
+            `الحد الأقصى المسموح: ${maxAllowedSubUnits} قطعة (${availableMainQty} وحدة أساسية × ${unitsInMain} قطعة/وحدة)`
+          );
+        }
+        
+        // القاعدة الذكية 2: المنطق الذكي للتحقق من توفر المخزون
         let requiredSubQty = 0;
         if (mainQty > 0) {
           // تحويل الكمية المباعة من أساسي إلى فرعي
-          const mainToSub = mainQty * (product.unitsInMain || 0);
+          const mainToSub = mainQty * unitsInMain;
           requiredSubQty = subQty + mainToSub;
         } else {
           requiredSubQty = subQty;
         }
         
         // حساب الكمية الإجمالية بالوحدات الفرعية
-        const totalAvailableSub = (product.mainQuantity || 0) * (product.unitsInMain || 0) + (product.subQuantity || 0);
+        const totalAvailableSub = (availableMainQty * unitsInMain) + availableSubQty;
         
         if (requiredSubQty > totalAvailableSub) {
           throw new Error(
@@ -792,6 +974,90 @@ export const DataProvider = ({ children }) => {
       items: enrichedItems,
       customerId: parseInt(invoice.customerId) // تحويل إلى رقم
     };
+
+    // ==================== إضافة: إنشاء سجل الشحن إذا تم اختيار شاحنة ====================
+    
+    // إذا تم اختيار شاحنة للفاتورة، قم بإنشاء سجل شحن
+    let shippingRecord = null;
+    if (invoice.selectedVehicle && invoice.selectedVehicle !== '') {
+      try {
+        // الحصول على بيانات العميل والشاحنة
+        const customer = customers.find(c => c.id === parseInt(invoice.customerId));
+        const vehicle = shippingVehicles.find(v => v.id === invoice.selectedVehicle);
+        
+        if (customer && vehicle) {
+          // حساب تكلفة الشحن
+          const weight = invoice.totalWeight || 100;
+          let shipmentCost = 50; // تكلفة أساسية
+          
+          // تكلفة حسب نوع الشاحنة
+          if (vehicle.vehicleType === 'شاحنة كبيرة') shipmentCost = 100;
+          else if (vehicle.vehicleType === 'فان') shipmentCost = 60;
+          
+          // تكلفة إضافية للوزن
+          const weightCost = weight > 100 ? (weight - 100) * 0.5 : 0;
+          
+          // تكلفة إضافية للتسليم في نفس اليوم
+          const sameDayCost = invoice.sameDayDelivery ? 25 : 0;
+          
+          const totalCost = shipmentCost + weightCost + sameDayCost;
+          
+          // إنشاء سجل الشحن
+          const shipmentData = {
+            invoiceId: newInvoice.id,
+            customerId: customer.id,
+            customerName: customer.name,
+            customerPhone: customer.phone || '',
+            customerAddress: customer.address || '',
+            pickupAddress: 'المخزن الرئيسي',
+            deliveryAddress: customer.address || '',
+            vehicleId: vehicle.id,
+            vehicleName: vehicle.name,
+            driverName: vehicle.driver,
+            totalWeight: invoice.totalWeight || 100,
+            deliveryDays: 1,
+            sameDayDelivery: invoice.sameDayDelivery || false,
+            cost: totalCost,
+            priority: 'عادي', // عادي، سريع، طارئ
+            specialInstructions: invoice.shippingNotes || '',
+            deliveryDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+          };
+          
+          // استخدام دالة إضافة الشحنة
+          const newShipment = {
+            id: Date.now(),
+            ...shipmentData,
+            status: 'awaiting_pickup',
+            trackingNumber: `SHIP-${Date.now()}`,
+            createdAt: new Date().toISOString(),
+            estimatedDelivery: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+            actualDelivery: null,
+            currentLocation: 'المخزن الرئيسي',
+            history: [
+              {
+                status: 'awaiting_pickup',
+                location: 'المخزن الرئيسي',
+                timestamp: new Date().toISOString(),
+                notes: 'تم إنشاء الشحنة'
+              }
+            ]
+          };
+          
+          const updatedShipments = [...shipments, newShipment];
+          setShipments(updatedShipments);
+          saveData('bero_shipments', updatedShipments);
+          shippingRecord = newShipment;
+          
+          console.log('✅ تم إنشاء سجل الشحن:', shippingRecord);
+        }
+      } catch (shippingError) {
+        console.error('⚠️ خطأ في إنشاء سجل الشحن:', shippingError);
+        // لا تفشل العملية بسبب فشل إنشاء الشحن
+      }
+    }
+    
+    // ==================== نهاية إضافة الشحن ====================
+    
     const updated = [...salesInvoices, newInvoice];
     
     // تحديث كميات المنتجات (الذكي - يحول من أساسي عند الحاجة)
@@ -806,57 +1072,64 @@ export const DataProvider = ({ children }) => {
           const mainSale = parseInt(item.mainQuantity || item.quantity) || 0; // الكمية الأساسية المباعة
           const subSale = parseInt(item.subQuantity) || 0; // الكمية الفرعية المباعة
           
+          console.log(`📋 منتج: ${product.name}`);
+          console.log(`📦 المتوفر: ${mainQuantity} أساسي + ${subQuantity} فرعي (${unitsInMain} في الوحدة)`);
+          console.log(`🛒 المطلوب: ${mainSale} أساسي + ${subSale} فرعي`);
+          
           let newMainQuantity = mainQuantity;
           let newSubQuantity = subQuantity;
           
-          // تطبيق المنطق الذكي للخصم
+          // تطبيق المنطق الذكي للخصم المحسن
           if (mainSale > 0 && subSale > 0) {
-            // بيع أساسي وفرعي معاً
-            newMainQuantity = Math.max(0, mainQuantity - mainSale);
+            // بيع أساسي وفرعي معاً - مع معالجة مبسطة
+            console.log(`🔄 معالجة بيع أساسي وفرعي معاً...`);
             
-            // تحويل المطلوب إلى فرعي لفحص إذا كان كافي
-            const mainToSub = mainSale * unitsInMain;
-            const totalSubRequired = mainToSub + subSale;
+            // إجمالي المطلوب والمتوفر بالوحدات الفرعية
+            const totalSubRequired = (mainSale * unitsInMain) + subSale;
+            const totalAvailableSubUnits = (mainQuantity * unitsInMain) + subQuantity;
             
-            if (subQuantity >= totalSubRequired) {
-              // الكمية الفرعية كافية
-              newSubQuantity = subQuantity - totalSubRequired;
-            } else {
-              // الكمية الفرعية غير كافية - خذ من الأساسي
-              const subShortage = totalSubRequired - subQuantity;
-              const additionalMainNeeded = Math.ceil(subShortage / unitsInMain);
-              
-              if (newMainQuantity >= additionalMainNeeded) {
-                newMainQuantity -= additionalMainNeeded;
-                newSubQuantity = subQuantity + (additionalMainNeeded * unitsInMain) - totalSubRequired;
-              } else {
-                throw new Error(
-                  `الكمية غير كافية في المخزون للمنتج "${product.name}"`
-                );
-              }
+            console.log(`📊 إجمالي المطلوب: ${totalSubRequired} فرعية (${mainSale}×${unitsInMain} + ${subSale})`);
+            console.log(`📊 إجمالي متوفر: ${totalAvailableSubUnits} فرعية (${mainQuantity}×${unitsInMain} + ${subQuantity})`);
+            
+            if (totalSubRequired > totalAvailableSubUnits) {
+              console.log(`❌ فشل: المطلوب (${totalSubRequired}) > متوفر (${totalAvailableSubUnits})`);
+              throw new Error(
+                `الكمية غير كافية في المخزون للمنتج "${product.name}"`
+              );
             }
+            
+            // الكمية كافية - حساب المتبقي
+            const totalRemainingSubUnits = totalAvailableSubUnits - totalSubRequired;
+            newMainQuantity = Math.floor(totalRemainingSubUnits / unitsInMain);
+            newSubQuantity = totalRemainingSubUnits % unitsInMain;
+            
+            console.log(`✅ تم خصم الكمية بنجاح. المتبقي: ${newMainQuantity} أساسي + ${newSubQuantity} فرعي`);
           } else if (mainSale > 0 && subSale === 0) {
             // بيع أساسي فقط
             newMainQuantity = Math.max(0, mainQuantity - mainSale);
             newSubQuantity = subQuantity; // لا تغيير في الفرعي
           } else if (mainSale === 0 && subSale > 0) {
-            // بيع فرعي فقط
-            if (subQuantity >= subSale) {
-              newSubQuantity = subQuantity - subSale;
-            } else {
-              // كميحة فرعية غير كافية - خذ من الأساسي
-              const subShortage = subSale - subQuantity;
-              const additionalMainNeeded = Math.ceil(subShortage / unitsInMain);
-              
-              if (newMainQuantity >= additionalMainNeeded) {
-                newMainQuantity -= additionalMainNeeded;
-                newSubQuantity = subQuantity + (additionalMainNeeded * unitsInMain) - subSale;
-              } else {
-                throw new Error(
-                  `الكمية غير كافية في المخزون للمنتج "${product.name}"`
-                );
-              }
+            // بيع فرعي فقط - معالجة مبسطة
+            console.log(`🔄 معالجة بيع فرعي فقط...`);
+            
+            const totalAvailableSubUnits = (mainQuantity * unitsInMain) + subQuantity;
+            
+            console.log(`📊 إجمالي المطلوب: ${subSale} فرعية`);
+            console.log(`📊 إجمالي متوفر: ${totalAvailableSubUnits} فرعية`);
+            
+            if (subSale > totalAvailableSubUnits) {
+              console.log(`❌ فشل: المطلوب (${subSale}) > متوفر (${totalAvailableSubUnits})`);
+              throw new Error(
+                `الكمية غير كافية في المخزون للمنتج "${product.name}"`
+              );
             }
+            
+            // حساب المتبقي
+            const totalRemainingSubUnits = totalAvailableSubUnits - subSale;
+            newMainQuantity = Math.floor(totalRemainingSubUnits / unitsInMain);
+            newSubQuantity = totalRemainingSubUnits % unitsInMain;
+            
+            console.log(`✅ تم خصم الفرعية بنجاح. المتبقي: ${newMainQuantity} أساسي + ${newSubQuantity} فرعي`);
           }
           
           updatedProducts[productIndex] = {
@@ -997,6 +1270,40 @@ export const DataProvider = ({ children }) => {
     if (invoice.paymentType === 'deferred' || invoice.paymentType === 'partial') {
       // سيتم تحديث رصيد العميل تلقائياً بعد حذف الفاتورة
     }
+    
+    // ==================== إضافة: حذف سجل الشحن المرتبط ====================
+    
+    // حذف سجل الشحن المرتبط بالفاتورة
+    if (invoice.selectedVehicle && invoice.selectedVehicle !== '') {
+      try {
+        const relatedShipments = shipments.filter(shipment => shipment.invoiceId === invoiceId);
+        
+        relatedShipments.forEach(shipment => {
+          // تحديث حالة الشاحنة إلى متاح
+          if (shipment.vehicleId) {
+            const updatedVehicles = shippingVehicles.map(v => 
+              v.id === shipment.vehicleId ? { ...v, status: 'متاح', updatedAt: new Date().toISOString() } : v
+            );
+            setShippingVehicles(updatedVehicles);
+            saveData('bero_shipping_vehicles', updatedVehicles);
+          }
+          
+          console.log('🗑️ حذف سجل الشحن المرتبط:', shipment.id, shipment.trackingNumber);
+        });
+        
+        // حذف الشحنات المرتبطة
+        const updatedShipments = shipments.filter(shipment => shipment.invoiceId !== invoiceId);
+        setShipments(updatedShipments);
+        saveData('bero_shipments', updatedShipments);
+        
+        console.log('✅ تم حذف جميع سجلات الشحن المرتبطة بالفاتورة');
+      } catch (shippingError) {
+        console.error('⚠️ خطأ في حذف سجل الشحن:', shippingError);
+        // لا تفشل العملية بسبب فشل حذف الشحن
+      }
+    }
+    
+    // ==================== نهاية إضافة حذف الشحن ====================
     
     // إعادة الكميات إلى المخزون (عكس عملية البيع) - فصل الكميات
     if (invoice.items && Array.isArray(invoice.items)) {
@@ -1229,22 +1536,49 @@ export const DataProvider = ({ children }) => {
   
   // إضافة إيصال استلام نقدي
   const addCashReceipt = (receiptData) => {
+    // التحقق من وجود معلومات المعاملة
+    const hasTransactionInfo = receiptData.transactionInfo;
+    
     const newReceipt = {
       id: Date.now(),
       date: new Date().toISOString(),
       ...receiptData,
       type: 'receipt', // receipt
-      status: 'completed' // completed, pending, cancelled
+      status: 'completed', // completed, pending, cancelled
+      // معلومات إضافية لحركة الخزينة
+      treasuryMovement: hasTransactionInfo ? {
+        previousBalance: hasTransactionInfo.currentBalance,
+        newBalance: hasTransactionInfo.newBalanceAfterPayment,
+        transactionType: hasTransactionInfo.transactionType,
+        willReduceBalance: hasTransactionInfo.willReduceBalance,
+        willIncreaseBalance: hasTransactionInfo.willIncreaseBalance,
+        remainingAmount: hasTransactionInfo.remainingAmount,
+        processedAt: new Date().toISOString()
+      } : null
     };
     
     const updatedReceipts = [newReceipt, ...cashReceipts];
     setCashReceipts(updatedReceipts);
     saveData('bero_cash_receipts', updatedReceipts);
     
-    // تحديث رصيد الخزينة (إضافة)
-    const newBalance = treasuryBalance + parseFloat(receiptData.amount);
-    setTreasuryBalance(newBalance);
-    saveData('bero_treasury_balance', newBalance);
+    // إذا كان هناك معلومات معاملة، استخدم النظام الجديد
+    if (hasTransactionInfo) {
+      // معالجة المعاملة مع أرصدة العملاء/الموردين والخزينة
+      processTreasuryTransactionWithBalances(receiptData);
+    } else {
+      // النظام القديم - إضافة المبلغ كاملاً للخزينة
+      const newBalance = treasuryBalance + parseFloat(receiptData.amount);
+      setTreasuryBalance(newBalance);
+      saveData('bero_treasury_balance', newBalance);
+    }
+    
+    console.log('✅ تم إضافة إيصال الاستلام بنجاح:', {
+      receiptId: newReceipt.id,
+      amount: receiptData.amount,
+      source: `${receiptData.fromType}: ${receiptData.fromName || receiptData.fromId}`,
+      transactionType: hasTransactionInfo?.transactionType || 'إيداع مباشر',
+      treasuryBalanceAfter: hasTransactionInfo ? treasuryBalance + (hasTransactionInfo.remainingAmount || 0) : treasuryBalance + parseFloat(receiptData.amount)
+    });
     
     return newReceipt;
   };
@@ -1441,6 +1775,88 @@ export const DataProvider = ({ children }) => {
       saveData('bero_suppliers', updatedSuppliers);
     }
   };
+
+  // دالة مساعدة لتحديث رصيد العميل
+  const updateCustomerBalance = (customerId, amount, type = 'credit') => {
+    const customerIndex = customers.findIndex(c => c.id === customerId);
+    if (customerIndex !== -1) {
+      const currentBalance = customers[customerIndex].balance || 0;
+      const newBalance = type === 'debit' 
+        ? currentBalance + amount  // زيادة الدين على العميل
+        : currentBalance - amount; // تخفيض الدين على العميل
+      
+      const updatedCustomers = [...customers];
+      updatedCustomers[customerIndex] = {
+        ...updatedCustomers[customerIndex],
+        balance: newBalance
+      };
+      
+      setCustomers(updatedCustomers);
+      saveData('bero_customers', updatedCustomers);
+    }
+  };
+
+  // دالة إدارة شاملة لحركة الخزينة مع أرصدة العملاء والموردين
+  const processTreasuryTransactionWithBalances = (receiptData) => {
+    const { fromType, fromId, amount, transactionInfo } = receiptData;
+    const transactionAmount = parseFloat(amount);
+    
+    // تحديث رصيد العميل/المورد حسب نوع المعاملة
+    if (fromType === 'customer' && fromId) {
+      const customerId = parseInt(fromId);
+      if (transactionInfo.willReduceBalance) {
+        // سداد دين - تخفيض من دين العميل
+        updateCustomerBalance(customerId, transactionAmount, 'credit');
+      } else if (transactionInfo.willIncreaseBalance && transactionInfo.currentBalance < 0) {
+        // دفع مقدماً - زيادة رصيد العميل المسبق
+        updateCustomerBalance(customerId, transactionAmount, 'debit');
+      }
+    } else if (fromType === 'supplier' && fromId) {
+      const supplierId = parseInt(fromId);
+      if (transactionInfo.willReduceBalance) {
+        // سداد دين - تخفيض من دين المورد
+        updateSupplierBalance(supplierId, transactionAmount, 'credit');
+      } else if (transactionInfo.willIncreaseBalance && transactionInfo.currentBalance < 0) {
+        // دفع مقدماً - زيادة رصيد المورد المسبق
+        updateSupplierBalance(supplierId, transactionAmount, 'debit');
+      }
+    }
+    
+    // تحديث رصيد الخزينة بالمبلغ المتبقي (إذا وجد)
+    if (transactionInfo.remainingAmount > 0) {
+      const newBalance = treasuryBalance + transactionInfo.remainingAmount;
+      setTreasuryBalance(newBalance);
+      saveData('bero_treasury_balance', newBalance);
+    }
+    
+    // تسجيل حركة الخزينة التفصيلية
+    const treasuryMovement = {
+      id: Date.now(),
+      date: receiptData.date,
+      type: 'receipt',
+      amount: transactionAmount,
+      remainingAmount: transactionInfo.remainingAmount,
+      sourceType: fromType,
+      sourceId: fromId,
+      sourceName: receiptData.fromName,
+      transactionType: transactionInfo.transactionType,
+      paymentMethod: receiptData.paymentMethod,
+      receiptNumber: receiptData.receiptNumber,
+      description: receiptData.description || '',
+      referenceNumber: receiptData.referenceNumber || '',
+      previousBalance: transactionInfo.currentBalance,
+      newBalance: transactionInfo.newBalanceAfterPayment,
+      treasuryBalanceBefore: treasuryBalance,
+      treasuryBalanceAfter: treasuryBalance + transactionInfo.remainingAmount,
+      notes: receiptData.notes || '',
+      createdAt: new Date().toISOString()
+    };
+    
+    // حفظ حركة الخزينة (يمكن إضافة نظام حفظ منفصل للحركات لاحقاً)
+    console.log('🏦 تسجيل حركة الخزينة:', treasuryMovement);
+    
+    return treasuryMovement;
+  };
   
   // الحصول على جميع أرصدة العملاء
   const getAllCustomerBalances = () => {
@@ -1513,7 +1929,7 @@ export const DataProvider = ({ children }) => {
       // المنتج غير موجود في المخزن المستهدف - ننشئ منتج جديد
       const newProduct = {
         ...sourceProduct,
-        id: Date.now(),
+        id: Date.now() + Math.random(), // معرف فريد لتحجنب التضارب
         warehouseId: toWarehouseId,
         mainQuantity: (quantity || 0),
         subQuantity: (subQuantity || 0),
@@ -1870,6 +2286,585 @@ export const DataProvider = ({ children }) => {
     return `${yearPrefix}${sequence.toString().padStart(3, '0')}`;
   };
 
+  // ==================== دوال إدارة الفواتير الآجلة والسداد المرتبط ====================
+  
+  // الحصول على فواتير العميل الآجلة (غير مسددة بالكامل)
+  const getCustomerDeferredInvoices = (customerId) => {
+    return salesInvoices
+      .filter(invoice => 
+        invoice.customerId === parseInt(customerId) && 
+        (invoice.paymentType === 'deferred' || invoice.paymentType === 'partial') &&
+        invoice.remaining > 0
+      )
+      .map(invoice => ({
+        ...invoice,
+        originalAmount: invoice.total,
+        paidAmount: invoice.paid || 0,
+        remainingAmount: invoice.remaining || invoice.total,
+        paymentStatus: invoice.paymentStatus || 'pending'
+      }))
+      .sort((a, b) => new Date(b.date) - new Date(a.date)); // الأحدث أولاً
+  };
+  
+  // الحصول على فواتير المورد الآجلة (غير مسددة بالكامل)
+  const getSupplierDeferredInvoices = (supplierId) => {
+    return purchaseInvoices
+      .filter(invoice => 
+        invoice.supplierId === parseInt(supplierId) && 
+        (invoice.paymentType === 'deferred' || invoice.paymentType === 'partial') &&
+        invoice.remaining > 0
+      )
+      .map(invoice => ({
+        ...invoice,
+        originalAmount: invoice.total,
+        paidAmount: invoice.paid || 0,
+        remainingAmount: invoice.remaining || invoice.total,
+        paymentStatus: invoice.paymentStatus || 'pending'
+      }))
+      .sort((a, b) => new Date(b.date) - new Date(a.date)); // الأحدث أولاً
+  };
+  
+  // سداد فاتورة محددة جزئياً أو كلياً
+  const payInvoiceAmount = (invoiceId, paymentAmount, paymentData) => {
+    const invoice = salesInvoices.find(inv => inv.id === invoiceId);
+    if (!invoice) {
+      throw new Error('الفاتورة غير موجودة');
+    }
+    
+    const currentPaid = invoice.paid || 0;
+    const currentRemaining = invoice.remaining || invoice.total;
+    const newPaidAmount = currentPaid + paymentAmount;
+    const newRemainingAmount = Math.max(0, currentRemaining - paymentAmount);
+    
+    // تحديد حالة الفاتورة
+    let paymentStatus = 'partial';
+    if (newRemainingAmount <= 0) {
+      paymentStatus = 'paid';
+    }
+    
+    // تحديث الفاتورة
+    const updatedInvoices = salesInvoices.map(inv => {
+      if (inv.id === invoiceId) {
+        return {
+          ...inv,
+          paid: newPaidAmount,
+          remaining: newRemainingAmount,
+          paymentStatus: paymentStatus,
+          lastPaymentDate: new Date().toISOString(),
+          paymentHistory: [
+            ...(inv.paymentHistory || []),
+            {
+              date: new Date().toISOString(),
+              amount: paymentAmount,
+              paymentMethod: paymentData.paymentMethod,
+              receiptNumber: paymentData.receiptNumber,
+              reference: paymentData.reference
+            }
+          ]
+        };
+      }
+      return inv;
+    });
+    
+    setSalesInvoices(updatedInvoices);
+    saveData('bero_sales_invoices', updatedInvoices);
+    
+    // 🔥 تحديث رصيد العميل الرئيسي عند سداد الدين
+    const customerId = parseInt(invoice.customerId);
+    updateCustomerBalance(customerId, paymentAmount, 'credit');
+    console.log(`✅ تم تحديث رصيد العميل ${customerId} - تم خصم ${formatCurrency(paymentAmount)} من الدين`);
+    
+    // إضافة إيصال نقدي لتحديث أرصدة العملاء فقط إذا لم يكن هناك إيصال مزدوج
+    let cashReceipt = null;
+    if (!paymentData.skipCashReceiptCreation) {
+      cashReceipt = {
+        id: Date.now(),
+        fromType: 'customer',
+        fromId: customerId,
+        amount: paymentAmount,
+        date: new Date().toISOString().split('T')[0],
+        paymentMethod: paymentData.paymentMethod || 'cash',
+        receiptNumber: paymentData.receiptNumber || `INV-${invoiceId}-PAY-${Date.now()}`,
+        reference: paymentData.reference || `دفعة من فاتورة ${invoiceId}`,
+        description: `دفعة جزئية من فاتورة رقم ${invoiceId}`,
+        linkedInvoiceId: invoiceId,
+        linkedInvoicePayment: paymentAmount
+      };
+      
+      const updatedCashReceipts = [...cashReceipts, cashReceipt];
+      setCashReceipts(updatedCashReceipts);
+      saveData('bero_cash_receipts', updatedCashReceipts);
+      
+      console.log(`تم إضافة إيصال نقدي بقيمة ${formatCurrency(paymentAmount)} لعميل فاتورة ${invoiceId}`);
+    }
+    
+    return {
+      invoice: updatedInvoices.find(inv => inv.id === invoiceId),
+      previousPaid: currentPaid,
+      newPaid: newPaidAmount,
+      previousRemaining: currentRemaining,
+      newRemaining: newRemainingAmount,
+      isFullyPaid: newRemainingAmount <= 0,
+      cashReceipt: cashReceipt
+    };
+  };
+  
+  // سداد فاتورة مشتريات محددة جزئياً أو كلياً
+  const payPurchaseInvoiceAmount = (invoiceId, paymentAmount, paymentData) => {
+    const invoice = purchaseInvoices.find(inv => inv.id === invoiceId);
+    if (!invoice) {
+      throw new Error('فاتورة المشتريات غير موجودة');
+    }
+    
+    const currentPaid = invoice.paid || 0;
+    const currentRemaining = invoice.remaining || invoice.total;
+    const newPaidAmount = currentPaid + paymentAmount;
+    const newRemainingAmount = Math.max(0, currentRemaining - paymentAmount);
+    
+    // تحديد حالة الفاتورة
+    let paymentStatus = 'partial';
+    if (newRemainingAmount <= 0) {
+      paymentStatus = 'paid';
+    }
+    
+    // تحديث الفاتورة
+    const updatedInvoices = purchaseInvoices.map(inv => {
+      if (inv.id === invoiceId) {
+        return {
+          ...inv,
+          paid: newPaidAmount,
+          remaining: newRemainingAmount,
+          paymentStatus: paymentStatus,
+          lastPaymentDate: new Date().toISOString(),
+          paymentHistory: [
+            ...(inv.paymentHistory || []),
+            {
+              date: new Date().toISOString(),
+              amount: paymentAmount,
+              paymentMethod: paymentData.paymentMethod,
+              disbursementNumber: paymentData.disbursementNumber,
+              reference: paymentData.reference
+            }
+          ]
+        };
+      }
+      return inv;
+    });
+    
+    setPurchaseInvoices(updatedInvoices);
+    saveData('bero_purchase_invoices', updatedInvoices);
+    
+    // 🔥 تحديث رصيد المورد الرئيسي عند سداد الدين
+    const supplierId = parseInt(invoice.supplierId);
+    updateSupplierBalance(supplierId, paymentAmount, 'credit');
+    console.log(`✅ تم تحديث رصيد المورد ${supplierId} - تم خصم ${formatCurrency(paymentAmount)} من الدين`);
+    
+    return {
+      invoice: updatedInvoices.find(inv => inv.id === invoiceId),
+      previousPaid: currentPaid,
+      newPaid: newPaidAmount,
+      previousRemaining: currentRemaining,
+      newRemaining: newRemainingAmount,
+      isFullyPaid: newRemainingAmount <= 0
+    };
+  };
+  
+  // إضافة إيصال استلام نقدي مع ربط بالفواتير
+  const addCashReceiptWithInvoiceLink = (receiptData) => {
+    const { 
+      fromType, 
+      fromId, 
+      amount, 
+      referenceNumber, 
+      linkedInvoices = [],
+      date,
+      paymentMethod,
+      receiptNumber,
+      description,
+      notes
+    } = receiptData;
+    
+    const paymentAmount = parseFloat(amount);
+    let updatedReceiptData = { ...receiptData };
+    
+    // النظام الذكي الجديد - استخدام التسوية الذكية
+    if (fromType === 'customer' && fromId) {
+      // استخدم النظام الذكي للعملاء
+      const customerId = parseInt(fromId);
+      const currentDebt = getCustomerBalance(customerId);
+      const currentAdvance = customers.find(c => c.id === customerId)?.advanceBalance || 0;
+      
+      let remainingPayment = paymentAmount;
+      let totalInvoicePayments = 0;
+      const settledInvoices = [];
+      
+      // 1. استخدام الرصيد المسبق أولاً
+      if (currentAdvance > 0) {
+        const advanceToUse = Math.min(remainingPayment, currentAdvance);
+        if (advanceToUse > 0) {
+          // تحديث رصيد العميل المسبق
+          updateCustomerAdvanceBalance(customerId, -advanceToUse, `استخدام رصيد مسبق - إيصال ${receiptNumber}`);
+          remainingPayment -= advanceToUse;
+        }
+      }
+      
+      // 2. سداد الفواتير الآجلة
+      if (remainingPayment > 0 && currentDebt > 0) {
+        const pendingInvoices = salesInvoices
+          .filter(inv => inv.customerId === customerId && inv.paymentType !== 'cash' && (inv.remaining || 0) > 0)
+          .sort((a, b) => new Date(a.date) - new Date(b.date));
+        
+        for (const invoice of pendingInvoices) {
+          if (remainingPayment <= 0) break;
+          
+          const invoiceDebt = invoice.remaining || 0;
+          const paymentForInvoice = Math.min(remainingPayment, invoiceDebt);
+          
+          if (paymentForInvoice > 0) {
+            try {
+              const paymentResult = payInvoiceAmount(invoice.id, paymentForInvoice, {
+                paymentMethod,
+                receiptNumber,
+                reference: referenceNumber,
+                skipCashReceiptCreation: true
+              });
+              
+              totalInvoicePayments += paymentForInvoice;
+              remainingPayment -= paymentForInvoice;
+              settledInvoices.push({
+                invoiceId: invoice.id,
+                amount: paymentForInvoice,
+                fullyPaid: paymentForInvoice >= invoiceDebt
+              });
+              
+              console.log(`✅ تم سداد ${formatCurrency(paymentForInvoice)} من فاتورة ${invoice.id}`);
+            } catch (error) {
+              console.error(`❌ خطأ في سداد فاتورة ${invoice.id}:`, error);
+            }
+          }
+        }
+      }
+      
+      // 🔥 إضافة المبلغ المخصوم من الدين إلى رصيد الخزينة
+      if (totalInvoicePayments > 0) {
+        const newTreasuryBalance = treasuryBalance + totalInvoicePayments;
+        setTreasuryBalance(newTreasuryBalance);
+        saveData('bero_treasury_balance', newTreasuryBalance);
+        console.log(`✅ تم إضافة ${formatCurrency(totalInvoicePayments)} إلى رصيد الخزينة`);
+      }
+      
+      // 3. إضافة أي مبلغ زائد للرصيد المسبق (وليس للخزينة)
+      if (remainingPayment > 0) {
+        if (currentDebt <= 0) {
+          // إذا لم يكن هناك دين، المبلغ كله للرصيد المسبق
+          updateCustomerAdvanceBalance(customerId, remainingPayment, `دفع مسبق جديد - إيصال ${receiptNumber}`);
+        } else {
+          // إذا كان هناك دين وتم سداده، المبلغ الزائد للرصيد المسبق
+          updateCustomerAdvanceBalance(customerId, remainingPayment, `رصيد مسبق زائد - إيصال ${receiptNumber}`);
+        }
+      }
+      
+      // حفظ تفاصيل التسوية الذكية في الإيصال
+      updatedReceiptData.intelligentSettlement = {
+        originalPayment: paymentAmount,
+        advanceUsed: currentAdvance > 0 ? Math.min(currentAdvance, paymentAmount) : 0,
+        invoicePayments: totalInvoicePayments,
+        advanceCredit: remainingPayment,
+        settledInvoices: settledInvoices,
+        settlementType: 'intelligent',
+        timestamp: new Date().toISOString()
+      };
+      
+    } else if (fromType === 'supplier' && fromId) {
+      // استخدم النظام الذكي للموردين (منطق مشابه)
+      const supplierId = parseInt(fromId);
+      const currentDebt = getSupplierBalance(supplierId);
+      const currentAdvance = suppliers.find(s => s.id === supplierId)?.advanceBalance || 0;
+      
+      let remainingPayment = paymentAmount;
+      let totalInvoicePayments = 0;
+      const settledInvoices = [];
+      
+      // 1. استخدام الرصيد المسبق
+      if (currentAdvance > 0) {
+        const advanceToUse = Math.min(remainingPayment, currentAdvance);
+        if (advanceToUse > 0) {
+          updateSupplierAdvanceBalance(supplierId, -advanceToUse, `استخدام رصيد مسبق - إيصال ${receiptNumber}`);
+          remainingPayment -= advanceToUse;
+        }
+      }
+      
+      // 2. سداد الفواتير الآجلة
+      if (remainingPayment > 0 && currentDebt > 0) {
+        const pendingInvoices = purchaseInvoices
+          .filter(inv => inv.supplierId === supplierId && inv.paymentType !== 'cash' && (inv.remaining || 0) > 0)
+          .sort((a, b) => new Date(a.date) - new Date(b.date));
+        
+        for (const invoice of pendingInvoices) {
+          if (remainingPayment <= 0) break;
+          
+          const invoiceDebt = invoice.remaining || 0;
+          const paymentForInvoice = Math.min(remainingPayment, invoiceDebt);
+          
+          if (paymentForInvoice > 0) {
+            try {
+              const paymentResult = payPurchaseInvoiceAmount(invoice.id, paymentForInvoice, {
+                paymentMethod,
+                receiptNumber,
+                reference: referenceNumber,
+                skipCashReceiptCreation: true
+              });
+              
+              totalInvoicePayments += paymentForInvoice;
+              remainingPayment -= paymentForInvoice;
+              settledInvoices.push({
+                invoiceId: invoice.id,
+                amount: paymentForInvoice,
+                fullyPaid: paymentForInvoice >= invoiceDebt
+              });
+              
+              console.log(`✅ تم سداد ${formatCurrency(paymentForInvoice)} من فاتورة مشتريات ${invoice.id}`);
+            } catch (error) {
+              console.error(`❌ خطأ في سداد فاتورة ${invoice.id}:`, error);
+            }
+          }
+        }
+      }
+      
+      // 🔥 إضافة المبلغ المخصوم من الدين إلى رصيد الخزينة
+      if (totalInvoicePayments > 0) {
+        const newTreasuryBalance = treasuryBalance + totalInvoicePayments;
+        setTreasuryBalance(newTreasuryBalance);
+        saveData('bero_treasury_balance', newTreasuryBalance);
+        console.log(`✅ تم إضافة ${formatCurrency(totalInvoicePayments)} إلى رصيد الخزينة`);
+      }
+      
+      // 3. إضافة أي مبلغ زائد للرصيد المسبق
+      if (remainingPayment > 0) {
+        if (currentDebt <= 0) {
+          updateSupplierAdvanceBalance(supplierId, remainingPayment, `دفع مسبق جديد - إيصال ${receiptNumber}`);
+        } else {
+          updateSupplierAdvanceBalance(supplierId, remainingPayment, `رصيد مسبق زائد - إيصال ${receiptNumber}`);
+        }
+      }
+      
+      // حفظ تفاصيل التسوية الذكية في الإيصال
+      updatedReceiptData.intelligentSettlement = {
+        originalPayment: paymentAmount,
+        advanceUsed: currentAdvance > 0 ? Math.min(currentAdvance, paymentAmount) : 0,
+        invoicePayments: totalInvoicePayments,
+        advanceCredit: remainingPayment,
+        settledInvoices: settledInvoices,
+        settlementType: 'intelligent',
+        timestamp: new Date().toISOString()
+      };
+    }
+    
+    // 🔥 تسجيل حركة الخزينة التفصيلية للنظام الذكي
+    if (updatedReceiptData.intelligentSettlement) {
+      const settlement = updatedReceiptData.intelligentSettlement;
+      
+      // تسجيل الحركة الأساسية
+      const treasuryMovement = {
+        id: Date.now(),
+        date: date.split('T')[0],
+        type: 'receipt',
+        amount: paymentAmount,
+        description: `إيصال ذكي - ${fromType === 'customer' ? 'عميل' : 'مورد'} ${receiptNumber}`,
+        referenceNumber,
+        fromType,
+        fromId,
+        // تفاصيل النظام الذكي
+        intelligentDetails: {
+          originalPayment: settlement.originalPayment,
+          advanceUsed: settlement.advanceUsed,
+          invoicePayments: settlement.invoicePayments,
+          advanceCredit: settlement.advanceCredit,
+          settledInvoices: settlement.settledInvoices,
+          totalInvoiceCount: settlement.settledInvoices?.length || 0
+        }
+      };
+      
+      const updatedTreasuryMovements = [...treasuryMovements, treasuryMovement];
+      setTreasuryMovements(updatedTreasuryMovements);
+      saveData('bero_treasury_movements', updatedTreasuryMovements);
+      
+      console.log('🎯 تم تسجيل حركة الخزينة التفصيلية:', treasuryMovement);
+    }
+    
+    // استدعاء دالة الإيصال الأساسية مع البيانات المحدثة
+    const newReceipt = addCashReceipt(updatedReceiptData);
+    
+    console.log('🎯 تم إكمال التسوية الذكية بنجاح:', {
+      receiptId: newReceipt.id,
+      type: fromType,
+      amount: paymentAmount,
+      settledInvoices: updatedReceiptData.intelligentSettlement?.settledInvoices?.length || 0,
+      advanceCredit: updatedReceiptData.intelligentSettlement?.advanceCredit || 0
+    });
+    
+    return {
+      ...newReceipt,
+      intelligentSettlement: updatedReceiptData.intelligentSettlement,
+      updatedBalances: {
+        treasuryBalance: treasuryBalance,
+        customerBalances: getAllCustomerBalances(),
+        supplierBalances: getAllSupplierBalances()
+      }
+    };
+  };
+
+  // ==================== دوال إدارة الأرصدة المسبقة ====================
+  
+  /**
+   * تحديث الأرصدة المسبقة للعميل
+   */
+  const updateCustomerAdvanceBalance = (customerId, amount, reason = '') => {
+    const customerIndex = customers.findIndex(c => c.id === customerId);
+    if (customerIndex === -1) {
+      throw new Error('العميل غير موجود');
+    }
+
+    const currentAdvance = customers[customerIndex].advanceBalance || 0;
+    const newAdvance = currentAdvance + amount;
+
+    if (newAdvance < -100000) {
+      throw new Error(`لا يمكن أن يكون الرصيد المسبق أقل من -100,000 ج.م`);
+    }
+
+    const updatedCustomers = [...customers];
+    updatedCustomers[customerIndex] = {
+      ...updatedCustomers[customerIndex],
+      advanceBalance: newAdvance,
+      advanceBalanceHistory: [
+        ...(updatedCustomers[customerIndex].advanceBalanceHistory || []),
+        {
+          id: Date.now(),
+          amount: amount,
+          reason: reason,
+          previousBalance: currentAdvance,
+          newBalance: newAdvance,
+          date: new Date().toISOString()
+        }
+      ]
+    };
+
+    setCustomers(updatedCustomers);
+    saveData('bero_customers', updatedCustomers);
+
+    console.log(`✅ تم تحديث الرصيد المسبق للعميل ${customerId}:`, {
+      amount: amount,
+      reason: reason,
+      previousBalance: currentAdvance,
+      newBalance: newAdvance
+    });
+  };
+
+  /**
+   * تحديث الأرصدة المسبقة للمورد
+   */
+  const updateSupplierAdvanceBalance = (supplierId, amount, reason = '') => {
+    const supplierIndex = suppliers.findIndex(s => s.id === supplierId);
+    if (supplierIndex === -1) {
+      throw new Error('المورد غير موجود');
+    }
+
+    const currentAdvance = suppliers[supplierIndex].advanceBalance || 0;
+    const newAdvance = currentAdvance + amount;
+
+    if (newAdvance < -100000) {
+      throw new Error(`لا يمكن أن يكون الرصيد المسبق أقل من -100,000 ج.م`);
+    }
+
+    const updatedSuppliers = [...suppliers];
+    updatedSuppliers[supplierIndex] = {
+      ...updatedSuppliers[supplierIndex],
+      advanceBalance: newAdvance,
+      advanceBalanceHistory: [
+        ...(updatedSuppliers[supplierIndex].advanceBalanceHistory || []),
+        {
+          id: Date.now(),
+          amount: amount,
+          reason: reason,
+          previousBalance: currentAdvance,
+          newBalance: newAdvance,
+          date: new Date().toISOString()
+        }
+      ]
+    };
+
+    setSuppliers(updatedSuppliers);
+    saveData('bero_suppliers', updatedSuppliers);
+
+    console.log(`✅ تم تحديث الرصيد المسبق للمورد ${supplierId}:`, {
+      amount: amount,
+      reason: reason,
+      previousBalance: currentAdvance,
+      newBalance: newAdvance
+    });
+  };
+  
+  // إضافة إيصال صرف نقدي مع ربط بالفواتير
+  const addCashDisbursementWithInvoiceLink = (disbursementData) => {
+    const { 
+      toType, 
+      toId, 
+      amount, 
+      referenceNumber, 
+      linkedInvoices = [],
+      date,
+      paymentMethod,
+      disbursementNumber,
+      description,
+      notes
+    } = disbursementData;
+    
+    const paymentAmount = parseFloat(amount);
+    let updatedDisbursementData = { ...disbursementData };
+    let treasuryDecrease = paymentAmount; // المخصوم من الخزينة
+    
+    // إذا كان هناك فواتير مرتبطة، قم بسدادها
+    if (linkedInvoices.length > 0 && toType === 'supplier') {
+      let totalInvoicePayments = 0;
+      
+      linkedInvoices.forEach(invoiceInfo => {
+        const { invoiceId, paymentAmount: invoicePayment } = invoiceInfo;
+        const paymentForInvoice = Math.min(invoicePayment, paymentAmount - totalInvoicePayments);
+        
+        if (paymentForInvoice > 0) {
+          try {
+            const paymentResult = payPurchaseInvoiceAmount(invoiceId, paymentForInvoice, {
+              paymentMethod,
+              disbursementNumber,
+              reference: referenceNumber
+            });
+            
+            totalInvoicePayments += paymentForInvoice;
+            treasuryDecrease -= paymentForInvoice;
+            
+            console.log(`تم سداد ${formatCurrency(paymentForInvoice)} من فاتورة مشتريات ${invoiceId}:`, paymentResult);
+          } catch (error) {
+            console.error(`خطأ في سداد فاتورة مشتريات ${invoiceId}:`, error);
+            throw new Error(`فشل في سداد فاتورة مشتريات رقم ${invoiceId}: ${error.message}`);
+          }
+        }
+      });
+    }
+    
+    // إعداد بيانات الإيصال مع التحديثات
+    updatedDisbursementData = {
+      ...updatedDisbursementData,
+      amount: paymentAmount,
+      treasuryAmount: Math.max(0, treasuryDecrease), // المخصوم من الخزينة
+      linkedInvoices: linkedInvoices,
+      finalAmount: paymentAmount,
+      balanceReduction: paymentAmount - Math.max(0, treasuryDecrease)
+    };
+    
+    // استدعاء دالة الإيصال الأساسية
+    return addCashDisbursement(updatedDisbursementData);
+  };
+
   const value = {
     warehouses,
     products,
@@ -1922,6 +2917,17 @@ export const DataProvider = ({ children }) => {
     getAllCustomerBalances,
     getAllSupplierBalances,
     transferProduct,
+    // دوال إدارة الفواتير الآجلة والسداد المرتبط
+    getCustomerDeferredInvoices,
+    getSupplierDeferredInvoices,
+    payInvoiceAmount,
+    payPurchaseInvoiceAmount,
+    addCashReceiptWithInvoiceLink,
+    addCashDisbursementWithInvoiceLink,
+    
+    // ==================== دوال النظام الذكي للأرصدة المسبقة ====================
+    updateCustomerAdvanceBalance,
+    updateSupplierAdvanceBalance,
     
     // ==================== دوال الموارد البشرية ====================
     
@@ -3450,7 +4456,266 @@ export const DataProvider = ({ children }) => {
       };
     },
 
-    // دوال وأقسام إضافية للأصول الثابتة مدمجة في الدوال أعلاه
+    // ==================== نظام الشحن والتوصيل ====================
+    
+    // إدارة شاحنات الشحن
+    shippingVehicles,
+    addShippingVehicle: (vehicleData) => {
+      const newVehicle = {
+        id: Date.now(),
+        ...vehicleData,
+        status: 'متاح', // متاح، مشغول، صيانة، خارج الخدمة
+        currentLocation: 'المخزن الرئيسي',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      const updated = [...shippingVehicles, newVehicle];
+      setShippingVehicles(updated);
+      saveData('bero_shipping_vehicles', updated);
+      return newVehicle;
+    },
+    updateShippingVehicle: (id, updatedData) => {
+      const updated = shippingVehicles.map(vehicle => 
+        vehicle.id === id ? { ...vehicle, ...updatedData, updatedAt: new Date().toISOString() } : vehicle
+      );
+      setShippingVehicles(updated);
+      saveData('bero_shipping_vehicles', updated);
+    },
+    deleteShippingVehicle: (id) => {
+      // التحقق من الشحنات النشطة فقط (التي تمنع الحذف)
+      // الشحنات المكتملة أو الملغية لا تمنع حذف الشاحنة
+      const activeShipments = shipments.filter(shipment => 
+        shipment.vehicleId === id && 
+        ['awaiting_pickup', 'in_transit', 'delayed'].includes(shipment.status)
+      );
+      
+      console.log('DataContext: عدد الشحنات النشطة للشاحنة', id, ':', activeShipments.length);
+      
+      if (activeShipments.length > 0) {
+        console.log('DataContext: منع حذف الشاحنة بسبب شحنات نشطة');
+        throw new Error('لا يمكن حذف الشاحنة: توجد شحنات نشطة مرتبطة بها');
+      }
+      
+      // لا توجد شحنات نشطة، يمكن حذف الشاحنة
+      console.log('DataContext: السماح بحذف الشاحنة');
+      const updated = shippingVehicles.filter(vehicle => vehicle.id !== id);
+      setShippingVehicles(updated);
+      saveData('bero_shipping_vehicles', updated);
+    },
+    getAvailableVehicles: () => {
+      return shippingVehicles.filter(vehicle => vehicle.status === 'متاح');
+    },
+    updateVehicleStatus: (id, status) => {
+      const updated = shippingVehicles.map(vehicle => 
+        vehicle.id === id ? { ...vehicle, status, updatedAt: new Date().toISOString() } : vehicle
+      );
+      setShippingVehicles(updated);
+      saveData('bero_shipping_vehicles', updated);
+    },
+
+    // إدارة شحنات التوصيل
+    shipments,
+    addShipment: (shipmentData) => {
+      const newShipment = {
+        id: Date.now(),
+        ...shipmentData,
+        status: 'awaiting_pickup', // awaiting_pickup, in_transit, delivered, delayed, cancelled
+        trackingNumber: `SHIP-${Date.now()}`, // رقم تتبع تلقائي
+        createdAt: new Date().toISOString(),
+        estimatedDelivery: new Date(Date.now() + (shipmentData.deliveryDays || 1) * 24 * 60 * 60 * 1000).toISOString(),
+        actualDelivery: null,
+        currentLocation: '',
+        history: [
+          {
+            status: 'awaiting_pickup',
+            location: shipmentData.pickupAddress || 'المخزن الرئيسي',
+            timestamp: new Date().toISOString(),
+            notes: 'تم إنشاء الشحنة'
+          }
+        ]
+      };
+      const updated = [...shipments, newShipment];
+      setShipments(updated);
+      saveData('bero_shipments', updated);
+      return newShipment;
+    },
+    updateShipmentStatus: (id, status, location = '', notes = '') => {
+      const updated = shipments.map(shipment => {
+        if (shipment.id === id) {
+          const historyEntry = {
+            status,
+            location: location || shipment.currentLocation,
+            timestamp: new Date().toISOString(),
+            notes
+          };
+          return {
+            ...shipment,
+            status,
+            currentLocation: location || shipment.currentLocation,
+            history: [...(shipment.history || []), historyEntry],
+            actualDelivery: status === 'delivered' ? new Date().toISOString() : shipment.actualDelivery,
+            updatedAt: new Date().toISOString()
+          };
+        }
+        return shipment;
+      });
+      setShipments(updated);
+      saveData('bero_shipments', updated);
+    },
+    assignVehicleToShipment: (shipmentId, vehicleId) => {
+      const updated = shipments.map(shipment => {
+        if (shipment.id === shipmentId) {
+          const vehicle = shippingVehicles.find(v => v.id === vehicleId);
+          return {
+            ...shipment,
+            vehicleId,
+            vehicleName: vehicle?.name || '',
+            driverName: vehicle?.driver || '',
+            status: 'in_transit',
+            history: [
+              ...(shipment.history || []),
+              {
+                status: 'in_transit',
+                location: 'تم تحميل الشحنة',
+                timestamp: new Date().toISOString(),
+                notes: `تم تخصيص ${vehicle?.name}`
+              }
+            ]
+          };
+        }
+        return shipment;
+      });
+      setShipments(updated);
+      saveData('bero_shipments', updated);
+
+      // تحديث حالة الشاحنة
+      if (vehicleId) {
+        const updatedVehicles = shippingVehicles.map(v => 
+          v.id === vehicleId ? { ...v, status: 'مشغول', updatedAt: new Date().toISOString() } : v
+        );
+        setShippingVehicles(updatedVehicles);
+        saveData('bero_shipping_vehicles', updatedVehicles);
+      }
+    },
+    getShipmentById: (id) => {
+      return shipments.find(shipment => shipment.id === id);
+    },
+    getShipmentsByInvoice: (invoiceId) => {
+      return shipments.filter(shipment => shipment.invoiceId === invoiceId);
+    },
+    getShipmentsByStatus: (status) => {
+      return shipments.filter(shipment => shipment.status === status);
+    },
+    getShipmentsByDateRange: (startDate, endDate) => {
+      return shipments.filter(shipment => 
+        shipment.createdAt >= startDate && shipment.createdAt <= endDate
+      );
+    },
+
+
+    // سجلات الشحن التفصيلية
+    shippingRecords,
+    addShippingRecord: (recordData) => {
+      const newRecord = {
+        id: Date.now(),
+        ...recordData,
+        createdAt: new Date().toISOString()
+      };
+      const updated = [...shippingRecords, newRecord];
+      setShippingRecords(updated);
+      saveData('bero_shipping_records', updated);
+      return newRecord;
+    },
+    getShippingRecordsByShipment: (shipmentId) => {
+      return shippingRecords.filter(record => record.shipmentId === shipmentId);
+    },
+    getShippingRecordsByVehicle: (vehicleId, startDate = null, endDate = null) => {
+      let filteredRecords = shippingRecords.filter(record => record.vehicleId === vehicleId);
+      
+      if (startDate) {
+        filteredRecords = filteredRecords.filter(record => record.date >= startDate);
+      }
+      if (endDate) {
+        filteredRecords = filteredRecords.filter(record => record.date <= endDate);
+      }
+      
+      return filteredRecords;
+    },
+    
+    // التقارير والإحصائيات
+    getShippingDashboard: () => {
+      const today = new Date().toISOString().split('T')[0];
+      const thisMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
+      
+      const todayShipments = shipments.filter(s => s.createdAt.startsWith(today));
+      const thisMonthShipments = shipments.filter(s => s.createdAt.startsWith(thisMonth));
+      const activeVehicles = shippingVehicles.filter(v => v.status === 'متاح').length;
+      const totalVehicles = shippingVehicles.length;
+      
+      const deliveredThisMonth = thisMonthShipments.filter(s => s.status === 'delivered').length;
+      const inTransitThisMonth = thisMonthShipments.filter(s => s.status === 'in_transit').length;
+      const delayedThisMonth = thisMonthShipments.filter(s => s.status === 'delayed').length;
+      
+      return {
+        todayShipments: todayShipments.length,
+        thisMonthShipments: thisMonthShipments.length,
+        deliveredThisMonth,
+        inTransitThisMonth,
+        delayedThisMonth,
+        activeVehicles,
+        totalVehicles,
+        vehicleUtilization: totalVehicles > 0 ? ((totalVehicles - activeVehicles) / totalVehicles * 100).toFixed(1) : 0,
+        onTimeDeliveryRate: thisMonthShipments.length > 0 ? 
+          (deliveredThisMonth / thisMonthShipments.length * 100).toFixed(1) : 0
+      };
+    },
+    getShippingAnalytics: (startDate, endDate) => {
+      const filteredShipments = shipments.filter(s => 
+        s.createdAt >= startDate && s.createdAt <= endDate
+      );
+      
+      const totalRevenue = filteredShipments.reduce((sum, shipment) => sum + (shipment.cost || 0), 0);
+      const deliveredShipments = filteredShipments.filter(s => s.status === 'delivered').length;
+      const delayedShipments = filteredShipments.filter(s => s.status === 'delayed').length;
+      const inTransitShipments = filteredShipments.filter(s => s.status === 'in_transit').length;
+      
+      // تحليل حسب نوع الشاحنة
+      const vehicleTypeAnalysis = {};
+      filteredShipments.forEach(shipment => {
+        const vehicle = shippingVehicles.find(v => v.id === shipment.vehicleId);
+        const type = vehicle?.vehicleType || 'غير محدد';
+        
+        if (!vehicleTypeAnalysis[type]) {
+          vehicleTypeAnalysis[type] = {
+            count: 0,
+            totalCost: 0,
+            delivered: 0,
+            delayed: 0
+          };
+        }
+        
+        vehicleTypeAnalysis[type].count++;
+        vehicleTypeAnalysis[type].totalCost += shipment.cost || 0;
+        if (shipment.status === 'delivered') vehicleTypeAnalysis[type].delivered++;
+        if (shipment.status === 'delayed') vehicleTypeAnalysis[type].delayed++;
+      });
+      
+      return {
+        totalShipments: filteredShipments.length,
+        totalRevenue: totalRevenue.toFixed(2),
+        deliveredShipments,
+        delayedShipments,
+        inTransitShipments,
+        vehicleTypeAnalysis,
+        averageCostPerShipment: filteredShipments.length > 0 ? 
+          (totalRevenue / filteredShipments.length).toFixed(2) : 0
+      };
+    },
+
+
+    
+    // الحصول على فواتير العميل الآجلة (غير مسددة بالكامل)
+
   };
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;

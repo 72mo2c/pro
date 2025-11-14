@@ -6,7 +6,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useData } from '../../context/DataContext';
 import { useNotification } from '../../context/NotificationContext';
 import { useNavigate } from 'react-router-dom';
-import { FaBox, FaSave, FaCheckCircle, FaTimes, FaWarehouse, FaTags, FaDollarSign, FaCubes, FaBarcode, FaUndo } from 'react-icons/fa';
+import { FaBox, FaSave, FaCheckCircle, FaTimes, FaWarehouse, FaTags, FaDollarSign, FaCubes, FaBarcode, FaUndo, FaMoneyBillWave } from 'react-icons/fa';
 
 const AddProduct = () => {
   const navigate = useNavigate();
@@ -16,7 +16,12 @@ const AddProduct = () => {
   const [formData, setFormData] = useState({
     name: '',
     category: '',
-    // نظام الشرائح السعرية الجديد
+    // أسعار الشراء الجديدة
+    purchasePrices: {
+      basicPrice: '',
+      subPrice: ''
+    },
+    // نظام الشرائح السعرية للبيع
     tierPrices: {
       retail: {
         basicPrice: '',
@@ -46,8 +51,19 @@ const AddProduct = () => {
   const handleChange = (e) => {
     const { name, value } = e.target;
     
+    // التعامل مع أسعار الشراء
+    if (name.startsWith('purchase_')) {
+      const priceType = name.replace('purchase_', ''); // purchase_basicPrice
+      setFormData({
+        ...formData,
+        purchasePrices: {
+          ...formData.purchasePrices,
+          [priceType]: value
+        }
+      });
+    }
     // التعامل مع خانات الشرائح السعرية
-    if (name.startsWith('tier_')) {
+    else if (name.startsWith('tier_')) {
       const [_, tier, priceType] = name.split('_'); // tier_retail_basicPrice
       setFormData({
         ...formData,
@@ -71,6 +87,12 @@ const AddProduct = () => {
     e.preventDefault();
     
     try {
+      // تحويل قيم أسعار الشراء إلى أرقام
+      const processedPurchasePrices = {
+        basicPrice: parseFloat(formData.purchasePrices.basicPrice) || 0,
+        subPrice: parseFloat(formData.purchasePrices.subPrice) || 0
+      };
+
       // تحويل قيم الشرائح السعرية إلى أرقام
       const processedTierPrices = {};
       Object.keys(formData.tierPrices).forEach(tier => {
@@ -82,6 +104,7 @@ const AddProduct = () => {
 
       const productData = {
         ...formData,
+        purchasePrices: processedPurchasePrices, // أسعار الشراء الجديدة
         tierPrices: processedTierPrices, // الشرائح السعرية الجديدة
         mainQuantity: parseInt(formData.mainQuantity) || 0,
         subQuantity: parseInt(formData.subQuantity) || 0,
@@ -106,6 +129,7 @@ const AddProduct = () => {
       setFormData({
         name: '',
         category: '',
+        purchasePrices: { basicPrice: '', subPrice: '' },
         tierPrices: {
           retail: { basicPrice: '', subPrice: '' },
           wholesale: { basicPrice: '', subPrice: '' },
@@ -161,6 +185,7 @@ const AddProduct = () => {
     setFormData({
       name: '',
       category: '',
+      purchasePrices: { basicPrice: '', subPrice: '' },
       tierPrices: {
         retail: { basicPrice: '', subPrice: '' },
         wholesale: { basicPrice: '', subPrice: '' },
@@ -202,78 +227,101 @@ const AddProduct = () => {
       {/* Modal تأكيد إضافة المنتج بنجاح */}
       {showSuccessModal && addedProduct && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9998] p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full transform transition-all">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full transform transition-all">
             {/* Header */}
-            <div className="bg-gradient-to-r from-green-500 to-emerald-600 p-6 rounded-t-2xl text-white relative">
+            <div className="bg-gradient-to-r from-green-500 to-emerald-600 p-4 rounded-t-2xl text-white relative">
               <button
                 onClick={() => setShowSuccessModal(false)}
-                className="absolute top-4 left-4 text-white hover:bg-white hover:bg-opacity-20 rounded-full p-2 transition-all"
+                className="absolute top-3 left-3 text-white hover:bg-white hover:bg-opacity-20 rounded-full p-1.5 transition-all"
               >
-                <FaTimes size={20} />
+                <FaTimes size={16} />
               </button>
-              <div className="flex items-center justify-center mb-4">
-                <div className="bg-white bg-opacity-20 rounded-full p-4">
-                  <FaCheckCircle size={48} />
+              <div className="flex items-center justify-center mb-3">
+                <div className="bg-white bg-opacity-20 rounded-full p-2.5">
+                  <FaCheckCircle size={32} />
                 </div>
               </div>
-              <h2 className="text-2xl font-bold text-center">تم إضافة المنتج بنجاح!</h2>
+              <h2 className="text-lg font-bold text-center">تم إضافة المنتج بنجاح!</h2>
             </div>
 
             {/* Body */}
-            <div className="p-6 space-y-4">
+            <div className="p-4 space-y-3">
               {/* اسم المنتج */}
-              <div className="bg-gradient-to-r from-orange-50 to-white p-4 rounded-lg border-r-4 border-orange-500">
-                <div className="flex items-center gap-3">
-                  <FaBox className="text-orange-500" size={24} />
+              <div className="bg-gradient-to-r from-orange-50 to-white p-3 rounded-lg border-r-4 border-orange-500">
+                <div className="flex items-center gap-2">
+                  <FaBox className="text-orange-500" size={18} />
                   <div className="flex-1">
-                    <p className="text-sm text-gray-500">اسم المنتج</p>
-                    <p className="text-lg font-bold text-gray-800">{addedProduct.name}</p>
+                    <p className="text-xs text-gray-500">اسم المنتج</p>
+                    <p className="text-sm font-bold text-gray-800">{addedProduct.name}</p>
                   </div>
                 </div>
               </div>
 
               {/* الفئة والمخزن */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <div className="flex items-center gap-2 mb-2">
-                    <FaTags className="text-blue-500" />
-                    <p className="text-sm text-gray-500">الفئة</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-blue-50 p-2.5 rounded-lg">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <FaTags className="text-blue-500" size={14} />
+                    <p className="text-xs text-gray-500">الفئة</p>
                   </div>
-                  <p className="font-semibold text-gray-800">{addedProduct.category}</p>
+                  <p className="text-xs font-semibold text-gray-800">{addedProduct.category}</p>
                 </div>
-                <div className="bg-purple-50 p-4 rounded-lg">
-                  <div className="flex items-center gap-2 mb-2">
-                    <FaWarehouse className="text-purple-500" />
-                    <p className="text-sm text-gray-500">المخزن</p>
+                <div className="bg-purple-50 p-2.5 rounded-lg">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <FaWarehouse className="text-purple-500" size={14} />
+                    <p className="text-xs text-gray-500">المخزن</p>
                   </div>
-                  <p className="font-semibold text-gray-800">{addedProduct.warehouseName}</p>
+                  <p className="text-xs font-semibold text-gray-800">{addedProduct.warehouseName}</p>
                 </div>
               </div>
 
-              {/* عرض الشرائح السعرية */}
-              <div className="space-y-3">
-                <div className="bg-orange-50 p-3 rounded-lg border-r-4 border-orange-500">
+              {/* عرض أسعار الشراء */}
+              <div className="space-y-2">
+                <div className="bg-green-50 p-2.5 rounded-lg border-r-4 border-green-500">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium text-gray-700">البيع المباشر:</span>
-                    <span className="text-sm font-bold text-orange-600">
+                    <span className="text-xs font-medium text-gray-700">سعر الشراء الأساسي:</span>
+                    <span className="text-xs font-bold text-green-600">
+                      {addedProduct.purchasePrices?.basicPrice?.toFixed(2) || '0.00'} ج.م
+                    </span>
+                  </div>
+                </div>
+                
+                {addedProduct.purchasePrices?.subPrice > 0 && (
+                  <div className="bg-green-50 p-2.5 rounded-lg border-r-4 border-green-400">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-medium text-gray-700">سعر الشراء الفرعي:</span>
+                      <span className="text-xs font-bold text-green-600">
+                        {addedProduct.purchasePrices?.subPrice?.toFixed(2) || '0.00'} ج.م
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* عرض الشرائح السعرية للبيع */}
+              <div className="space-y-2">
+                <div className="bg-orange-50 p-2.5 rounded-lg border-r-4 border-orange-500">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-medium text-gray-700">البيع المباشر:</span>
+                    <span className="text-xs font-bold text-orange-600">
                       {addedProduct.tierPrices?.retail?.basicPrice?.toFixed(2) || '0.00'} ج.م
                     </span>
                   </div>
                 </div>
                 
-                <div className="bg-blue-50 p-3 rounded-lg border-r-4 border-blue-500">
+                <div className="bg-blue-50 p-2.5 rounded-lg border-r-4 border-blue-500">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium text-gray-700">الجملة:</span>
-                    <span className="text-sm font-bold text-blue-600">
+                    <span className="text-xs font-medium text-gray-700">الجملة:</span>
+                    <span className="text-xs font-bold text-blue-600">
                       {addedProduct.tierPrices?.wholesale?.basicPrice?.toFixed(2) || '0.00'} ج.م
                     </span>
                   </div>
                 </div>
                 
-                <div className="bg-purple-50 p-3 rounded-lg border-r-4 border-purple-500">
+                <div className="bg-purple-50 p-2.5 rounded-lg border-r-4 border-purple-500">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium text-gray-700">جملة الجملة:</span>
-                    <span className="text-sm font-bold text-purple-600">
+                    <span className="text-xs font-medium text-gray-700">جملة الجملة:</span>
+                    <span className="text-xs font-bold text-purple-600">
                       {addedProduct.tierPrices?.bulk?.basicPrice?.toFixed(2) || '0.00'} ج.م
                     </span>
                   </div>
@@ -282,18 +330,18 @@ const AddProduct = () => {
 
               {/* معلومات إضافية */}
               {addedProduct.barcode && (
-                <div className="bg-gray-50 p-3 rounded-lg">
-                  <p className="text-sm text-gray-500">الباركود</p>
-                  <p className="font-mono font-semibold text-gray-800">{addedProduct.barcode}</p>
+                <div className="bg-gray-50 p-2 rounded-lg">
+                  <p className="text-xs text-gray-500">الباركود</p>
+                  <p className="font-mono text-xs font-semibold text-gray-800">{addedProduct.barcode}</p>
                 </div>
               )}
             </div>
 
             {/* Footer */}
-            <div className="p-6 bg-gray-50 rounded-b-2xl flex gap-3">
+            <div className="p-3 bg-gray-50 rounded-b-2xl flex gap-2">
               <button
                 onClick={() => setShowSuccessModal(false)}
-                className="flex-1 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors font-semibold"
+                className="flex-1 bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg transition-colors text-sm font-semibold"
               >
                 إضافة منتج آخر
               </button>
@@ -303,7 +351,7 @@ const AddProduct = () => {
                   // توجيه المستخدم إلى صفحة عرض البضائع
                   navigate('/warehouses/manage-products');
                 }}
-                className="flex-1 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors font-semibold"
+                className="flex-1 bg-gray-600 hover:bg-gray-700 text-white px-3 py-2 rounded-lg transition-colors text-sm font-semibold"
               >
                 عرض البضاعة
               </button>
@@ -368,6 +416,53 @@ const AddProduct = () => {
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
                 </select>
+              </div>
+            </div>
+          </div>
+
+          {/* أسعار الشراء الجديدة */}
+          <div className="p-4 border-b">
+            <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
+              <FaMoneyBillWave className="text-green-500" /> أسعار الشراء
+            </h3>
+            
+            <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">سعر الشراء الأساسي *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    name="purchase_basicPrice"
+                    value={formData.purchasePrices.basicPrice}
+                    onChange={handleChange}
+                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    placeholder="0.00"
+                    min="0"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">سعر الشراء الفرعي</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    name="purchase_subPrice"
+                    value={formData.purchasePrices.subPrice}
+                    onChange={handleChange}
+                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    placeholder="0.00"
+                    min="0"
+                  />
+                </div>
+              </div>
+              
+              {/* ملاحظة توضيحية */}
+              <div className="mt-3 p-3 bg-blue-100 rounded-lg">
+                <p className="text-xs text-blue-700">
+                  <span className="font-semibold">💡 ملاحظة مهمة:</span>
+                  <span className="mx-1">سيتم استخدام أسعار الشراء تلقائياً عند إضافة المنتجات لفواتير المشتريات</span>
+                </p>
               </div>
             </div>
           </div>
@@ -583,14 +678,15 @@ const AddProduct = () => {
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">رقم الباركود</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">رقم الباركود *</label>
                 <input
                   type="text"
                   name="barcode"
                   value={formData.barcode}
                   onChange={handleChange}
                   className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="123456789"
+                  placeholder="أدخل رقم الباركود"
+                  required
                 />
               </div>
 

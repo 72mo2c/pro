@@ -5,19 +5,67 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useData } from '../../context/DataContext';
 import { useNotification } from '../../context/NotificationContext';
-import { FaSave, FaPrint, FaSearch, FaTrash, FaPercent, FaMoneyBillWave, FaInfoCircle, FaExclamationTriangle, FaUserPlus, FaTimes } from 'react-icons/fa';
+import { useTab } from '../../contexts/TabContext';
+import { FaSave, FaPrint, FaSearch, FaTrash, FaPercent, FaMoneyBillWave, FaInfoCircle, FaExclamationTriangle, FaUserPlus, FaTimes, FaList } from 'react-icons/fa';
 import { printInvoiceDirectly } from '../../utils/printUtils';
 
-const NewSalesInvoice = () => {
-  const { customers, products, warehouses, addSalesInvoice, getCustomerBalance, addCustomer } = useData();
-  const { showSuccess, showError } = useNotification();
+// دالة للتحقق من أرقام الهواتف المصرية (11 رقم بالضبط)
+const validatePhoneNumber = (phone) => {
+  if (!phone) return { isValid: true, error: null };
+  
+  // إزالة المسافات والشرطات
+  const cleanPhone = phone.replace(/[\s-]/g, '');
+  
+  // التحقق من أن الرقم يبدأ برقم مصري (010, 011, 012, 015, 0100-0199)
+  const egyptianPhoneRegex = /^(010|011|012|015|0100|0101|0102|0103|0104|0105|0106|0107|0108|0109|0110|0111|0112|0113|0114|0115|0116|0117|0118|0119|0120|0121|0122|0123|0124|0125|0126|0127|0128|0129|0150|0151|0152|0153|0154|0155|0156|0157|0158|0159)[0-9]{7}$/;
+  
+  if (!cleanPhone.match(/^[0-9]{11}$/)) {
+    return {
+      isValid: false,
+      error: 'رقم الهاتف يجب أن يكون 11 رقم بالضبط (مثال: 01012345678)',
+    };
+  }
+  
+  if (!egyptianPhoneRegex.test(cleanPhone)) {
+    return {
+      isValid: false,
+      error: 'رقم الهاتف يجب أن يبدأ برقم مصري صحيح (010, 011, 012, 015)',
+    };
+  }
+  
+  return { isValid: true, error: null };
+};
 
-  // قائمة الشاحنات المتاحة (يمكن ربطها بنظام إدارة الشحن لاحقاً)
+// دالة للتحقق من إدخال رقم هاتف واحد على الأقل
+const validateAtLeastOnePhone = (phone1, phone2) => {
+  if (!phone1 && !phone2) {
+    return {
+      isValid: false,
+      error: 'يجب إدخال رقم هاتف واحد على الأقل',
+    };
+  }
+  return { isValid: true, error: null };
+};
+
+const NewSalesInvoice = () => {
+  const { customers, products, warehouses, shippingVehicles, addSalesInvoice, getCustomerBalance, addCustomer, updateProduct } = useData();
+  const { showSuccess, showError } = useNotification();
+  const { openTab } = useTab();
+
+  // دالة لفتح سجل المبيعات في تبويبة جديدة
+  const handleOpenSalesRecord = () => {
+    openTab('/sales/invoices', 'سجل فواتير المبيعات', '📋');
+  };
+
+  // قائمة الشاحنات المتاحة من نظام الشحن المتكامل
   const availableVehicles = [
     { id: '', name: 'اختر الشاحنة', driver: '', status: 'غير متاح' },
-    { id: 'vehicle1', name: 'شاحنة كبيرة - أ 1234 ب', driver: 'أحمد محمد', status: 'متاح' },
-    { id: 'vehicle2', name: 'فان - ج 5678 د', driver: 'محمد علي', status: 'متاح' },
-    { id: 'vehicle3', name: 'شاحنة صغيرة - ه 9012 و', driver: 'علي أحمد', status: 'مشغول' },
+    ...shippingVehicles.map(vehicle => ({
+      id: vehicle.id,
+      name: `${vehicle.vehicleType} - ${vehicle.vehicleNumber}`,
+      driver: vehicle.driver,
+      status: vehicle.status
+    }))
   ];
 
 
@@ -61,6 +109,19 @@ const NewSalesInvoice = () => {
   const [discountErrors, setDiscountErrors] = useState([false]);
   const [validationErrors, setValidationErrors] = useState({});
 
+  // رسالة التأكيد عند تغيير السعر في المبيعات
+  const [showPriceChangeModal, setShowPriceChangeModal] = useState(false);
+  const [priceChangeData, setPriceChangeData] = useState({
+    index: null,
+    field: '',
+    newPrice: 0,
+    originalPrice: 0,
+    productName: '',
+    productId: null,
+    saleType: '',
+    tierName: ''
+  });
+
   // مراجع للتركيز التلقائي
   const customerInputRef = useRef(null);
   const productInputRefs = useRef([]);
@@ -76,6 +137,7 @@ const NewSalesInvoice = () => {
     agentType: 'general'
   });
   const [quickCustomerLoading, setQuickCustomerLoading] = useState(false);
+  const [quickCustomerErrors, setQuickCustomerErrors] = useState({});
 
   // الحصول على رصيد العميل المحدد
   const getSelectedCustomerBalance = () => {
@@ -95,6 +157,87 @@ const NewSalesInvoice = () => {
     const totalWithoutDiscount = calculateItemTotalWithoutDiscount(item);
     const itemDiscount = item.discount || 0;
     return Math.max(0, totalWithoutDiscount - itemDiscount);
+  };
+
+  // حساب الفرق وتطبيقه على الشريحة السعرية المحددة
+  const calculateAndApplyPriceDifference = (product, field, newPrice, saleType) => {
+    const tierPrice = product.tierPrices?.[saleType];
+    if (!tierPrice) return product;
+
+    // تحويل اسم الحقل إلى الاسم الصحيح في tierPrices
+    const actualField = field === 'price' ? 'basicPrice' : 'subPrice';
+    const originalPrice = parseFloat(tierPrice[actualField]) || 0;
+    const priceDifference = newPrice - originalPrice;
+
+    if (priceDifference === 0) return product; // لا يوجد فرق
+
+    // إنشاء نسخة جديدة من المنتج
+    const updatedProduct = { ...product };
+
+    // تحديث الشريحة السعرية المحددة فقط
+    updatedProduct.tierPrices = {
+      ...product.tierPrices,
+      [saleType]: {
+        ...tierPrice,
+        [actualField]: newPrice
+      }
+    };
+
+    // تحديث السعر الأساسي للتوافق مع النظام القديم
+    updatedProduct.mainPrice = updatedProduct.tierPrices.wholesale?.basicPrice || 0;
+    updatedProduct.subPrice = updatedProduct.tierPrices.wholesale?.subPrice || 0;
+
+    return updatedProduct;
+  };
+
+  // تأكيد تغيير السعر في المبيعات
+  const confirmPriceChange = () => {
+    const { index, field, newPrice, productId, saleType, tierName } = priceChangeData;
+    
+    // جلب المنتج من قاعدة البيانات للحصول على أحدث البيانات
+    const currentProduct = products.find(p => p.id === parseInt(productId));
+    if (!currentProduct) {
+      showError('لم يتم العثور على المنتج');
+      setShowPriceChangeModal(false);
+      return;
+    }
+
+    // حساب الفرق وتطبيقه على الشريحة المحددة
+    const updatedProduct = calculateAndApplyPriceDifference(currentProduct, field, newPrice, saleType);
+
+    // تحديث المنتج في قاعدة البيانات
+    try {
+      if (productId && updateProduct) {
+        updateProduct(parseInt(productId), updatedProduct);
+        const priceType = field === 'price' ? 'السعر الأساسي' : 'السعر الفرعي';
+        showSuccess(`تم تحديث ${tierName} - ${priceType} بنجاح!`);
+      }
+    } catch (error) {
+      console.error('خطأ في تحديث المنتج:', error);
+      showError('حدث خطأ في تحديث المنتج');
+    }
+
+    // تحديث العنصر في الفاتورة
+    const newItems = [...items];
+    newItems[index][field] = newPrice;
+    setItems(newItems);
+
+    // تحديث أخطاء السعر
+    const newPriceErrors = [...priceErrors];
+    newPriceErrors[index] = newPrice < 0;
+    setPriceErrors(newPriceErrors);
+
+    setShowPriceChangeModal(false);
+  };
+
+  // إلغاء تغيير السعر
+  const cancelPriceChange = () => {
+    setShowPriceChangeModal(false);
+    // إعادة تعيين الحقل للقيمة الأصلية
+    const { index, field, originalPrice } = priceChangeData;
+    const newItems = [...items];
+    newItems[index][field] = originalPrice;
+    setItems(newItems);
   };
 
   const calculateSubTotal = () => {
@@ -201,20 +344,64 @@ const NewSalesInvoice = () => {
   const closeQuickCustomerModal = () => {
     setShowQuickCustomerModal(false);
     setQuickCustomerLoading(false);
+    setQuickCustomerErrors({}); // مسح الأخطاء
   };
 
   // تحديث بيانات نموذج العميل السريع
   const handleQuickCustomerChange = (e) => {
+    const { name, value } = e.target;
+    
     setQuickCustomerForm({
       ...quickCustomerForm,
-      [e.target.name]: e.target.value
+      [name]: value
     });
+    
+    // التحقق من أرقام الهواتف عند التغيير
+    if (name === 'phone1' || name === 'phone2') {
+      const validation = validatePhoneNumber(value);
+      setQuickCustomerErrors(prev => ({
+        ...prev,
+        [name]: validation.error
+      }));
+    }
   };
 
   // إضافة عميل سريع جديد
   const handleAddQuickCustomer = async () => {
-    if (!quickCustomerForm.name.trim() || !quickCustomerForm.phone1.trim()) {
-      showError('يجب إدخال الاسم ورقم الهاتف الأول');
+    // التحقق من صحة البيانات
+    const newErrors = {};
+    
+    // التحقق من إدخال رقم هاتف واحد على الأقل
+    const phoneValidation = validateAtLeastOnePhone(quickCustomerForm.phone1, quickCustomerForm.phone2);
+    if (!phoneValidation.isValid) {
+      newErrors.phone1 = phoneValidation.error;
+    }
+    
+    // التحقق من رقم الهاتف الأساسي
+    if (quickCustomerForm.phone1) {
+      const phone1Validation = validatePhoneNumber(quickCustomerForm.phone1);
+      if (!phone1Validation.isValid) {
+        newErrors.phone1 = phone1Validation.error;
+      }
+    }
+    
+    // التحقق من رقم الهاتف الثانوي (إذا تم إدخاله)
+    if (quickCustomerForm.phone2) {
+      const phone2Validation = validatePhoneNumber(quickCustomerForm.phone2);
+      if (!phone2Validation.isValid) {
+        newErrors.phone2 = phone2Validation.error;
+      }
+    }
+    
+    // إذا كان هناك أخطاء، عرضها وإيقاف الإرسال
+    if (Object.keys(newErrors).length > 0) {
+      setQuickCustomerErrors(newErrors);
+      showError('يرجى تصحيح أرقام الهواتف قبل الإرسال');
+      return;
+    }
+    
+    if (!quickCustomerForm.name.trim()) {
+      showError('يجب إدخال اسم العميل');
       return;
     }
 
@@ -260,6 +447,16 @@ const NewSalesInvoice = () => {
            customerPhone.includes(searchTerm) || 
            customerPhone1.includes(searchTerm);
   });
+
+  // دالة الحصول على اسم الشريحة
+  const getTierName = (saleType) => {
+    switch(saleType) {
+      case 'retail': return 'التجزئة';
+      case 'wholesale': return 'الجملة';
+      case 'bulk': return 'جملة الجملة';
+      default: return 'غير محدد';
+    }
+  };
 
   // دالة تحديد السعر حسب نوع البيع
   const getPriceForSaleType = (product, saleType) => {
@@ -426,6 +623,39 @@ const NewSalesInvoice = () => {
     }
   };
 
+  // التحقق من السعر عند مغادرة الحقل (onBlur)
+  const handlePriceBlur = (index, field, currentValue) => {
+    const currentItem = items[index];
+    const newValue = parseFloat(currentValue) || 0;
+    
+    // التحقق من تغيير السعر مع تحديد منتج
+    if ((field === 'price' || field === 'subPrice') && currentItem.productId) {
+      // تحقق من أن السعر تم تغييره من السعر الأصلي
+      const product = products.find(p => p.id === parseInt(currentItem.productId));
+      if (product && product.tierPrices && product.tierPrices[currentItem.saleType]) {
+        const tierPrice = product.tierPrices[currentItem.saleType];
+        // تحويل اسم الحقل إلى الاسم الصحيح في tierPrices
+        const actualField = field === 'price' ? 'basicPrice' : 'subPrice';
+        const originalAutoPrice = parseFloat(tierPrice[actualField]) || 0;
+        
+        if (originalAutoPrice !== 0 && newValue !== originalAutoPrice) {
+          // تم تغيير السعر، أظهر رسالة التأكيد
+          setPriceChangeData({
+            index,
+            field,
+            newPrice: newValue,
+            originalPrice: originalAutoPrice,
+            productName: currentItem.productName || 'المنتج المحدد',
+            productId: currentItem.productId || null,
+            saleType: currentItem.saleType || 'retail',
+            tierName: getTierName(currentItem.saleType)
+          });
+          setShowPriceChangeModal(true);
+        }
+      }
+    }
+  };
+
   const addItem = () => {
     setItems([...items, { 
       productId: '', 
@@ -475,7 +705,116 @@ const NewSalesInvoice = () => {
     };
   };
 
-  // عرض تحذير عن الكمية المطلوبة مع المنطق الذكي
+  // تحديث عنصر محدد في قائمة العناصر
+  const updateItem = (index, field, value) => {
+    const newItems = [...items];
+    newItems[index][field] = value;
+    setItems(newItems);
+  };
+
+  // فحص ذكي شامل للكمية المطلوبة
+  const validateQuantityRequest = (product, requestedMainQty, requestedSubQty) => {
+    if (!product) return { isValid: false, errors: [], suggestions: [] };
+    
+    const errors = [];
+    const suggestions = [];
+    const unitsInMain = product.unitsInMain || 0;
+    const availableMainQty = product.mainQuantity || 0;
+    const availableSubQty = product.subQuantity || 0;
+    
+    console.log(`🔍 فحص الكمية - منتج: ${product.name}`);
+    console.log(`   المطلوب: ${requestedMainQty} أساسي + ${requestedSubQty} فرعي`);
+    console.log(`   المتوفر: ${availableMainQty} أساسي + ${availableSubQty} فرعي`);
+    console.log(`   الوحدات في الأساسية: ${unitsInMain}`);
+    
+    // القاعدة 1: منع طلب فرعية أكثر من العدد المسموح (أساسية × unitsInMain) + فرعية مباشرة
+    const maxAllowedSubUnits = availableMainQty * unitsInMain + availableSubQty;
+    console.log(`   الحد الأقصى للفرعية: ${maxAllowedSubUnits} (${availableMainQty}×${unitsInMain} + ${availableSubQty})`);
+    
+    if (requestedSubQty > maxAllowedSubUnits) {
+      errors.push(`لا يمكن طلب ${requestedSubQty} قطعة فرعية. الحد الأقصى: ${maxAllowedSubUnits} قطعة`);
+    }
+    
+    // القاعدة 2: اقتراح خصم 1 أساسية إذا طلبت فرعية تساوي العدد المسموح من الأساسية فقط
+    const maxSubFromMainOnly = availableMainQty * unitsInMain;
+    if (requestedSubQty === maxSubFromMainOnly && requestedSubQty > 0 && availableMainQty > 0) {
+      suggestions.push({
+        type: 'convert_main_unit',
+        message: `💡 اقتراح ذكي: بدلاً من طلب ${requestedSubQty} قطعة فرعية، سيتم خصم 1 وحدة أساسية (${unitsInMain} قطعة)`,
+        action: 'convertToMain'
+      });
+    }
+    
+    // القاعدة 3: فحص التحويل الذكي عند الطلب الأساسي + فرعي
+    if (requestedMainQty > 0 && requestedSubQty > 0) {
+      // تحويل المطلوب والمتوفر إلى فرعية لفحص الذكي
+      const totalSubRequired = (requestedMainQty * unitsInMain) + requestedSubQty;
+      const totalAvailableSubUnits = (availableMainQty * unitsInMain) + availableSubQty;
+      
+      console.log(`   إجمالي المطلوب: ${totalSubRequired} فرعية (${requestedMainQty}×${unitsInMain} + ${requestedSubQty})`);
+      console.log(`   إجمالي متوفر: ${totalAvailableSubUnits} فرعية (${availableMainQty}×${unitsInMain} + ${availableSubQty})`);
+      
+      if (totalSubRequired > totalAvailableSubUnits) {
+        errors.push(`الكمية المطلوبة غير متوفرة في المخزون`);
+      } else {
+        // اقتراح استخدام الفرعية المتوفرة أولاً
+        if (availableSubQty > 0 && availableSubQty >= requestedSubQty) {
+          suggestions.push({
+            type: 'prefer_sub_quantity',
+            message: `💡 لمعلومة: سيتم استخدام الفرعية المتوفرة (${availableSubQty} قطعة) أولاً قبل التحويل من الأساسية`,
+            action: null
+          });
+        }
+        
+        // اقتراح التحويل الذكي إذا كان مطلوباً تحويل وحدات أساسية
+        const mainUnitsEquivalent = Math.floor(requestedSubQty / unitsInMain);
+        if (mainUnitsEquivalent > 0) {
+          suggestions.push({
+            type: 'convert_to_main',
+            message: `💡 اقتراح: يمكن تحويل ${mainUnitsEquivalent} وحدة أساسية بدلاً من ${requestedSubQty} قطعة فرعية`,
+            action: 'convertToMain'
+          });
+        }
+      }
+    }
+    
+    console.log(`   النتيجة: ${errors.length === 0 ? '✅ صحيح' : '❌ خطأ'} - الأخطاء: ${errors.length}, الاقتراحات: ${suggestions.length}`);
+    
+    return {
+      isValid: errors.length === 0,
+      errors,
+      suggestions
+    };
+  };
+
+  // تطبيق اقتراح ذكي على عنصر محدد
+  const applySmartSuggestion = (index, suggestionType) => {
+    const item = items[index];
+    if (!item.productId) return;
+    
+    const product = products.find(p => p.id === parseInt(item.productId));
+    if (!product) return;
+    
+    const unitsInMain = product.unitsInMain || 0;
+    const requestedSubQty = parseInt(item.subQuantity) || 0;
+    const requestedMainQty = parseInt(item.quantity) || 0;
+    
+    if (suggestionType === 'convertToMain') {
+      // تحويل إلى وحدة أساسية
+      const newMainQty = requestedMainQty + 1;
+      const newSubQty = 0;
+      
+      // تحديث العنصر
+      const newItems = [...items];
+      newItems[index].quantity = newMainQty;
+      newItems[index].subQuantity = newSubQty;
+      setItems(newItems);
+      
+      showSuccess(`تم تحويل الطلب إلى ${newMainQty} وحدة أساسية`);
+    }
+  };
+
+  // عرض تحذير ونصائح ذكية للكمية المطلوبة
   const getQuantityWarning = (index) => {
     const item = items[index];
     if (!item.productId) return null;
@@ -486,29 +825,36 @@ const NewSalesInvoice = () => {
     const requestedMainQty = parseInt(item.quantity) || 0;
     const requestedSubQty = parseInt(item.subQuantity) || 0;
     
-    const availableMainQty = product.mainQuantity || 0;
-    const availableSubQty = product.subQuantity || 0;
-    const unitsInMain = product.unitsInMain || 0;
+    const validation = validateQuantityRequest(product, requestedMainQty, requestedSubQty);
     
-    // استخدام المنطق الذكي للتحقق من توفر الكمية
-    const totalRequestedSubUnits = (requestedMainQty * unitsInMain) + requestedSubQty;
-    const totalAvailableSubUnits = (availableMainQty * unitsInMain) + availableSubQty;
-    
-    if (totalRequestedSubUnits > totalAvailableSubUnits) {
-      // تحويل إجمالي المطلوب إلى وحدة أساسية + فرعية للرسالة
-      const mainUnitsNeeded = Math.floor(totalRequestedSubUnits / unitsInMain);
-      const subUnitsNeeded = totalRequestedSubUnits % unitsInMain;
-      const mainUnitsAvailable = Math.floor(totalAvailableSubUnits / unitsInMain);
-      const subUnitsAvailable = totalAvailableSubUnits % unitsInMain;
-      
+    if (!validation.isValid) {
       return (
         <div className="mt-1 p-2 bg-red-50 border border-red-200 rounded text-red-700 text-xs">
-          ⚠️ الكمية المطلوبة إجمالاً: {mainUnitsNeeded} وحدة أساسية + {subUnitsNeeded} قطعة فرعية
-          <br />
-          المتوفر: {mainUnitsAvailable} وحدة أساسية + {subUnitsAvailable} قطعة فرعية
-          <br />
-          {requestedMainQty > availableMainQty && `الوحدات الأساسية زائدة بـ ${requestedMainQty - availableMainQty}`}
-          {requestedSubQty > availableSubQty && `القطع الفرعية زائدة بـ ${requestedSubQty - availableSubQty}`}
+          ❌ أخطاء التحقق:
+          {validation.errors.map((error, i) => (
+            <div key={i} className="mt-1">• {error}</div>
+          ))}
+        </div>
+      );
+    }
+    
+    if (validation.suggestions.length > 0) {
+      return (
+        <div className="mt-1 p-2 bg-blue-50 border border-blue-200 rounded text-blue-700 text-xs">
+          💡 نصائح ذكية:
+          {validation.suggestions.map((suggestion, i) => (
+            <div key={i} className="mt-1">
+              • {suggestion.message}
+              {suggestion.action && (
+                <button
+                  onClick={() => applySmartSuggestion(index, suggestion.action)}
+                  className="ml-2 px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
+                >
+                  تطبيق التحويل الذكي
+                </button>
+              )}
+            </div>
+          ))}
         </div>
       );
     }
@@ -563,7 +909,27 @@ const NewSalesInvoice = () => {
         errors[`quantity_${index}`] = 'يجب إدخال كمية أساسية أو فرعية';
         newQuantityErrors[index] = true;
       } else {
-        newQuantityErrors[index] = false;
+        // فحص ذكي إضافي للمنتجات المختارة
+        if (item.productId) {
+          const product = products.find(p => p.id === parseInt(item.productId));
+          if (product) {
+            const requestedMainQty = parseInt(item.quantity) || 0;
+            const requestedSubQty = parseInt(item.subQuantity) || 0;
+            
+            const validation = validateQuantityRequest(product, requestedMainQty, requestedSubQty);
+            
+            if (!validation.isValid) {
+              errors[`quantity_${index}`] = validation.errors.join(', ');
+              newQuantityErrors[index] = true;
+            } else {
+              newQuantityErrors[index] = false;
+            }
+          } else {
+            newQuantityErrors[index] = false;
+          }
+        } else {
+          newQuantityErrors[index] = false;
+        }
       }
       
       // التحقق من السعر
@@ -654,6 +1020,9 @@ const NewSalesInvoice = () => {
     }
 
     try {
+      console.log('🚀 بدء حفظ الفاتورة...');
+      console.log('📋 عناصر الفاتورة:', items);
+      
       // تحويل البيانات للصيغة المتوافقة مع النظام مع الحفاظ على البيانات الفرعية
       const convertedItems = items.map(item => ({
         productId: item.productId,
@@ -666,6 +1035,8 @@ const NewSalesInvoice = () => {
         saleType: item.saleType || 'retail', // نوع البيع
         total: calculateItemTotal(item)
       }));
+      
+      console.log('📦 البيانات المحولة:', convertedItems);
 
       const discountAmount = calculateDiscountAmount();
       
@@ -678,8 +1049,18 @@ const NewSalesInvoice = () => {
         total: calculateTotal(),
         status: 'completed'
       };
+      
+      console.log('💾 بيانات الفاتورة النهائية:', invoiceData);
+      console.log('📊 إحصائيات الفاتورة:', {
+        عدد_العناصر: invoiceData.items.length,
+        المجموع_الفرعي: invoiceData.subtotal,
+        الخصم: invoiceData.discountAmount,
+        الإجمالي: invoiceData.total
+      });
 
+      console.log('🔄 استدعاء addSalesInvoice...');
       const newInvoice = addSalesInvoice(invoiceData);
+      console.log('✅ تم إنشاء الفاتورة بنجاح:', newInvoice.id);
       showSuccess(`تم حفظ فاتورة المبيعات بنجاح! الإجمالي: ${calculateTotal().toFixed(2)} ج.م`);
 
       if (shouldPrint) {
@@ -699,6 +1080,12 @@ const NewSalesInvoice = () => {
       }
       resetForm();
     } catch (error) {
+      console.error('💥 خطأ في حفظ الفاتورة:', error);
+      console.error('📍 تفاصيل الخطأ:', {
+        الرسالة: error.message,
+        السبب: error.cause,
+        المكدس: error.stack
+      });
       // عرض رسالة الخطأ الفعلية للمستخدم
       showError(error.message || 'حدث خطأ في حفظ الفاتورة');
     }
@@ -812,23 +1199,6 @@ const NewSalesInvoice = () => {
               </select>
             </div>
 
-            {/* الشاحنة */}
-            <div>
-              <select
-                name="selectedVehicle"
-                value={formData.selectedVehicle}
-                onChange={handleChange}
-                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500"
-              >
-                <option value="">اختر الشاحنة</option>
-                {availableVehicles.filter(v => v.id).map(vehicle => (
-                  <option key={vehicle.id} value={vehicle.id}>
-                    {vehicle.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
             {/* نوع البيع */}
             <div>
               <select
@@ -846,7 +1216,23 @@ const NewSalesInvoice = () => {
                 <option value="wholesale">الجملة</option>
                 <option value="bulk">جملة الجملة</option>
               </select>
-              
+            </div>
+
+            {/* الشاحنة */}
+            <div>
+              <select
+                name="selectedVehicle"
+                value={formData.selectedVehicle}
+                onChange={handleChange}
+                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500"
+              >
+                <option value="">اختر الشاحنة</option>
+                {availableVehicles.filter(v => v.id).map(vehicle => (
+                  <option key={vehicle.id} value={vehicle.id}>
+                    {vehicle.name}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {/* الوكيل/المندوب */}
@@ -912,7 +1298,6 @@ const NewSalesInvoice = () => {
               <thead>
                 <tr className="bg-gray-100 border-b">
                   <th className="px-2 py-2 text-right text-xs font-semibold text-gray-700">المنتج</th>
-                  <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-24">نوع البيع</th>
                   <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-20">كمية أساسية</th>
                   <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-20">كمية فرعية</th>
                   <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-24">سعر أساسي</th>
@@ -967,25 +1352,6 @@ const NewSalesInvoice = () => {
                       {getQuantityWarning(index)}
                     </td>
 
-                    {/* نوع البيع */}
-                    <td className="px-2 py-2 text-center">
-                      <button
-                        onClick={() => updateSaleType(index)}
-                        className={`text-xs px-2 py-1 rounded-full font-semibold hover:opacity-80 transition-opacity ${
-                          item.saleType === 'retail' ? 'bg-orange-100 text-orange-700' :
-                          item.saleType === 'wholesale' ? 'bg-blue-100 text-blue-700' :
-                          item.saleType === 'bulk' ? 'bg-purple-100 text-purple-700' :
-                          'bg-gray-100 text-gray-700'
-                        }`}
-                        title="انقر للتغيير"
-                      >
-                        {item.saleType === 'retail' && '🛒 مباشر'}
-                        {item.saleType === 'wholesale' && '📦 جملة'}
-                        {item.saleType === 'bulk' && '🚛 جملة كبيرة'}
-                        {!item.saleType && 'غير محدد'}
-                      </button>
-                    </td>
-
                     {/* الكمية الأساسية */}
                     <td className="px-2 py-2">
                       <input
@@ -1019,6 +1385,7 @@ const NewSalesInvoice = () => {
                         step="0.01"
                         value={item.price}
                         onChange={(e) => handleItemChange(index, 'price', parseFloat(e.target.value) || 0)}
+                        onBlur={(e) => handlePriceBlur(index, 'price', e.target.value)}
                         className={`w-full px-2 py-1.5 text-sm text-center border rounded-md focus:ring-2 focus:ring-blue-500 ${
                           priceErrors[index] ? 'border-red-500 bg-red-50' : 'border-gray-300'
                         }`}
@@ -1033,6 +1400,7 @@ const NewSalesInvoice = () => {
                         step="0.01"
                         value={item.subPrice}
                         onChange={(e) => handleItemChange(index, 'subPrice', parseFloat(e.target.value) || 0)}
+                        onBlur={(e) => handlePriceBlur(index, 'subPrice', e.target.value)}
                         className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
                         min="0"
                       />
@@ -1166,11 +1534,22 @@ const NewSalesInvoice = () => {
 
         {/* الأزرار */}
         <div className="mt-6 pt-4 border-t">
-          <div className="flex justify-center gap-3">
+          <div className="flex flex-wrap justify-center gap-3">
+            {/* زر السجل */}
+            <button
+              type="button"
+              onClick={handleOpenSalesRecord}
+              className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white px-4 py-2.5 rounded-lg transition-colors font-medium text-sm shadow-sm hover:shadow-md"
+              title="فتح سجل فواتير المبيعات في تبويبة جديدة"
+            >
+              <FaList /> سجل المبيعات
+            </button>
+            
+            {/* أزرار العمليات الرئيسية */}
             <button
               type="button"
               onClick={resetForm}
-              className="flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg transition-colors font-medium"
+              className="flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white px-5 py-2.5 rounded-lg transition-colors font-medium shadow-sm hover:shadow-md"
               title="إعادة تعيين الفاتورة بالكامل"
             >
               <FaTrash /> إعادة تعيين
@@ -1178,14 +1557,14 @@ const NewSalesInvoice = () => {
             <button
               type="button"
               onClick={(e) => handleSubmit(e, false)}
-              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg transition-colors font-medium"
+              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-lg transition-colors font-medium shadow-sm hover:shadow-md"
             >
               <FaSave /> حفظ الفاتورة
             </button>
             <button
               type="button"
               onClick={(e) => handleSubmit(e, true)}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition-colors font-medium"
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg transition-colors font-medium shadow-sm hover:shadow-md"
             >
               <FaPrint /> حفظ وطباعة
             </button>
@@ -1251,7 +1630,7 @@ const NewSalesInvoice = () => {
                     value={quickCustomerForm.phone1}
                     onChange={handleQuickCustomerChange}
                     className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                    placeholder="+20 XXX XXX XXXX"
+                    placeholder="مثال: 01012345678 (11 رقم)"
                     required
                   />
                 </div>
@@ -1267,7 +1646,7 @@ const NewSalesInvoice = () => {
                     value={quickCustomerForm.phone2}
                     onChange={handleQuickCustomerChange}
                     className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                    placeholder="+20 XXX XXX XXXX (اختياري)"
+                    placeholder="مثال: 01112345678 (11 رقم)"
                   />
                 </div>
 
@@ -1332,6 +1711,93 @@ const NewSalesInvoice = () => {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal رسالة تأكيد تغيير السعر في المبيعات */}
+      {showPriceChangeModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9998] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full transform transition-all">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-blue-500 to-purple-600 p-6 rounded-t-2xl text-white">
+              <div className="flex items-center justify-center mb-4">
+                <div className="bg-white bg-opacity-20 rounded-full p-4">
+                  <FaExclamationTriangle size={48} />
+                </div>
+              </div>
+              <h2 className="text-xl font-bold text-center">تأكيد تغيير سعر الشريحة</h2>
+            </div>
+
+            {/* Body */}
+            <div className="p-6">
+              <div className="text-center space-y-4">
+                <div className="bg-yellow-50 p-4 rounded-lg border-r-4 border-yellow-500">
+                  <p className="text-sm text-gray-700 mb-2">
+                    المنتج: <span className="font-semibold text-gray-900">{priceChangeData.productName}</span>
+                  </p>
+                  <p className="text-sm text-gray-700 mb-2">
+                    الشريحة: <span className="font-semibold text-blue-700">{priceChangeData.tierName}</span>
+                  </p>
+                  
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">السعر الحالي:</span>
+                      <span className="font-semibold text-green-600">{priceChangeData.originalPrice.toFixed(2)} ج.م</span>
+                    </div>
+                    
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">السعر الجديد:</span>
+                      <span className="font-semibold text-blue-600">{priceChangeData.newPrice.toFixed(2)} ج.م</span>
+                    </div>
+                    
+                    <div className="flex justify-between items-center border-t pt-2">
+                      <span className="text-sm text-gray-600">الفرق:</span>
+                      <span className={`font-bold ${priceChangeData.newPrice > priceChangeData.originalPrice ? 'text-red-600' : 'text-green-600'}`}>
+                        {priceChangeData.newPrice > priceChangeData.originalPrice ? '+' : ''}
+                        {(priceChangeData.newPrice - priceChangeData.originalPrice).toFixed(2)} ج.م
+                      </span>
+                    </div>
+                    
+                    <div className="bg-green-50 p-2 rounded border-r-2 border-green-400 mt-2">
+                      <div className="flex items-center gap-1 mb-1">
+                        <FaInfoCircle className="text-green-500 text-xs" />
+                        <span className="text-xs font-semibold text-green-700">تحديث تلقائي</span>
+                      </div>
+                      <p className="text-xs text-green-600">
+                        سيتم تحديث سعر {priceChangeData.tierName} فقط ({priceChangeData.field === 'price' ? 'السعر الأساسي' : 'السعر الفرعي'})
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <div className="flex items-center gap-2 mb-2">
+                    <FaInfoCircle className="text-blue-500" />
+                    <span className="text-sm font-semibold text-blue-700">معلومة مهمة</span>
+                  </div>
+                  <p className="text-xs text-blue-600">
+                    هذا السعر تم تحديده تلقائياً من الشريحة المحددة. هل تريد تحديث السعر فعلاً؟
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-6 bg-gray-50 rounded-b-2xl flex gap-3">
+              <button
+                onClick={cancelPriceChange}
+                className="flex-1 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors font-semibold"
+              >
+                إلغاء التغيير
+              </button>
+              <button
+                onClick={confirmPriceChange}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors font-semibold"
+              >
+                تأكيد التغيير
+              </button>
             </div>
           </div>
         </div>

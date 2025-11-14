@@ -4,6 +4,7 @@
 
 import React, { useState } from 'react';
 import { useData } from '../../context/DataContext';
+import { useNotification } from '../../context/NotificationContext';
 import { 
   FaChevronDown, 
   FaChevronLeft, 
@@ -16,6 +17,7 @@ import {
 
 const ChartOfAccounts = () => {
   const { accounts, addAccount, updateAccount, deleteAccount } = useData();
+  const { showSuccess, showError, showConfirm } = useNotification();
   const [expandedAccounts, setExpandedAccounts] = useState(new Set());
   const [showModal, setShowModal] = useState(false);
   const [editingAccount, setEditingAccount] = useState(null);
@@ -137,13 +139,23 @@ const ChartOfAccounts = () => {
 
   // حذف الحساب
   const handleDelete = (account) => {
-    if (window.confirm(`هل أنت متأكد من حذف الحساب "${account.name}"؟`)) {
-      try {
-        deleteAccount(account.id);
-      } catch (error) {
-        alert('خطأ: ' + error.message);
+    showConfirm(
+      'حذف الحساب',
+      `هل أنت متأكد من حذف الحساب "${account.name}"؟`,
+      () => {
+        try {
+          deleteAccount(account.id);
+          showSuccess('تم حذف الحساب بنجاح');
+        } catch (error) {
+          showError('خطأ في حذف الحساب: ' + error.message);
+        }
+      },
+      {
+        type: 'danger',
+        confirmText: 'حذف الحساب',
+        cancelText: 'إلغاء'
       }
-    }
+    );
   };
 
   // عرض شجرة الحسابات

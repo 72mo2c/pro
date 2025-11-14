@@ -6,13 +6,16 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useData } from '../../context/DataContext';
 import { useNotification } from '../../context/NotificationContext';
+import { useSystemSettings } from '../../hooks/useSystemSettings';
 import { FaSave, FaArrowLeft, FaUndo } from 'react-icons/fa';
+import { formatCurrency } from '../../utils/currencyUtils';
 
 const NewSalesReturn = () => {
   const { invoiceId } = useParams();
   const navigate = useNavigate();
   const { salesInvoices, products, customers, addSalesReturn, salesReturns } = useData();
   const { showSuccess, showError } = useNotification();
+  const { currency: currentCurrency } = useSystemSettings();
 
   const [invoice, setInvoice] = useState(null);
   const [returnItems, setReturnItems] = useState([]);
@@ -201,7 +204,7 @@ const NewSalesReturn = () => {
           </div>
           <div className="bg-purple-50 p-3 rounded-lg">
             <p className="text-xs text-gray-600 mb-1">المجموع الكلي</p>
-            <p className="font-bold text-lg text-purple-600">{invoice.total.toFixed(2)} د.ع</p>
+            <p className="font-bold text-lg text-purple-600">{formatCurrency(invoice.total, currentCurrency)}</p>
           </div>
         </div>
       </div>
@@ -341,7 +344,7 @@ const NewSalesReturn = () => {
             <div className="text-right">
               <p className="text-sm text-gray-600">إجمالي المبلغ المرتجع</p>
               <p className="text-2xl font-bold text-red-600">
-                {calculateTotalReturn().toFixed(2)} د.ع
+                {formatCurrency(calculateTotalReturn(), currentCurrency)}
               </p>
             </div>
           </div>
