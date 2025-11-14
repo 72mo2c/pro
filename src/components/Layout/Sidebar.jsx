@@ -255,7 +255,6 @@ const Sidebar = ({ isOpen, closeSidebar }) => {
         { title: 'حركة الخزينة', icon: <FaChartLine />, path: '/treasury/movement' },
         { title: 'أرصدة العملاء', icon: <FaUsers />, path: '/treasury/customer-balances' },
         { title: 'أرصدة الموردين', icon: <FaTruck />, path: '/treasury/supplier-balances' },
-        { title: 'تتبع مدفوعات الفواتير', icon: <FaFileInvoice />, path: '/treasury/invoice-payment-tracking' },
         { title: 'دليل الحسابات', icon: <FaBookOpen />, path: '/accounting/chart-of-accounts' },
         { title: 'القيود اليومية', icon: <FaFileInvoice />, path: '/accounting/journal-entry' },
         { title: 'إدارة الموظفين', icon: <FaUserPlus />, path: '/hr/employees' },

@@ -41,9 +41,7 @@ const NewCashReceipt = () => {
     getSupplierBalance, 
     treasuryBalance,
     getCustomerDeferredInvoices,
-    addCashReceiptWithInvoiceLink,
-    updateCustomerAdvanceBalance,
-    updateSupplierAdvanceBalance
+    addCashReceiptWithInvoiceLink
   } = useData();
   const { settings } = useSystemSettings();
   const { showError, showSuccess, showInfo } = useNotification();
@@ -102,56 +100,16 @@ const NewCashReceipt = () => {
     return 0;
   };
 
-  // حساب الرصيد المسبق للعميل/المورد
-  const getSourceAdvanceBalance = () => {
-    if (formData.fromType === 'customer' && formData.fromId) {
-      const customer = customers.find(c => c.id === parseInt(formData.fromId));
-      return customer?.advanceBalance || 0;
-    } else if (formData.fromType === 'supplier' && formData.fromId) {
-      const supplier = suppliers.find(s => s.id === parseInt(formData.fromId));
-      return supplier?.advanceBalance || 0;
-    }
-    return 0;
-  };
-
-  // حساب الرصيد الشامل (دين + رصيد مسبق)
-  const getSourceComprehensiveBalance = () => {
-    const currentBalance = getSourceCurrentBalance();
-    const advanceBalance = getSourceAdvanceBalance();
-    
-    return {
-      debtBalance: currentBalance,
-      advanceBalance: advanceBalance,
-      netBalance: currentBalance - advanceBalance,
-      totalDebt: Math.max(0, currentBalance),
-      totalAdvance: Math.max(0, advanceBalance)
-    };
-  };
-
-  // حساب المبلغ المتبقي بعد التسوية الذكية
+  // حساب المبلغ المتبقي بعد الخصم من الدين
   const getRemainingAmount = () => {
-    const comprehensiveBalance = getSourceComprehensiveBalance();
+    const currentBalance = getSourceCurrentBalance();
     const paymentAmount = parseFloat(formData.amount) || 0;
     
-    // النظام الذكي: استخدام الرصيد المسبق أولاً، ثم سداد الدين
-    if (comprehensiveBalance.advanceBalance > 0) {
-      // يوجد رصيد مسبق - سيتم استخدامه أولاً
-      const advanceToUse = Math.min(comprehensiveBalance.advanceBalance, paymentAmount);
-      const remainingAfterAdvance = paymentAmount - advanceToUse;
-      
-      if (comprehensiveBalance.debtBalance > 0) {
-        // يوجد دين أيضاً - سيتم سداده من المبلغ المتبقي
-        return Math.max(0, remainingAfterAdvance - comprehensiveBalance.debtBalance);
-      } else {
-        // لا يوجد دين - المبلغ المتبقي يصبح رصيد مسبق جديد
-        return remainingAfterAdvance;
-      }
-    } else if (comprehensiveBalance.debtBalance > 0) {
-      // يوجد دين فقط - سيتم خصم المبلغ الزائد
-      return Math.max(0, paymentAmount - comprehensiveBalance.debtBalance);
+    if (currentBalance > 0) {
+      // هناك دين - سيتم خصم من الدين
+      return Math.max(0, paymentAmount - currentBalance);
     }
-    
-    // لا يوجد دين ولا رصيد مسبق - كل المبلغ يصبح رصيد مسبق جديد
+    // لا يوجد دين - كل المبلغ يذهب للخزينة
     return paymentAmount;
   };
 
@@ -170,62 +128,23 @@ const NewCashReceipt = () => {
     return 'دفع مقدماً';
   };
 
-  // معلومات المعاملة المحسوبة مع النظام الذكي
+  // معلومات المعاملة المحسوبة
   const transactionInfo = useMemo(() => {
-    const comprehensiveBalance = getSourceComprehensiveBalance();
+    const currentBalance = getSourceCurrentBalance();
     const paymentAmount = parseFloat(formData.amount) || 0;
     const remainingAmount = getRemainingAmount();
     const transactionType = getTransactionType();
     
-    // تحليل التسوية الذكية
-    let advanceUsed = 0;
-    let debtPaid = 0;
-    let advanceCredit = 0;
-    
-    if (comprehensiveBalance.advanceBalance > 0) {
-      advanceUsed = Math.min(comprehensiveBalance.advanceBalance, paymentAmount);
-      const remainingAfterAdvance = paymentAmount - advanceUsed;
-      
-      if (comprehensiveBalance.debtBalance > 0) {
-        debtPaid = Math.min(comprehensiveBalance.debtBalance, remainingAfterAdvance);
-        advanceCredit = remainingAfterAdvance - debtPaid;
-      } else {
-        advanceCredit = remainingAfterAdvance;
-      }
-    } else if (comprehensiveBalance.debtBalance > 0) {
-      debtPaid = Math.min(comprehensiveBalance.debtBalance, paymentAmount);
-      advanceCredit = paymentAmount - debtPaid;
-    } else {
-      advanceCredit = paymentAmount;
-    }
-    
     return {
-      // الأرصدة الحالية
-      currentDebtBalance: comprehensiveBalance.debtBalance,
-      currentAdvanceBalance: comprehensiveBalance.advanceBalance,
-      currentNetBalance: comprehensiveBalance.netBalance,
-      
-      // تفاصيل المعاملة
+      currentBalance,
       paymentAmount,
       remainingAmount,
       transactionType,
-      
-      // التحليل الذكي
-      advanceUsed,
-      debtPaid,
-      advanceCredit,
-      
-      // النتائج المتوقعة
-      willUseAdvance: advanceUsed > 0,
-      willPayDebt: debtPaid > 0,
-      willAddAdvance: advanceCredit > 0,
-      
-      // الأرصدة الجديدة
-      newDebtBalance: Math.max(0, comprehensiveBalance.debtBalance - debtPaid),
-      newAdvanceBalance: Math.max(0, comprehensiveBalance.advanceBalance - advanceUsed + advanceCredit),
-      newNetBalance: Math.max(0, comprehensiveBalance.debtBalance - debtPaid) - Math.max(0, comprehensiveBalance.advanceBalance - advanceUsed + advanceCredit)
+      willReduceBalance: currentBalance > 0,
+      willIncreaseBalance: currentBalance <= 0,
+      newBalanceAfterPayment: Math.max(0, currentBalance - paymentAmount)
     };
-  }, [formData.fromType, formData.fromId, formData.amount, customers, suppliers, getCustomerBalance, getSupplierBalance]);
+  }, [formData.fromType, formData.fromId, formData.amount, getCustomerBalance, getSupplierBalance]);
 
   // الحصول على قائمة المصادر بناءً على النوع
   const getSourceList = () => {
@@ -407,8 +326,13 @@ const NewCashReceipt = () => {
       });
     }
     
-    // لا نحتاج للتحقق من الرصيد في إذن الاستلام النقدي
-    // إذن الاستلام النقدي يزيد الرصيد في الخزينة وليس ينقصه
+    // التحقق من الرصيد الكافي في الخزينة
+    if (formData.paymentMethod === 'cash') {
+      const paymentAmount = parseFloat(formData.amount) || 0;
+      if (paymentAmount > treasuryBalance) {
+        newErrors.amount = `الرصيد المتوفر في الخزينة (${formatCurrency(treasuryBalance)}) غير كافٍ`;
+      }
+    }
     
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -447,44 +371,45 @@ const NewCashReceipt = () => {
         }
       };
       
-      // استخدام النظام الذكي الجديد للتسوية
-      const result = addCashReceiptWithInvoiceLink(receiptData);
+      // استخدام الدالة المحسنة التي تدعم ربط الفواتير
+      addCashReceiptWithInvoiceLink(receiptData);
       
-      // عرض رسالة تفصيلية للنظام الذكي
-      let successMessage = `🎯 تم إضافة إيصال الاستلام بنجاح بالنظام الذكي!\n\n`;
+      // عرض رسالة تفصيلية حسب نوع المعاملة
+      const { transactionType, currentBalance, remainingAmount, newBalanceAfterPayment } = transactionInfo;
       
-      if (result.intelligentSettlement) {
-        const settlement = result.intelligentSettlement;
+      let successMessage = `تم إضافة إيصال الاستلام بنجاح!\n`;
+      
+      if (canUseInvoiceMode()) {
+        // رسالة مع ربط الفواتير
+        const totalInvoicePayments = getTotalSelectedInvoicePayments();
+        const additionalAmount = getAdditionalTreasuryAmount();
         
-        successMessage += `📊 تفاصيل التسوية الذكية:\n`;
-        successMessage += `• المبلغ الأصلي: ${formatCurrency(settlement.originalPayment)}\n`;
+        successMessage += `تم ربط السداد بالفواتير: ${formatCurrency(totalInvoicePayments)}\n`;
         
-        if (settlement.advanceUsed > 0) {
-          successMessage += `• تم استخدام رصيد مسبق: ${formatCurrency(settlement.advanceUsed)}\n`;
+        if (additionalAmount > 0) {
+          successMessage += `تم إضافة للخزينة: ${formatCurrency(additionalAmount)}\n`;
         }
         
-        if (settlement.invoicePayments > 0) {
-          successMessage += `• تم سداد فواتير: ${formatCurrency(settlement.invoicePayments)}\n`;
+        selectedInvoices.forEach(selected => {
+          if (selected.paymentAmount > 0) {
+            successMessage += `- فاتورة ${selected.invoiceNumber}: ${formatCurrency(selected.paymentAmount)}\n`;
+          }
+        });
+      } else if (transactionType === 'دفع دين كامل') {
+        successMessage += `تم سداد الدين بالكامل (${formatCurrency(currentBalance)})`;
+        if (remainingAmount > 0) {
+          successMessage += ` وإضافة ${formatCurrency(remainingAmount)} للخزينة`;
         }
-        
-        if (settlement.advanceCredit > 0) {
-          successMessage += `• تم إضافة رصيد مسبق جديد: ${formatCurrency(settlement.advanceCredit)}\n`;
-        }
-        
-        if (settlement.settledInvoices && settlement.settledInvoices.length > 0) {
-          successMessage += `\n📋 الفواتير المسددة:\n`;
-          settlement.settledInvoices.forEach(invoice => {
-            successMessage += `• فاتورة #${invoice.invoiceId}: ${formatCurrency(invoice.amount)} `;
-            successMessage += invoice.fullyPaid ? '(مسددة بالكامل)\n' : '(مسددة جزئياً)\n';
-          });
-        }
+        successMessage += `\nالرصيد الجديد: ${formatCurrency(newBalanceAfterPayment)}`;
+      } else if (transactionType === 'دفع دين جزئي') {
+        successMessage += `تم خصم ${formatCurrency(transactionInfo.paymentAmount)} من الدين`;
+        successMessage += `\nالرصيد المتبقي: ${formatCurrency(newBalanceAfterPayment)}`;
       } else {
-        // في حالة عدم وجود تسوية ذكية (للمصادر الأخرى)
-        successMessage += `• تم تسجيل إيصال بمبلغ: ${formatCurrency(transactionInfo.paymentAmount)}\n`;
-        successMessage += `• نوع المعاملة: ${transactionInfo.transactionType}\n`;
+        successMessage += `تم إضافة ${formatCurrency(transactionInfo.paymentAmount)} للخزينة`;
+        if (currentBalance < 0) {
+          successMessage += `\nالرصيد المتوفر: ${formatCurrency(Math.abs(currentBalance))} كرصيد مسبق`;
+        }
       }
-      
-      successMessage += `\n✅ النظام الذكي يضمن الاستخدام الأمثل للأرصدة المسبقة وسداد الديون بالترتيب.`;
       
       showSuccess(successMessage);
       navigate('/treasury/receipts');
@@ -671,137 +596,91 @@ const NewCashReceipt = () => {
                         </div>
                       </div>
                       
-                      {/* بطاقة معلومات الرصيد والمعاملة - النظام الذكي */}
+                      {/* بطاقة معلومات الرصيد والمعاملة */}
                       {formData.amount && (
-                        <div className={`border rounded-md p-4 ${
-                          transactionInfo.currentDebtBalance > 0 || transactionInfo.currentAdvanceBalance > 0 
-                            ? 'bg-purple-50 border-purple-200' 
-                            : 'bg-green-50 border-green-200'
-                        }`}>
+                        <div className={`border rounded-md p-4 ${transactionInfo.currentBalance > 0 ? 'bg-orange-50 border-orange-200' : 'bg-green-50 border-green-200'}`}>
                           <h4 className="font-semibold mb-3 text-sm flex items-center gap-2">
-                            <FaBalanceScale className="text-purple-600" />
-                            النظام الذكي للتسوية
+                            <FaBalanceScale className={transactionInfo.currentBalance > 0 ? 'text-orange-600' : 'text-green-600'} />
+                            حالة المعاملة والرصيد
                           </h4>
                           
-                          {/* الأرصدة الحالية */}
-                          <div className="bg-gray-50 rounded-md p-3 mb-3">
-                            <h5 className="font-medium text-gray-700 mb-2 text-xs">الأرصدة الحالية</h5>
-                            <div className="grid grid-cols-2 gap-2 text-xs">
-                              <div className="flex justify-between">
-                                <span className="text-gray-600">الدين الحالي:</span>
-                                <span className={`font-bold ${transactionInfo.currentDebtBalance > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                  {formatCurrency(transactionInfo.currentDebtBalance)}
-                                </span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-gray-600">الرصيد المسبق:</span>
-                                <span className={`font-bold ${transactionInfo.currentAdvanceBalance > 0 ? 'text-blue-600' : 'text-gray-600'}`}>
-                                  {formatCurrency(transactionInfo.currentAdvanceBalance)}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* تفاصيل التسوية الذكية */}
-                          <div className="bg-blue-50 rounded-md p-3 mb-3">
-                            <h5 className="font-medium text-blue-700 mb-2 text-xs">تفاصيل التسوية الذكية</h5>
-                            <div className="space-y-1 text-xs">
-                              {transactionInfo.advanceUsed > 0 && (
-                                <div className="flex justify-between">
-                                  <span className="text-gray-600">استخدام الرصيد المسبق:</span>
-                                  <span className="font-bold text-blue-600">-{formatCurrency(transactionInfo.advanceUsed)}</span>
-                                </div>
-                              )}
-                              {transactionInfo.debtPaid > 0 && (
-                                <div className="flex justify-between">
-                                  <span className="text-gray-600">سداد الدين:</span>
-                                  <span className="font-bold text-orange-600">-{formatCurrency(transactionInfo.debtPaid)}</span>
-                                </div>
-                              )}
-                              {transactionInfo.advanceCredit > 0 && (
-                                <div className="flex justify-between">
-                                  <span className="text-gray-600">إضافة رصيد مسبق:</span>
-                                  <span className="font-bold text-green-600">+{formatCurrency(transactionInfo.advanceCredit)}</span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                          
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">الرصيد الحالي:</span>
+                              <span className={`font-bold ${transactionInfo.currentBalance > 0 ? 'text-orange-600' : transactionInfo.currentBalance < 0 ? 'text-blue-600' : 'text-gray-600'}`}>
+                                {formatCurrency(transactionInfo.currentBalance)}
+                              </span>
+                            </div>
+                            
                             <div className="flex justify-between">
                               <span className="text-gray-600">مبلغ الدفع:</span>
                               <span className="font-bold text-blue-600">{formatCurrency(transactionInfo.paymentAmount)}</span>
                             </div>
                             
-                            <div className="flex justify-between">
+                            {transactionInfo.currentBalance > 0 && (
+                              <div className="flex justify-between">
+                                <span className="text-gray-600">سيتم خصم:</span>
+                                <span className="font-bold text-orange-600">{formatCurrency(Math.min(transactionInfo.paymentAmount, transactionInfo.currentBalance))}</span>
+                              </div>
+                            )}
+                            
+                            {transactionInfo.remainingAmount > 0 && (
+                              <div className="flex justify-between">
+                                <span className="text-gray-600">سيتم إضافته للخزينة:</span>
+                                <span className="font-bold text-green-600">{formatCurrency(transactionInfo.remainingAmount)}</span>
+                              </div>
+                            )}
+                            
+                            <div className="flex justify-between md:col-span-2">
                               <span className="text-gray-600">نوع المعاملة:</span>
-                              <span className="font-semibold text-purple-600">
+                              <span className={`font-semibold ${transactionInfo.currentBalance > 0 ? 'text-orange-600' : 'text-green-600'}`}>
                                 {transactionInfo.transactionType}
                               </span>
                             </div>
-                          </div>
-
-                          {/* الأرصدة المتوقعة */}
-                          <div className="bg-gray-50 rounded-md p-3 mt-3">
-                            <h5 className="font-medium text-gray-700 mb-2 text-xs">الأرصدة بعد المعاملة</h5>
-                            <div className="grid grid-cols-2 gap-2 text-xs">
-                              <div className="flex justify-between">
-                                <span className="text-gray-600">الدين المتبقي:</span>
-                                <span className={`font-bold ${transactionInfo.newDebtBalance > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                  {formatCurrency(transactionInfo.newDebtBalance)}
-                                </span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-gray-600">الرصيد المسبق الجديد:</span>
-                                <span className={`font-bold ${transactionInfo.newAdvanceBalance > 0 ? 'text-blue-600' : 'text-gray-600'}`}>
-                                  {formatCurrency(transactionInfo.newAdvanceBalance)}
-                                </span>
-                              </div>
+                            
+                            <div className="flex justify-between md:col-span-2">
+                              <span className="text-gray-600">الرصيد بعد المعاملة:</span>
+                              <span className={`font-bold ${transactionInfo.newBalanceAfterPayment > 0 ? 'text-orange-600' : transactionInfo.newBalanceAfterPayment < 0 ? 'text-blue-600' : 'text-green-600'}`}>
+                                {formatCurrency(transactionInfo.newBalanceAfterPayment)}
+                              </span>
                             </div>
                           </div>
                           
-                          {/* تحذيرات وتوضيحات للنظام الذكي */}
+                          {/* تحذيرات وتوضيحات */}
                           <div className="mt-3 pt-3 border-t border-gray-200">
-                            {transactionInfo.willUseAdvance && transactionInfo.willPayDebt ? (
-                              <div className="flex items-start gap-2 text-purple-700 bg-purple-100 p-2 rounded text-xs">
-                                <FaCheckCircle className="text-purple-600 mt-0.5 flex-shrink-0" />
+                            {transactionInfo.currentBalance > transactionInfo.paymentAmount ? (
+                              <div className="flex items-start gap-2 text-orange-700 bg-orange-100 p-2 rounded text-xs">
+                                <FaExclamationTriangle className="text-orange-600 mt-0.5 flex-shrink-0" />
                                 <div>
-                                  <p className="font-medium">تسوية ذكية شاملة</p>
-                                  <p>النظام سيستخدم الرصيد المسبق أولاً ({formatCurrency(transactionInfo.advanceUsed)}) ثم يسدد الدين ({formatCurrency(transactionInfo.debtPaid)})</p>
+                                  <p className="font-medium">دفع جزئي للدين</p>
+                                  <p>سيتم خصم {formatCurrency(transactionInfo.paymentAmount)} من الدين المتبقي {formatCurrency(transactionInfo.currentBalance)}</p>
                                 </div>
                               </div>
-                            ) : transactionInfo.willUseAdvance ? (
+                            ) : transactionInfo.currentBalance > 0 ? (
+                              <div className="flex items-start gap-2 text-green-700 bg-green-100 p-2 rounded text-xs">
+                                <FaCheckCircle className="text-green-600 mt-0.5 flex-shrink-0" />
+                                <div>
+                                  <p className="font-medium">سداد دين كامل</p>
+                                  <p>سيتم سداد الدين بالكامل وإضافة {formatCurrency(transactionInfo.remainingAmount)} للخزينة</p>
+                                </div>
+                              </div>
+                            ) : transactionInfo.currentBalance < 0 ? (
                               <div className="flex items-start gap-2 text-blue-700 bg-blue-100 p-2 rounded text-xs">
                                 <FaHistory className="text-blue-600 mt-0.5 flex-shrink-0" />
                                 <div>
-                                  <p className="font-medium">استخدام رصيد مسبق</p>
-                                  <p>سيتم استخدام {formatCurrency(transactionInfo.advanceUsed)} من الرصيد المسبق</p>
-                                </div>
-                              </div>
-                            ) : transactionInfo.willPayDebt ? (
-                              <div className="flex items-start gap-2 text-orange-700 bg-orange-100 p-2 rounded text-xs">
-                                <FaBalanceScale className="text-orange-600 mt-0.5 flex-shrink-0" />
-                                <div>
-                                  <p className="font-medium">سداد دين</p>
-                                  <p>سيتم سداد {formatCurrency(transactionInfo.debtPaid)} من الدين الحالي</p>
+                                  <p className="font-medium">دفع مقدماً</p>
+                                  <p>العميل لديه رصيد مسبق {formatCurrency(Math.abs(transactionInfo.currentBalance))} سيتم إضافة المبلغ كاملاً للخزينة</p>
                                 </div>
                               </div>
                             ) : (
                               <div className="flex items-start gap-2 text-green-700 bg-green-100 p-2 rounded text-xs">
-                                <FaMoneyBillWave className="text-green-600 mt-0.5 flex-shrink-0" />
+                                <FaCheckCircle className="text-green-600 mt-0.5 flex-shrink-0" />
                                 <div>
-                                  <p className="font-medium">دفع مسبق جديد</p>
-                                  <p>سيتم إضافة {formatCurrency(transactionInfo.advanceCredit)} كرصيد مسبق جديد</p>
+                                  <p className="font-medium">دفع جديد</p>
+                                  <p>لا يوجد دين مسبق، سيتم إضافة المبلغ كاملاً للخزينة</p>
                                 </div>
                               </div>
                             )}
-                            
-                            {/* توضيح النظام الذكي */}
-                            <div className="mt-2 p-2 bg-gray-50 border border-gray-200 rounded text-xs">
-                              <p className="text-gray-600">
-                                <strong>النظام الذكي:</strong> أولاً يُستخدم الرصيد المسبق (إن وجد)، ثم يُسدد الدين، وأي مبلغ زائد يُضاف كرصيد مسبق جديد. لا يتم إضافة أموال العملاء للخزينة مباشرة.
-                              </p>
-                            </div>
                           </div>
                         </div>
                       )}

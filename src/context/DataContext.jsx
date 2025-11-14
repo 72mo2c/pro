@@ -16,16 +16,15 @@ export const useData = () => {
   return context;
 };
 
-// دالة تنسيق العملة العامة - متاحة في كامل الملف
-const formatCurrency = (amount = 0) => {
-  const numericAmount = Number(amount) || 0;
-  return numericAmount.toLocaleString('ar-EG', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  }) + ' ج.م';
-};
-
 export const DataProvider = ({ children }) => {
+  // دالة تنسيق العملة المحلية
+  const formatCurrency = (amount = 0) => {
+    const numericAmount = Number(amount) || 0;
+    return numericAmount.toLocaleString('ar-EG', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }) + ' ج.م';
+  };
 
   // ==================== دوال نظام الشحن (مُعرَّفة مبكراً للاستخدام) ====================
   
@@ -77,7 +76,6 @@ export const DataProvider = ({ children }) => {
   const [treasuryBalance, setTreasuryBalance] = useState(0);
   const [cashReceipts, setCashReceipts] = useState([]); // إيصالات الاستلام النقدي
   const [cashDisbursements, setCashDisbursements] = useState([]); // إيصالات الصرف النقدي
-  const [treasuryMovements, setTreasuryMovements] = useState([]); // سجلات حركة الخزينة التفصيلية
   
   // بيانات التحويلات بين المخازن
   const [transfers, setTransfers] = useState([]);
@@ -2369,43 +2367,13 @@ export const DataProvider = ({ children }) => {
     setSalesInvoices(updatedInvoices);
     saveData('bero_sales_invoices', updatedInvoices);
     
-    // 🔥 تحديث رصيد العميل الرئيسي عند سداد الدين
-    const customerId = parseInt(invoice.customerId);
-    updateCustomerBalance(customerId, paymentAmount, 'credit');
-    console.log(`✅ تم تحديث رصيد العميل ${customerId} - تم خصم ${formatCurrency(paymentAmount)} من الدين`);
-    
-    // إضافة إيصال نقدي لتحديث أرصدة العملاء فقط إذا لم يكن هناك إيصال مزدوج
-    let cashReceipt = null;
-    if (!paymentData.skipCashReceiptCreation) {
-      cashReceipt = {
-        id: Date.now(),
-        fromType: 'customer',
-        fromId: customerId,
-        amount: paymentAmount,
-        date: new Date().toISOString().split('T')[0],
-        paymentMethod: paymentData.paymentMethod || 'cash',
-        receiptNumber: paymentData.receiptNumber || `INV-${invoiceId}-PAY-${Date.now()}`,
-        reference: paymentData.reference || `دفعة من فاتورة ${invoiceId}`,
-        description: `دفعة جزئية من فاتورة رقم ${invoiceId}`,
-        linkedInvoiceId: invoiceId,
-        linkedInvoicePayment: paymentAmount
-      };
-      
-      const updatedCashReceipts = [...cashReceipts, cashReceipt];
-      setCashReceipts(updatedCashReceipts);
-      saveData('bero_cash_receipts', updatedCashReceipts);
-      
-      console.log(`تم إضافة إيصال نقدي بقيمة ${formatCurrency(paymentAmount)} لعميل فاتورة ${invoiceId}`);
-    }
-    
     return {
       invoice: updatedInvoices.find(inv => inv.id === invoiceId),
       previousPaid: currentPaid,
       newPaid: newPaidAmount,
       previousRemaining: currentRemaining,
       newRemaining: newRemainingAmount,
-      isFullyPaid: newRemainingAmount <= 0,
-      cashReceipt: cashReceipt
+      isFullyPaid: newRemainingAmount <= 0
     };
   };
   
@@ -2454,11 +2422,6 @@ export const DataProvider = ({ children }) => {
     setPurchaseInvoices(updatedInvoices);
     saveData('bero_purchase_invoices', updatedInvoices);
     
-    // 🔥 تحديث رصيد المورد الرئيسي عند سداد الدين
-    const supplierId = parseInt(invoice.supplierId);
-    updateSupplierBalance(supplierId, paymentAmount, 'credit');
-    console.log(`✅ تم تحديث رصيد المورد ${supplierId} - تم خصم ${formatCurrency(paymentAmount)} من الدين`);
-    
     return {
       invoice: updatedInvoices.find(inv => inv.id === invoiceId),
       previousPaid: currentPaid,
@@ -2486,322 +2449,48 @@ export const DataProvider = ({ children }) => {
     
     const paymentAmount = parseFloat(amount);
     let updatedReceiptData = { ...receiptData };
+    let treasuryIncrease = paymentAmount; // المبلغ الذي سيضاف للخزينة
     
-    // النظام الذكي الجديد - استخدام التسوية الذكية
-    if (fromType === 'customer' && fromId) {
-      // استخدم النظام الذكي للعملاء
-      const customerId = parseInt(fromId);
-      const currentDebt = getCustomerBalance(customerId);
-      const currentAdvance = customers.find(c => c.id === customerId)?.advanceBalance || 0;
-      
-      let remainingPayment = paymentAmount;
+    // إذا كان هناك فواتير مرتبطة، قم بسدادها
+    if (linkedInvoices.length > 0 && fromType === 'customer') {
       let totalInvoicePayments = 0;
-      const settledInvoices = [];
       
-      // 1. استخدام الرصيد المسبق أولاً
-      if (currentAdvance > 0) {
-        const advanceToUse = Math.min(remainingPayment, currentAdvance);
-        if (advanceToUse > 0) {
-          // تحديث رصيد العميل المسبق
-          updateCustomerAdvanceBalance(customerId, -advanceToUse, `استخدام رصيد مسبق - إيصال ${receiptNumber}`);
-          remainingPayment -= advanceToUse;
-        }
-      }
-      
-      // 2. سداد الفواتير الآجلة
-      if (remainingPayment > 0 && currentDebt > 0) {
-        const pendingInvoices = salesInvoices
-          .filter(inv => inv.customerId === customerId && inv.paymentType !== 'cash' && (inv.remaining || 0) > 0)
-          .sort((a, b) => new Date(a.date) - new Date(b.date));
+      linkedInvoices.forEach(invoiceInfo => {
+        const { invoiceId, paymentAmount: invoicePayment } = invoiceInfo;
+        const paymentForInvoice = Math.min(invoicePayment, paymentAmount - totalInvoicePayments);
         
-        for (const invoice of pendingInvoices) {
-          if (remainingPayment <= 0) break;
-          
-          const invoiceDebt = invoice.remaining || 0;
-          const paymentForInvoice = Math.min(remainingPayment, invoiceDebt);
-          
-          if (paymentForInvoice > 0) {
-            try {
-              const paymentResult = payInvoiceAmount(invoice.id, paymentForInvoice, {
-                paymentMethod,
-                receiptNumber,
-                reference: referenceNumber,
-                skipCashReceiptCreation: true
-              });
-              
-              totalInvoicePayments += paymentForInvoice;
-              remainingPayment -= paymentForInvoice;
-              settledInvoices.push({
-                invoiceId: invoice.id,
-                amount: paymentForInvoice,
-                fullyPaid: paymentForInvoice >= invoiceDebt
-              });
-              
-              console.log(`✅ تم سداد ${formatCurrency(paymentForInvoice)} من فاتورة ${invoice.id}`);
-            } catch (error) {
-              console.error(`❌ خطأ في سداد فاتورة ${invoice.id}:`, error);
-            }
+        if (paymentForInvoice > 0) {
+          try {
+            const paymentResult = payInvoiceAmount(invoiceId, paymentForInvoice, {
+              paymentMethod,
+              receiptNumber,
+              reference: referenceNumber
+            });
+            
+            totalInvoicePayments += paymentForInvoice;
+            treasuryIncrease -= paymentForInvoice;
+            
+            console.log(`تم سداد ${formatCurrency(paymentForInvoice)} من فاتورة ${invoiceId}:`, paymentResult);
+          } catch (error) {
+            console.error(`خطأ في سداد فاتورة ${invoiceId}:`, error);
+            throw new Error(`فشل في سداد فاتورة رقم ${invoiceId}: ${error.message}`);
           }
         }
-      }
-      
-      // 🔥 إضافة المبلغ المخصوم من الدين إلى رصيد الخزينة
-      if (totalInvoicePayments > 0) {
-        const newTreasuryBalance = treasuryBalance + totalInvoicePayments;
-        setTreasuryBalance(newTreasuryBalance);
-        saveData('bero_treasury_balance', newTreasuryBalance);
-        console.log(`✅ تم إضافة ${formatCurrency(totalInvoicePayments)} إلى رصيد الخزينة`);
-      }
-      
-      // 3. إضافة أي مبلغ زائد للرصيد المسبق (وليس للخزينة)
-      if (remainingPayment > 0) {
-        if (currentDebt <= 0) {
-          // إذا لم يكن هناك دين، المبلغ كله للرصيد المسبق
-          updateCustomerAdvanceBalance(customerId, remainingPayment, `دفع مسبق جديد - إيصال ${receiptNumber}`);
-        } else {
-          // إذا كان هناك دين وتم سداده، المبلغ الزائد للرصيد المسبق
-          updateCustomerAdvanceBalance(customerId, remainingPayment, `رصيد مسبق زائد - إيصال ${receiptNumber}`);
-        }
-      }
-      
-      // حفظ تفاصيل التسوية الذكية في الإيصال
-      updatedReceiptData.intelligentSettlement = {
-        originalPayment: paymentAmount,
-        advanceUsed: currentAdvance > 0 ? Math.min(currentAdvance, paymentAmount) : 0,
-        invoicePayments: totalInvoicePayments,
-        advanceCredit: remainingPayment,
-        settledInvoices: settledInvoices,
-        settlementType: 'intelligent',
-        timestamp: new Date().toISOString()
-      };
-      
-    } else if (fromType === 'supplier' && fromId) {
-      // استخدم النظام الذكي للموردين (منطق مشابه)
-      const supplierId = parseInt(fromId);
-      const currentDebt = getSupplierBalance(supplierId);
-      const currentAdvance = suppliers.find(s => s.id === supplierId)?.advanceBalance || 0;
-      
-      let remainingPayment = paymentAmount;
-      let totalInvoicePayments = 0;
-      const settledInvoices = [];
-      
-      // 1. استخدام الرصيد المسبق
-      if (currentAdvance > 0) {
-        const advanceToUse = Math.min(remainingPayment, currentAdvance);
-        if (advanceToUse > 0) {
-          updateSupplierAdvanceBalance(supplierId, -advanceToUse, `استخدام رصيد مسبق - إيصال ${receiptNumber}`);
-          remainingPayment -= advanceToUse;
-        }
-      }
-      
-      // 2. سداد الفواتير الآجلة
-      if (remainingPayment > 0 && currentDebt > 0) {
-        const pendingInvoices = purchaseInvoices
-          .filter(inv => inv.supplierId === supplierId && inv.paymentType !== 'cash' && (inv.remaining || 0) > 0)
-          .sort((a, b) => new Date(a.date) - new Date(b.date));
-        
-        for (const invoice of pendingInvoices) {
-          if (remainingPayment <= 0) break;
-          
-          const invoiceDebt = invoice.remaining || 0;
-          const paymentForInvoice = Math.min(remainingPayment, invoiceDebt);
-          
-          if (paymentForInvoice > 0) {
-            try {
-              const paymentResult = payPurchaseInvoiceAmount(invoice.id, paymentForInvoice, {
-                paymentMethod,
-                receiptNumber,
-                reference: referenceNumber,
-                skipCashReceiptCreation: true
-              });
-              
-              totalInvoicePayments += paymentForInvoice;
-              remainingPayment -= paymentForInvoice;
-              settledInvoices.push({
-                invoiceId: invoice.id,
-                amount: paymentForInvoice,
-                fullyPaid: paymentForInvoice >= invoiceDebt
-              });
-              
-              console.log(`✅ تم سداد ${formatCurrency(paymentForInvoice)} من فاتورة مشتريات ${invoice.id}`);
-            } catch (error) {
-              console.error(`❌ خطأ في سداد فاتورة ${invoice.id}:`, error);
-            }
-          }
-        }
-      }
-      
-      // 🔥 إضافة المبلغ المخصوم من الدين إلى رصيد الخزينة
-      if (totalInvoicePayments > 0) {
-        const newTreasuryBalance = treasuryBalance + totalInvoicePayments;
-        setTreasuryBalance(newTreasuryBalance);
-        saveData('bero_treasury_balance', newTreasuryBalance);
-        console.log(`✅ تم إضافة ${formatCurrency(totalInvoicePayments)} إلى رصيد الخزينة`);
-      }
-      
-      // 3. إضافة أي مبلغ زائد للرصيد المسبق
-      if (remainingPayment > 0) {
-        if (currentDebt <= 0) {
-          updateSupplierAdvanceBalance(supplierId, remainingPayment, `دفع مسبق جديد - إيصال ${receiptNumber}`);
-        } else {
-          updateSupplierAdvanceBalance(supplierId, remainingPayment, `رصيد مسبق زائد - إيصال ${receiptNumber}`);
-        }
-      }
-      
-      // حفظ تفاصيل التسوية الذكية في الإيصال
-      updatedReceiptData.intelligentSettlement = {
-        originalPayment: paymentAmount,
-        advanceUsed: currentAdvance > 0 ? Math.min(currentAdvance, paymentAmount) : 0,
-        invoicePayments: totalInvoicePayments,
-        advanceCredit: remainingPayment,
-        settledInvoices: settledInvoices,
-        settlementType: 'intelligent',
-        timestamp: new Date().toISOString()
-      };
+      });
     }
     
-    // 🔥 تسجيل حركة الخزينة التفصيلية للنظام الذكي
-    if (updatedReceiptData.intelligentSettlement) {
-      const settlement = updatedReceiptData.intelligentSettlement;
-      
-      // تسجيل الحركة الأساسية
-      const treasuryMovement = {
-        id: Date.now(),
-        date: date.split('T')[0],
-        type: 'receipt',
-        amount: paymentAmount,
-        description: `إيصال ذكي - ${fromType === 'customer' ? 'عميل' : 'مورد'} ${receiptNumber}`,
-        referenceNumber,
-        fromType,
-        fromId,
-        // تفاصيل النظام الذكي
-        intelligentDetails: {
-          originalPayment: settlement.originalPayment,
-          advanceUsed: settlement.advanceUsed,
-          invoicePayments: settlement.invoicePayments,
-          advanceCredit: settlement.advanceCredit,
-          settledInvoices: settlement.settledInvoices,
-          totalInvoiceCount: settlement.settledInvoices?.length || 0
-        }
-      };
-      
-      const updatedTreasuryMovements = [...treasuryMovements, treasuryMovement];
-      setTreasuryMovements(updatedTreasuryMovements);
-      saveData('bero_treasury_movements', updatedTreasuryMovements);
-      
-      console.log('🎯 تم تسجيل حركة الخزينة التفصيلية:', treasuryMovement);
-    }
-    
-    // استدعاء دالة الإيصال الأساسية مع البيانات المحدثة
-    const newReceipt = addCashReceipt(updatedReceiptData);
-    
-    console.log('🎯 تم إكمال التسوية الذكية بنجاح:', {
-      receiptId: newReceipt.id,
-      type: fromType,
+    // إعداد بيانات الإيصال مع التحديثات
+    updatedReceiptData = {
+      ...updatedReceiptData,
       amount: paymentAmount,
-      settledInvoices: updatedReceiptData.intelligentSettlement?.settledInvoices?.length || 0,
-      advanceCredit: updatedReceiptData.intelligentSettlement?.advanceCredit || 0
-    });
+      treasuryAmount: Math.max(0, treasuryIncrease), // المبلغ الإضافي للخزينة
+      linkedInvoices: linkedInvoices,
+      finalAmount: paymentAmount,
+      balanceReduction: paymentAmount - Math.max(0, treasuryIncrease)
+    };
     
-    return {
-      ...newReceipt,
-      intelligentSettlement: updatedReceiptData.intelligentSettlement,
-      updatedBalances: {
-        treasuryBalance: treasuryBalance,
-        customerBalances: getAllCustomerBalances(),
-        supplierBalances: getAllSupplierBalances()
-      }
-    };
-  };
-
-  // ==================== دوال إدارة الأرصدة المسبقة ====================
-  
-  /**
-   * تحديث الأرصدة المسبقة للعميل
-   */
-  const updateCustomerAdvanceBalance = (customerId, amount, reason = '') => {
-    const customerIndex = customers.findIndex(c => c.id === customerId);
-    if (customerIndex === -1) {
-      throw new Error('العميل غير موجود');
-    }
-
-    const currentAdvance = customers[customerIndex].advanceBalance || 0;
-    const newAdvance = currentAdvance + amount;
-
-    if (newAdvance < -100000) {
-      throw new Error(`لا يمكن أن يكون الرصيد المسبق أقل من -100,000 ج.م`);
-    }
-
-    const updatedCustomers = [...customers];
-    updatedCustomers[customerIndex] = {
-      ...updatedCustomers[customerIndex],
-      advanceBalance: newAdvance,
-      advanceBalanceHistory: [
-        ...(updatedCustomers[customerIndex].advanceBalanceHistory || []),
-        {
-          id: Date.now(),
-          amount: amount,
-          reason: reason,
-          previousBalance: currentAdvance,
-          newBalance: newAdvance,
-          date: new Date().toISOString()
-        }
-      ]
-    };
-
-    setCustomers(updatedCustomers);
-    saveData('bero_customers', updatedCustomers);
-
-    console.log(`✅ تم تحديث الرصيد المسبق للعميل ${customerId}:`, {
-      amount: amount,
-      reason: reason,
-      previousBalance: currentAdvance,
-      newBalance: newAdvance
-    });
-  };
-
-  /**
-   * تحديث الأرصدة المسبقة للمورد
-   */
-  const updateSupplierAdvanceBalance = (supplierId, amount, reason = '') => {
-    const supplierIndex = suppliers.findIndex(s => s.id === supplierId);
-    if (supplierIndex === -1) {
-      throw new Error('المورد غير موجود');
-    }
-
-    const currentAdvance = suppliers[supplierIndex].advanceBalance || 0;
-    const newAdvance = currentAdvance + amount;
-
-    if (newAdvance < -100000) {
-      throw new Error(`لا يمكن أن يكون الرصيد المسبق أقل من -100,000 ج.م`);
-    }
-
-    const updatedSuppliers = [...suppliers];
-    updatedSuppliers[supplierIndex] = {
-      ...updatedSuppliers[supplierIndex],
-      advanceBalance: newAdvance,
-      advanceBalanceHistory: [
-        ...(updatedSuppliers[supplierIndex].advanceBalanceHistory || []),
-        {
-          id: Date.now(),
-          amount: amount,
-          reason: reason,
-          previousBalance: currentAdvance,
-          newBalance: newAdvance,
-          date: new Date().toISOString()
-        }
-      ]
-    };
-
-    setSuppliers(updatedSuppliers);
-    saveData('bero_suppliers', updatedSuppliers);
-
-    console.log(`✅ تم تحديث الرصيد المسبق للمورد ${supplierId}:`, {
-      amount: amount,
-      reason: reason,
-      previousBalance: currentAdvance,
-      newBalance: newAdvance
-    });
+    // استدعاء دالة الإيصال الأساسية
+    return addCashReceipt(updatedReceiptData);
   };
   
   // إضافة إيصال صرف نقدي مع ربط بالفواتير
@@ -2924,10 +2613,6 @@ export const DataProvider = ({ children }) => {
     payPurchaseInvoiceAmount,
     addCashReceiptWithInvoiceLink,
     addCashDisbursementWithInvoiceLink,
-    
-    // ==================== دوال النظام الذكي للأرصدة المسبقة ====================
-    updateCustomerAdvanceBalance,
-    updateSupplierAdvanceBalance,
     
     // ==================== دوال الموارد البشرية ====================
     
