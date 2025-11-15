@@ -27,12 +27,10 @@ const SupplierBalances = () => {
   // فلترة وبحث
   const filteredBalances = useMemo(() => {
     return supplierBalances.filter(supplier => {
-      // بحث بالاسم والهاتف والمنطقة ونوع المورد
+      // بحث بالاسم
       const matchesSearch = supplier.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           supplier.phone1?.includes(searchTerm) ||
-                           supplier.phone2?.includes(searchTerm) ||
-                           supplier.area?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           supplier.supplierType?.toLowerCase().includes(searchTerm.toLowerCase());
+                           supplier.phone?.includes(searchTerm) ||
+                           supplier.email?.toLowerCase().includes(searchTerm.toLowerCase());
       
       // إخفاء فلترة الأرصدة
       let matchesFilter = true;
@@ -151,7 +149,7 @@ const SupplierBalances = () => {
             <FaSearch className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
             <input
               type="text"
-              placeholder="بحث بالاسم أو الهاتف أو المنطقة أو نوع المورد..."
+              placeholder="بحث بالاسم أو الهاتف أو البريد..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pr-10 pl-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -179,7 +177,7 @@ const SupplierBalances = () => {
                 <th className="px-4 py-3 text-right text-sm font-semibold">#</th>
                 <th className="px-4 py-3 text-right text-sm font-semibold">اسم المورد</th>
                 <th className="px-4 py-3 text-right text-sm font-semibold">رقم الهاتف</th>
-                <th className="px-4 py-3 text-right text-sm font-semibold">المنطقة</th>
+                <th className="px-4 py-3 text-right text-sm font-semibold">البريد الإلكتروني</th>
                 <th className="px-4 py-3 text-center text-sm font-semibold">الرصيد</th>
                 <th className="px-4 py-3 text-center text-sm font-semibold">الحالة</th>
               </tr>
@@ -196,13 +194,8 @@ const SupplierBalances = () => {
                   <tr key={supplier.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 text-sm">{index + 1}</td>
                     <td className="px-4 py-3 text-sm font-medium">{supplier.name}</td>
-                    <td className="px-4 py-3 text-sm">
-                      {supplier.phone1 || supplier.phone2 ? 
-                        `${supplier.phone1 || ''}${supplier.phone1 && supplier.phone2 ? ' / ' : ''}${supplier.phone2 || ''}` : 
-                        '-'
-                      }
-                    </td>
-                    <td className="px-4 py-3 text-sm">{supplier.area || '-'}</td>
+                    <td className="px-4 py-3 text-sm">{supplier.phone || '-'}</td>
+                    <td className="px-4 py-3 text-sm">{supplier.email || '-'}</td>
                     <td className="px-4 py-3 text-center">
                       <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800">
                         معلومات محمية

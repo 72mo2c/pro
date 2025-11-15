@@ -2,40 +2,19 @@
 // New Cash Receipt - إضافة إذن استلام نقدي
 // ======================================
 
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../../context/DataContext';
-import { useSystemSettings } from '../../hooks/useSystemSettings';
 import { useNotification } from '../../context/NotificationContext';
-import { useTab } from '../../contexts/TabContext';
 import PageHeader from '../../components/Common/PageHeader';
 import Card from '../../components/Common/Card';
 import Button from '../../components/Common/Button';
-import { 
-  FaSave, 
-  FaTimes, 
-  FaMoneyBillWave, 
-  FaList,
-  FaUser,
-  FaBuilding,
-  FaBalanceScale,
-  FaExclamationTriangle,
-  FaCheckCircle,
-  FaCalculator,
-  FaHistory
-} from 'react-icons/fa';
+import { FaSave, FaTimes, FaMoneyBillWave } from 'react-icons/fa';
 
 const NewCashReceipt = () => {
   const navigate = useNavigate();
-  const { addCashReceipt, customers, suppliers, getCustomerBalance, getSupplierBalance, treasuryBalance } = useData();
-  const { settings } = useSystemSettings();
-  const { showError, showSuccess, showInfo } = useNotification();
-  const { openTab } = useTab();
-  
-  // دالة لفتح سجل إيصالات الاستلام في تبويبة جديدة
-  const handleOpenReceiptsRecord = () => {
-    openTab('/treasury/receipts', 'سجل إيصالات الاستلام', '💰');
-  };
+  const { addCashReceipt, customers, suppliers } = useData();
+  const { showError, showSuccess } = useNotification();
   
   const [formData, setFormData] = useState({
     receiptNumber: `REC-${Date.now()}`,
@@ -45,6 +24,7 @@ const NewCashReceipt = () => {
     fromType: 'customer', // customer, supplier, other
     fromId: '',
     fromName: '',
+    category: 'invoice_payment', // invoice_payment, return_refund, capital, bank, other
     paymentMethod: 'cash', // cash, check, bank_transfer
     referenceNumber: '',
     notes: '',
@@ -54,7 +34,16 @@ const NewCashReceipt = () => {
   const [selectedSource, setSelectedSource] = useState(null);
   
   const [errors, setErrors] = useState({});
-  const [processing, setProcessing] = useState(false);
+  
+  // خيارات الفئات
+  const categoryOptions = [
+    { value: 'invoice_payment', label: 'سداد فاتورة مبيعات' },
+    { value: 'return_refund', label: 'استرداد مرتجعات مشتريات' },
+    { value: 'capital', label: 'إيداع رأس مال' },
+    { value: 'bank', label: 'استلام من بنك' },
+    { value: 'revenue', label: 'إيرادات متنوعة' },
+    { value: 'other', label: 'أخرى' }
+  ];
   
   // خيارات طرق الدفع
   const paymentMethods = [
@@ -62,73 +51,7 @@ const NewCashReceipt = () => {
     { value: 'check', label: 'شيك' },
     { value: 'bank_transfer', label: 'تحويل بنكي' }
   ];
-
-  // دالة تنسيق العملة
-  const formatCurrency = (amount) => {
-    const currency = settings?.currency || 'EGP';
-    const locale = settings?.language === 'ar' ? 'ar-EG' : 'en-US';
-    return new Intl.NumberFormat(locale, {
-      style: 'currency',
-      currency: currency
-    }).format(amount);
-  };
   
-  // حساب الرصيد الحالي للعميل/المورد
-  const getSourceCurrentBalance = () => {
-    if (formData.fromType === 'customer' && formData.fromId) {
-      return getCustomerBalance(parseInt(formData.fromId));
-    } else if (formData.fromType === 'supplier' && formData.fromId) {
-      return getSupplierBalance(parseInt(formData.fromId));
-    }
-    return 0;
-  };
-
-  // حساب المبلغ المتبقي بعد الخصم من الدين
-  const getRemainingAmount = () => {
-    const currentBalance = getSourceCurrentBalance();
-    const paymentAmount = parseFloat(formData.amount) || 0;
-    
-    if (currentBalance > 0) {
-      // هناك دين - سيتم خصم من الدين
-      return Math.max(0, paymentAmount - currentBalance);
-    }
-    // لا يوجد دين - كل المبلغ يذهب للخزينة
-    return paymentAmount;
-  };
-
-  // تحديد نوع المعاملة
-  const getTransactionType = () => {
-    const currentBalance = getSourceCurrentBalance();
-    const paymentAmount = parseFloat(formData.amount) || 0;
-    
-    if (currentBalance > 0) {
-      if (paymentAmount >= currentBalance) {
-        return 'دفع دين كامل';
-      } else {
-        return 'دفع دين جزئي';
-      }
-    }
-    return 'دفع مقدماً';
-  };
-
-  // معلومات المعاملة المحسوبة
-  const transactionInfo = useMemo(() => {
-    const currentBalance = getSourceCurrentBalance();
-    const paymentAmount = parseFloat(formData.amount) || 0;
-    const remainingAmount = getRemainingAmount();
-    const transactionType = getTransactionType();
-    
-    return {
-      currentBalance,
-      paymentAmount,
-      remainingAmount,
-      transactionType,
-      willReduceBalance: currentBalance > 0,
-      willIncreaseBalance: currentBalance <= 0,
-      newBalanceAfterPayment: Math.max(0, currentBalance - paymentAmount)
-    };
-  }, [formData.fromType, formData.fromId, formData.amount, getCustomerBalance, getSupplierBalance]);
-
   // الحصول على قائمة المصادر بناءً على النوع
   const getSourceList = () => {
     if (formData.fromType === 'customer') {
@@ -191,12 +114,8 @@ const NewCashReceipt = () => {
       newErrors.fromName = 'يرجى إدخال اسم المصدر';
     }
     
-    // التحقق من الرصيد الكافي في الخزينة
-    if (formData.paymentMethod === 'cash') {
-      const paymentAmount = parseFloat(formData.amount) || 0;
-      if (paymentAmount > treasuryBalance) {
-        newErrors.amount = `الرصيد المتوفر في الخزينة (${formatCurrency(treasuryBalance)}) غير كافٍ`;
-      }
+    if (!formData.category) {
+      newErrors.category = 'يرجى اختيار الفئة';
     }
     
     setErrors(newErrors);
@@ -210,53 +129,16 @@ const NewCashReceipt = () => {
       return;
     }
     
-    setProcessing(true);
-    
     try {
       const receiptData = {
         ...formData,
-        date: `${formData.date}T${formData.time}:00`,
-        // معلومات إضافية لحركة الخزينة
-        transactionInfo: {
-          currentBalance: transactionInfo.currentBalance,
-          paymentAmount: transactionInfo.paymentAmount,
-          remainingAmount: transactionInfo.remainingAmount,
-          transactionType: transactionInfo.transactionType,
-          newBalanceAfterPayment: transactionInfo.newBalanceAfterPayment,
-          willReduceBalance: transactionInfo.willReduceBalance,
-          willIncreaseBalance: transactionInfo.willIncreaseBalance
-        }
+        date: `${formData.date}T${formData.time}:00`
       };
-      
       addCashReceipt(receiptData);
-      
-      // عرض رسالة تفصيلية حسب نوع المعاملة
-      const { transactionType, currentBalance, remainingAmount, newBalanceAfterPayment } = transactionInfo;
-      
-      let successMessage = `تم إضافة إيصال الاستلام بنجاح!\n`;
-      
-      if (transactionType === 'دفع دين كامل') {
-        successMessage += `تم سداد الدين بالكامل (${formatCurrency(currentBalance)})`;
-        if (remainingAmount > 0) {
-          successMessage += ` وإضافة ${formatCurrency(remainingAmount)} للخزينة`;
-        }
-        successMessage += `\nالرصيد الجديد: ${formatCurrency(newBalanceAfterPayment)}`;
-      } else if (transactionType === 'دفع دين جزئي') {
-        successMessage += `تم خصم ${formatCurrency(transactionInfo.paymentAmount)} من الدين`;
-        successMessage += `\nالرصيد المتبقي: ${formatCurrency(newBalanceAfterPayment)}`;
-      } else {
-        successMessage += `تم إضافة ${formatCurrency(transactionInfo.paymentAmount)} للخزينة`;
-        if (currentBalance < 0) {
-          successMessage += `\nالرصيد المتوفر: ${formatCurrency(Math.abs(currentBalance))} كرصيد مسبق`;
-        }
-      }
-      
-      showSuccess(successMessage);
+      showSuccess('تم إضافة إيصال الاستلام بنجاح');
       navigate('/treasury/receipts');
     } catch (error) {
       showError('خطأ: ' + error.message);
-    } finally {
-      setProcessing(false);
     }
   };
   
@@ -265,74 +147,74 @@ const NewCashReceipt = () => {
   };
   
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <PageHeader 
         title="إذن استلام نقدي جديد"
         icon={<FaMoneyBillWave />}
       />
       
       <Card>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-6">
           {/* معلومات الإيصال */}
           <div>
-            <h3 className="text-md font-semibold mb-3 text-gray-800">معلومات الإيصال</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <h3 className="text-lg font-semibold mb-4">معلومات الإيصال</h3>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
-                <label className="block text-xs font-medium mb-1 text-gray-700">رقم الإيصال</label>
+                <label className="block text-sm font-medium mb-2">رقم الإيصال</label>
                 <input
                   type="text"
                   name="receiptNumber"
                   value={formData.receiptNumber}
                   onChange={handleChange}
-                  className="w-full px-3 py-1.5 text-sm border rounded-md bg-gray-50"
+                  className="w-full px-4 py-2 border rounded-lg bg-gray-50"
                   readOnly
                 />
               </div>
               
               <div>
-                <label className="block text-xs font-medium mb-1 text-gray-700">
-                  المبلغ <span className="text-red-500 text-xs">*</span>
+                <label className="block text-sm font-medium mb-2">
+                  المبلغ <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="number"
                   name="amount"
                   value={formData.amount}
                   onChange={handleChange}
-                  className={`w-full px-3 py-1.5 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 ${
-                    errors.amount ? 'border-red-500' : 'border-gray-300'
+                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                    errors.amount ? 'border-red-500' : ''
                   }`}
                   placeholder="0.00"
                   step="0.01"
                   min="0"
                 />
                 {errors.amount && (
-                  <p className="text-red-500 text-xs mt-1">{errors.amount}</p>
+                  <p className="text-red-500 text-sm mt-1">{errors.amount}</p>
                 )}
               </div>
 
               <div>
-                <label className="block text-xs font-medium mb-1 text-gray-700">
-                  التاريخ <span className="text-red-500 text-xs">*</span>
+                <label className="block text-sm font-medium mb-2">
+                  التاريخ <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="date"
                   name="date"
                   value={formData.date}
                   onChange={handleChange}
-                  className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium mb-1 text-gray-700">
-                  الوقت <span className="text-red-500 text-xs">*</span>
+                <label className="block text-sm font-medium mb-2">
+                  الوقت <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="time"
                   name="time"
                   value={formData.time}
                   onChange={handleChange}
-                  className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
               </div>
             </div>
@@ -340,17 +222,17 @@ const NewCashReceipt = () => {
           
           {/* معلومات المصدر */}
           <div>
-            <h3 className="text-md font-semibold mb-3 text-gray-800">معلومات المصدر</h3>
-            <div className="grid grid-cols-2 md:grid-cols-2 gap-3">
+            <h3 className="text-lg font-semibold mb-4">معلومات المصدر</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-medium mb-1 text-gray-700">
-                  نوع المصدر <span className="text-red-500 text-xs">*</span>
+                <label className="block text-sm font-medium mb-2">
+                  نوع المصدر <span className="text-red-500">*</span>
                 </label>
                 <select
                   name="fromType"
                   value={formData.fromType}
                   onChange={handleChange}
-                  className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="customer">عميل</option>
                   <option value="supplier">مورد</option>
@@ -361,189 +243,75 @@ const NewCashReceipt = () => {
               {formData.fromType !== 'other' ? (
                 <>
                   <div>
-                    <label className="block text-xs font-medium mb-1 text-gray-700">
-                      {formData.fromType === 'customer' ? 'العميل' : 'المورد'} <span className="text-red-500 text-xs">*</span>
+                    <label className="block text-sm font-medium mb-2">
+                      {formData.fromType === 'customer' ? 'العميل' : 'المورد'} <span className="text-red-500">*</span>
                     </label>
                     <select
                       name="fromId"
                       value={formData.fromId}
                       onChange={handleChange}
-                      className={`w-full px-3 py-1.5 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 ${
-                        errors.fromId ? 'border-red-500' : 'border-gray-300'
+                      className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                        errors.fromId ? 'border-red-500' : ''
                       }`}
                     >
                       <option value="">اختر {formData.fromType === 'customer' ? 'العميل' : 'المورد'}</option>
                       {getSourceList().map(source => (
                         <option key={source.id} value={source.id}>
-                          {source.name} - {
-                            formData.fromType === 'customer' 
-                              ? (source.phone1 || source.phone2 || 'لا يوجد هاتف')
-                              : (source.phone1 || source.phone2 || 'لا يوجد هاتف')
-                          }
+                          {source.name} - {source.phone || 'لا يوجد هاتف'}
                         </option>
                       ))}
                     </select>
                     {errors.fromId && (
-                      <p className="text-red-500 text-xs mt-1">{errors.fromId}</p>
+                      <p className="text-red-500 text-sm mt-1">{errors.fromId}</p>
                     )}
                   </div>
                   
-                  {/* عرض معلومات المصدر المختار وحالة الرصيد */}
+                  {/* عرض معلومات المصدر المختار */}
                   {selectedSource && (
                     <div className="md:col-span-2">
-                      <div className="bg-blue-50 border border-blue-200 rounded-md p-3 mb-3">
-                        <h4 className="font-semibold text-blue-900 mb-2 text-sm flex items-center gap-2">
-                          {formData.fromType === 'customer' ? <FaUser className="text-blue-600" /> : <FaBuilding className="text-blue-600" />}
-                          معلومات {formData.fromType === 'customer' ? 'العميل' : 'المورد'}
-                        </h4>
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <h4 className="font-semibold text-blue-900 mb-2">معلومات {formData.fromType === 'customer' ? 'العميل' : 'المورد'}:</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
                           <div>
                             <span className="text-gray-600">الاسم:</span>
                             <p className="font-medium">{selectedSource.name}</p>
                           </div>
                           <div>
-                            <span className="text-gray-600">الهاتف الأول:</span>
-                            <p className="font-medium">{selectedSource.phone1 || selectedSource.phone || '-'}</p>
+                            <span className="text-gray-600">الهاتف:</span>
+                            <p className="font-medium">{selectedSource.phone || '-'}</p>
                           </div>
                           <div>
-                            <span className="text-gray-600">الهاتف الثاني:</span>
-                            <p className="font-medium">{selectedSource.phone2 || '-'}</p>
+                            <span className="text-gray-600">البريد الإلكتروني:</span>
+                            <p className="font-medium">{selectedSource.email || '-'}</p>
                           </div>
                           {selectedSource.address && (
-                            <div>
+                            <div className="md:col-span-3">
                               <span className="text-gray-600">العنوان:</span>
                               <p className="font-medium">{selectedSource.address}</p>
                             </div>
                           )}
-                          {formData.fromType === 'customer' && selectedSource.area && (
-                            <div>
-                              <span className="text-gray-600">النطاق:</span>
-                              <p className="font-medium">{selectedSource.area}</p>
-                            </div>
-                          )}
-                          {formData.fromType === 'customer' && selectedSource.agentType && (
-                            <div>
-                              <span className="text-gray-600">نوع العميل:</span>
-                              <p className="font-medium">{selectedSource.agentType}</p>
-                            </div>
-                          )}
-                          {formData.fromType === 'supplier' && selectedSource.email && (
-                            <div className="md:col-span-3">
-                              <span className="text-gray-600">البريد الإلكتروني:</span>
-                              <p className="font-medium">{selectedSource.email}</p>
-                            </div>
-                          )}
                         </div>
                       </div>
-                      
-                      {/* بطاقة معلومات الرصيد والمعاملة */}
-                      {formData.amount && (
-                        <div className={`border rounded-md p-4 ${transactionInfo.currentBalance > 0 ? 'bg-orange-50 border-orange-200' : 'bg-green-50 border-green-200'}`}>
-                          <h4 className="font-semibold mb-3 text-sm flex items-center gap-2">
-                            <FaBalanceScale className={transactionInfo.currentBalance > 0 ? 'text-orange-600' : 'text-green-600'} />
-                            حالة المعاملة والرصيد
-                          </h4>
-                          
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                            <div className="flex justify-between">
-                              <span className="text-gray-600">الرصيد الحالي:</span>
-                              <span className={`font-bold ${transactionInfo.currentBalance > 0 ? 'text-orange-600' : transactionInfo.currentBalance < 0 ? 'text-blue-600' : 'text-gray-600'}`}>
-                                {formatCurrency(transactionInfo.currentBalance)}
-                              </span>
-                            </div>
-                            
-                            <div className="flex justify-between">
-                              <span className="text-gray-600">مبلغ الدفع:</span>
-                              <span className="font-bold text-blue-600">{formatCurrency(transactionInfo.paymentAmount)}</span>
-                            </div>
-                            
-                            {transactionInfo.currentBalance > 0 && (
-                              <div className="flex justify-between">
-                                <span className="text-gray-600">سيتم خصم:</span>
-                                <span className="font-bold text-orange-600">{formatCurrency(Math.min(transactionInfo.paymentAmount, transactionInfo.currentBalance))}</span>
-                              </div>
-                            )}
-                            
-                            {transactionInfo.remainingAmount > 0 && (
-                              <div className="flex justify-between">
-                                <span className="text-gray-600">سيتم إضافته للخزينة:</span>
-                                <span className="font-bold text-green-600">{formatCurrency(transactionInfo.remainingAmount)}</span>
-                              </div>
-                            )}
-                            
-                            <div className="flex justify-between md:col-span-2">
-                              <span className="text-gray-600">نوع المعاملة:</span>
-                              <span className={`font-semibold ${transactionInfo.currentBalance > 0 ? 'text-orange-600' : 'text-green-600'}`}>
-                                {transactionInfo.transactionType}
-                              </span>
-                            </div>
-                            
-                            <div className="flex justify-between md:col-span-2">
-                              <span className="text-gray-600">الرصيد بعد المعاملة:</span>
-                              <span className={`font-bold ${transactionInfo.newBalanceAfterPayment > 0 ? 'text-orange-600' : transactionInfo.newBalanceAfterPayment < 0 ? 'text-blue-600' : 'text-green-600'}`}>
-                                {formatCurrency(transactionInfo.newBalanceAfterPayment)}
-                              </span>
-                            </div>
-                          </div>
-                          
-                          {/* تحذيرات وتوضيحات */}
-                          <div className="mt-3 pt-3 border-t border-gray-200">
-                            {transactionInfo.currentBalance > transactionInfo.paymentAmount ? (
-                              <div className="flex items-start gap-2 text-orange-700 bg-orange-100 p-2 rounded text-xs">
-                                <FaExclamationTriangle className="text-orange-600 mt-0.5 flex-shrink-0" />
-                                <div>
-                                  <p className="font-medium">دفع جزئي للدين</p>
-                                  <p>سيتم خصم {formatCurrency(transactionInfo.paymentAmount)} من الدين المتبقي {formatCurrency(transactionInfo.currentBalance)}</p>
-                                </div>
-                              </div>
-                            ) : transactionInfo.currentBalance > 0 ? (
-                              <div className="flex items-start gap-2 text-green-700 bg-green-100 p-2 rounded text-xs">
-                                <FaCheckCircle className="text-green-600 mt-0.5 flex-shrink-0" />
-                                <div>
-                                  <p className="font-medium">سداد دين كامل</p>
-                                  <p>سيتم سداد الدين بالكامل وإضافة {formatCurrency(transactionInfo.remainingAmount)} للخزينة</p>
-                                </div>
-                              </div>
-                            ) : transactionInfo.currentBalance < 0 ? (
-                              <div className="flex items-start gap-2 text-blue-700 bg-blue-100 p-2 rounded text-xs">
-                                <FaHistory className="text-blue-600 mt-0.5 flex-shrink-0" />
-                                <div>
-                                  <p className="font-medium">دفع مقدماً</p>
-                                  <p>العميل لديه رصيد مسبق {formatCurrency(Math.abs(transactionInfo.currentBalance))} سيتم إضافة المبلغ كاملاً للخزينة</p>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="flex items-start gap-2 text-green-700 bg-green-100 p-2 rounded text-xs">
-                                <FaCheckCircle className="text-green-600 mt-0.5 flex-shrink-0" />
-                                <div>
-                                  <p className="font-medium">دفع جديد</p>
-                                  <p>لا يوجد دين مسبق، سيتم إضافة المبلغ كاملاً للخزينة</p>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
                     </div>
                   )}
                 </>
               ) : (
                 <div>
-                  <label className="block text-xs font-medium mb-1 text-gray-700">
-                    اسم المصدر <span className="text-red-500 text-xs">*</span>
+                  <label className="block text-sm font-medium mb-2">
+                    اسم المصدر <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
                     name="fromName"
                     value={formData.fromName}
                     onChange={handleChange}
-                    className={`w-full px-3 py-1.5 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 ${
-                      errors.fromName ? 'border-red-500' : 'border-gray-300'
+                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                      errors.fromName ? 'border-red-500' : ''
                     }`}
                     placeholder="أدخل اسم المصدر"
                   />
                   {errors.fromName && (
-                    <p className="text-red-500 text-xs mt-1">{errors.fromName}</p>
+                    <p className="text-red-500 text-sm mt-1">{errors.fromName}</p>
                   )}
                 </div>
               )}
@@ -552,15 +320,38 @@ const NewCashReceipt = () => {
           
           {/* معلومات إضافية */}
           <div>
-            <h3 className="text-md font-semibold mb-3 text-gray-800">معلومات إضافية</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <h3 className="text-lg font-semibold mb-4">معلومات إضافية</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-medium mb-1 text-gray-700">طريقة الدفع</label>
+                <label className="block text-sm font-medium mb-2">
+                  الفئة <span className="text-red-500">*</span>
+                </label>
+                <select
+                  name="category"
+                  value={formData.category}
+                  onChange={handleChange}
+                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                    errors.category ? 'border-red-500' : ''
+                  }`}
+                >
+                  {categoryOptions.map(option => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                {errors.category && (
+                  <p className="text-red-500 text-sm mt-1">{errors.category}</p>
+                )}
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-2">طريقة الدفع</label>
                 <select
                   name="paymentMethod"
                   value={formData.paymentMethod}
                   onChange={handleChange}
-                  className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                 >
                   {paymentMethods.map(method => (
                     <option key={method.value} value={method.value}>
@@ -571,57 +362,49 @@ const NewCashReceipt = () => {
               </div>
               
               <div>
-                <label className="block text-xs font-medium mb-1 text-gray-700">رقم المرجع</label>
+                <label className="block text-sm font-medium mb-2">رقم المرجع</label>
                 <input
                   type="text"
                   name="referenceNumber"
                   value={formData.referenceNumber}
                   onChange={handleChange}
-                  className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                   placeholder="رقم الفاتورة أو المرجع"
                 />
               </div>
               
               <div>
-                <label className="block text-xs font-medium mb-1 text-gray-700">الوصف</label>
+                <label className="block text-sm font-medium mb-2">الوصف</label>
                 <input
                   type="text"
                   name="description"
                   value={formData.description}
                   onChange={handleChange}
-                  className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                   placeholder="وصف مختصر"
                 />
               </div>
             </div>
             
-            <div className="mt-3">
-              <label className="block text-xs font-medium mb-1 text-gray-700">ملاحظات</label>
+            <div className="mt-4">
+              <label className="block text-sm font-medium mb-2">ملاحظات</label>
               <textarea
                 name="notes"
                 value={formData.notes}
                 onChange={handleChange}
-                rows="2"
-                className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500"
+                rows="3"
+                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                 placeholder="ملاحظات إضافية..."
               />
             </div>
           </div>
           
           {/* أزرار التحكم */}
-          <div className="flex flex-wrap justify-center gap-3 pt-3 border-t">
-            <button
-              type="button"
-              onClick={handleOpenReceiptsRecord}
-              className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white px-4 py-1.5 rounded-md transition-colors font-medium text-xs shadow-sm hover:shadow-md"
-              title="فتح سجل إيصالات الاستلام في تبويبة جديدة"
-            >
-              <FaList /> سجل الإيصالات
-            </button>
-            <Button type="submit" variant="primary" icon={<FaSave />} size="sm" disabled={processing}>
-              {processing ? 'جارِ الحفظ...' : 'حفظ الإيصال'}
+          <div className="flex gap-4 pt-4 border-t">
+            <Button type="submit" variant="primary" icon={<FaSave />}>
+              حفظ الإيصال
             </Button>
-            <Button type="button" variant="secondary" icon={<FaTimes />} onClick={handleCancel} size="sm">
+            <Button type="button" variant="secondary" icon={<FaTimes />} onClick={handleCancel}>
               إلغاء
             </Button>
           </div>

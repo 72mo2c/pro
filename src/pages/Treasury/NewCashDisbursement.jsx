@@ -247,11 +247,7 @@ const NewCashDisbursement = () => {
                       </option>
                       {getRecipientList().map(recipient => (
                         <option key={recipient.id} value={recipient.id}>
-                          {recipient.name} - {
-                            formData.toType === 'supplier' 
-                              ? (recipient.phone1 || recipient.phone2 || 'لا يوجد هاتف')
-                              : (recipient.phone1 || recipient.phone2 || 'لا يوجد هاتف')
-                          }
+                          {recipient.name} - {recipient.phone || 'لا يوجد هاتف'}
                         </option>
                       ))}
                     </select>
@@ -271,35 +267,17 @@ const NewCashDisbursement = () => {
                             <p className="font-medium">{selectedRecipient.name}</p>
                           </div>
                           <div>
-                            <span className="text-gray-600">الهاتف الأول:</span>
-                            <p className="font-medium">{selectedRecipient.phone1 || selectedRecipient.phone || '-'}</p>
+                            <span className="text-gray-600">الهاتف:</span>
+                            <p className="font-medium">{selectedRecipient.phone || '-'}</p>
                           </div>
                           <div>
-                            <span className="text-gray-600">الهاتف الثاني:</span>
-                            <p className="font-medium">{selectedRecipient.phone2 || '-'}</p>
+                            <span className="text-gray-600">البريد الإلكتروني:</span>
+                            <p className="font-medium">{selectedRecipient.email || '-'}</p>
                           </div>
                           {selectedRecipient.address && (
-                            <div>
+                            <div className="md:col-span-3">
                               <span className="text-gray-600">العنوان:</span>
                               <p className="font-medium">{selectedRecipient.address}</p>
-                            </div>
-                          )}
-                          {formData.toType === 'customer' && selectedRecipient.area && (
-                            <div>
-                              <span className="text-gray-600">النطاق:</span>
-                              <p className="font-medium">{selectedRecipient.area}</p>
-                            </div>
-                          )}
-                          {formData.toType === 'customer' && selectedRecipient.agentType && (
-                            <div>
-                              <span className="text-gray-600">نوع العميل:</span>
-                              <p className="font-medium">{selectedRecipient.agentType}</p>
-                            </div>
-                          )}
-                          {formData.toType === 'supplier' && selectedRecipient.email && (
-                            <div className="md:col-span-3">
-                              <span className="text-gray-600">البريد الإلكتروني:</span>
-                              <p className="font-medium">{selectedRecipient.email}</p>
                             </div>
                           )}
                         </div>

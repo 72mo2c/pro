@@ -8,7 +8,6 @@ import { useData } from '../../context/DataContext';
 import { useSystemSettings } from '../../hooks/useSystemSettings';
 import { useAuth } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
-import { useTab } from '../../contexts/TabContext';
 import PageHeader from '../../components/Common/PageHeader';
 import Card from '../../components/Common/Card';
 import Button from '../../components/Common/Button';
@@ -20,13 +19,7 @@ import {
   FaTrash, 
   FaMoneyBillWave,
   FaSearch,
-  FaLock,
-  FaFileInvoice,
-  FaUsers,
-  FaPhone,
-  FaMapMarkerAlt,
-  FaInfoCircle,
-  FaCalculator
+  FaLock
 } from 'react-icons/fa';
 
 const ManageCashReceipts = () => {
@@ -35,7 +28,6 @@ const ManageCashReceipts = () => {
   const { settings } = useSystemSettings();
   const { hasPermission } = useAuth();
   const { showWarning, showError } = useNotification();
-  const { openTab } = useTab();
 
   // دالة تنسيق العملة
   const formatCurrency = (amount) => {
@@ -50,7 +42,17 @@ const ManageCashReceipts = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedReceipt, setSelectedReceipt] = useState(null);
   const [showViewModal, setShowViewModal] = useState(false);
-
+  const [filterCategory, setFilterCategory] = useState('all');
+  
+  // خيارات الفئات
+  const categoryLabels = {
+    invoice_payment: 'سداد فاتورة مبيعات',
+    return_refund: 'استرداد مرتجعات مشتريات',
+    capital: 'إيداع رأس مال',
+    bank: 'استلام من بنك',
+    revenue: 'إيرادات متنوعة',
+    other: 'أخرى'
+  };
   
   const paymentMethodLabels = {
     cash: 'نقداً',
@@ -82,16 +84,19 @@ const ManageCashReceipts = () => {
       sourceName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       receipt.description?.toLowerCase().includes(searchTerm.toLowerCase());
     
-    return matchesSearch;
+    const matchesCategory = filterCategory === 'all' || receipt.category === filterCategory;
+    
+    return matchesSearch && matchesCategory;
   });
   
-  // أعمدة الجدول - تطابق Table API
+  // أعمدة الجدول
   const columns = [
-    { header: 'رقم الإيصال', accessor: 'receiptNumber' },
-    { header: 'التاريخ', accessor: 'date' },
-    { header: 'من', accessor: 'sourceName' },
-    { header: 'المبلغ', accessor: 'amount' },
-    { header: 'طريقة الدفع', accessor: 'paymentMethod' },
+    { key: 'receiptNumber', label: 'رقم الإيصال' },
+    { key: 'date', label: 'التاريخ' },
+    { key: 'sourceName', label: 'من' },
+    { key: 'amount', label: 'المبلغ' },
+    { key: 'category', label: 'الفئة' },
+    { key: 'paymentMethod', label: 'طريقة الدفع' },
   ];
   
   // تنسيق البيانات للجدول
@@ -106,6 +111,7 @@ const ManageCashReceipts = () => {
         مخفي
       </span>
     ),
+    category: categoryLabels[receipt.category] || receipt.category,
     paymentMethod: paymentMethodLabels[receipt.paymentMethod] || receipt.paymentMethod
   }));
   
@@ -140,8 +146,7 @@ const ManageCashReceipts = () => {
       showWarning('ليس لديك صلاحية إدارة إيصالات الاستلام');
       return;
     }
-    // فتح تبويبة جديدة لإضافة إيصال نقدي
-    openTab('/treasury/receipt/new', 'إضافة إيصال نقدي', '💰➕');
+    navigate('/treasury/receipt/new');
   };
   
   // حساب إجمالي الإيصالات
@@ -150,291 +155,206 @@ const ManageCashReceipts = () => {
   );
   
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <PageHeader 
-        title="سجل إيصالات الاستلام"
+        title="إدارة إيصالات الاستلام"
         icon={<FaMoneyBillWave />}
         action={
           hasPermission('manage_cash_receipts') && (
-            <Button onClick={handleAddNew} icon={<FaPlus />} size="sm">
+            <Button onClick={handleAddNew} icon={<FaPlus />}>
               إضافة إيصال جديد
             </Button>
           )
         }
       />
       
-      {/* بطاقات الإحصائيات المحسنة */}
+      {/* بطاقة الإحصائيات */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="hover:shadow-lg transition-shadow">
-          <div className="flex items-center gap-4">
-            <div className="bg-green-100 p-4 rounded-xl">
-              <FaMoneyBillWave className="text-2xl text-green-600" />
+        <Card>
+          <div className="text-center">
+            <div className="text-3xl font-bold text-green-600">
+              {hasPermission('view_cash_receipts') ? filteredReceipts.length : (
+                <span className="flex items-center justify-center gap-1 text-gray-400">
+                  <FaLock className="text-sm" />
+                  --
+                </span>
+              )}
             </div>
-            <div className="flex-1">
-              <div className="text-sm text-gray-600 mb-1">إجمالي الإيصالات</div>
-              <div className="text-3xl font-bold text-green-600">
-                {hasPermission('view_cash_receipts') ? filteredReceipts.length : (
-                  <span className="flex items-center gap-2 text-gray-400">
-                    <FaLock className="text-sm" />
-                    ----
-                  </span>
-                )}
-              </div>
-            </div>
+            <div className="text-gray-600 mt-2">إجمالي الإيصالات</div>
           </div>
         </Card>
         
-        <Card className="hover:shadow-lg transition-shadow">
-          <div className="flex items-center gap-4">
-            <div className="bg-blue-100 p-4 rounded-xl">
-              <FaMoneyBillWave className="text-2xl text-blue-600" />
+        <Card>
+          <div className="text-center">
+            <div className="text-3xl font-bold text-blue-600">
+              {hasPermission('view_financial_data') ? formatCurrency(totalReceipts) : (
+                <span className="flex items-center justify-center gap-1 text-gray-400">
+                  <FaLock className="text-sm" />
+                  --
+                </span>
+              )}
             </div>
-            <div className="flex-1">
-              <div className="text-sm text-gray-600 mb-1">إجمالي المبالغ</div>
-              <div className="text-3xl font-bold text-blue-600">
-                {hasPermission('view_financial_data') ? formatCurrency(totalReceipts) : (
-                  <span className="flex items-center gap-2 text-gray-400">
-                    <FaLock className="text-sm" />
-                    ----
-                  </span>
-                )}
-              </div>
-            </div>
+            <div className="text-gray-600 mt-2">إجمالي المبالغ</div>
           </div>
         </Card>
         
-        <Card className="hover:shadow-lg transition-shadow">
-          <div className="flex items-center gap-4">
-            <div className="bg-purple-100 p-4 rounded-xl">
-              <FaCalculator className="text-2xl text-purple-600" />
+        <Card>
+          <div className="text-center">
+            <div className="text-3xl font-bold text-purple-600">
+              {hasPermission('view_financial_data') ? formatCurrency(filteredReceipts.length > 0 ? (totalReceipts / filteredReceipts.length) : 0) : (
+                <span className="flex items-center justify-center gap-1 text-gray-400">
+                  <FaLock className="text-sm" />
+                  --
+                </span>
+              )}
             </div>
-            <div className="flex-1">
-              <div className="text-sm text-gray-600 mb-1">متوسط الإيصال</div>
-              <div className="text-3xl font-bold text-purple-600">
-                {hasPermission('view_financial_data') ? formatCurrency(filteredReceipts.length > 0 ? (totalReceipts / filteredReceipts.length) : 0) : (
-                  <span className="flex items-center gap-2 text-gray-400">
-                    <FaLock className="text-sm" />
-                    ----
-                  </span>
-                )}
-              </div>
-            </div>
+            <div className="text-gray-600 mt-2">متوسط الإيصال</div>
           </div>
         </Card>
       </div>
       
-      {/* أدوات البحث والفلترة المحسنة */}
       <Card>
-        <div className="space-y-4">
-          <div className="flex flex-col lg:flex-row gap-4">
-            {/* مربع البحث */}
-            <div className="flex-1 relative">
-              <FaSearch className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                placeholder="بحث برقم الإيصال أو المصدر أو الوصف..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pr-10 pl-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-              />
-            </div>
+        {/* أدوات البحث والفلترة */}
+        <div className="mb-6 flex flex-col md:flex-row gap-4">
+          <div className="flex-1 relative">
+            <FaSearch className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="بحث برقم الإيصال أو المصدر..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pr-10 pl-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
           </div>
           
-          {/* إحصائيات سريعة */}
-          <div className="flex flex-wrap gap-4 pt-4 border-t border-gray-200">
-            <div className="text-sm text-gray-600">
-              عرض <span className="font-semibold text-blue-600">{filteredReceipts.length}</span> من أصل 
-              <span className="font-semibold text-gray-800">{cashReceipts.length}</span> إيصال
-            </div>
-            {searchTerm && (
-              <div className="text-sm text-blue-600">
-                نتائج البحث عن: "<span className="font-semibold">{searchTerm}</span>"
-              </div>
-            )}
-          </div>
+          <select
+            value={filterCategory}
+            onChange={(e) => setFilterCategory(e.target.value)}
+            className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="all">جميع الفئات</option>
+            {Object.entries(categoryLabels).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
         </div>
         
         {/* الجدول */}
-        <div className="mt-6">
-          <Table
-            columns={columns}
-            data={tableData || []}
-            onView={handleView}
-            onDelete={handleDelete}
-          />
-        </div>
+        <Table
+          columns={columns}
+          data={tableData}
+          onView={handleView}
+          onDelete={handleDelete}
+        />
       </Card>
       
-      {/* Modal عرض تفاصيل الإيصال - تصميم محسن */}
+      {/* Modal عرض تفاصيل الإيصال */}
       <Modal
         isOpen={showViewModal}
         onClose={() => setShowViewModal(false)}
-        title={
-          <div className="flex items-center gap-3">
-            <FaMoneyBillWave className="text-green-600 text-xl" />
-            <span>تفاصيل إيصال الاستلام #{selectedReceipt?.receiptNumber}</span>
-          </div>
-        }
-        size="lg"
+        title="تفاصيل إيصال الاستلام"
       >
         {selectedReceipt && (() => {
           const sourceDetails = getSourceDetails(selectedReceipt);
           return (
-            <div className="space-y-6">
-              {/* معلومات الإيصال الأساسية */}
-              <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg p-6 border border-green-200">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                  <FaFileInvoice className="text-green-600" />
-                  معلومات الإيصال
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div className="bg-white rounded-lg p-4 shadow-sm border">
-                    <div className="text-sm text-gray-600 mb-1">رقم الإيصال</div>
-                    <div className="font-bold text-lg text-gray-800">{selectedReceipt.receiptNumber}</div>
-                  </div>
-                  
-                  <div className="bg-white rounded-lg p-4 shadow-sm border">
-                    <div className="text-sm text-gray-600 mb-1">التاريخ</div>
-                    <div className="font-bold text-lg text-gray-800">
-                      {new Date(selectedReceipt.date).toLocaleDateString('ar-EG')}
-                    </div>
-                  </div>
-                  
-                  <div className="bg-white rounded-lg p-4 shadow-sm border">
-                    <div className="text-sm text-gray-600 mb-1">المبلغ</div>
-                    <div className="font-bold text-xl text-green-600">
-                      {hasPermission('view_financial_data') ? 
-                        formatCurrency(parseFloat(selectedReceipt.amount)) : 
-                        <span className="flex items-center gap-1 text-gray-400">
-                          <FaLock className="text-sm" />
-                          مخفي
-                        </span>
-                      }
-                    </div>
-                  </div>
-                  
-                  <div className="bg-white rounded-lg p-4 shadow-sm border">
-                    <div className="text-sm text-gray-600 mb-1">طريقة الدفع</div>
-                    <div className="font-medium text-gray-800">
-                      {paymentMethodLabels[selectedReceipt.paymentMethod] || selectedReceipt.paymentMethod}
-                    </div>
-                  </div>
-                  
-                  {selectedReceipt.referenceNumber && (
-                    <div className="bg-white rounded-lg p-4 shadow-sm border">
-                      <div className="text-sm text-gray-600 mb-1">رقم المرجع</div>
-                      <div className="font-medium text-gray-800">{selectedReceipt.referenceNumber}</div>
-                    </div>
-                  )}
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <span className="font-semibold">رقم الإيصال:</span>
+                  <p className="mt-1">{selectedReceipt.receiptNumber}</p>
+                </div>
+                
+                <div>
+                  <span className="font-semibold">التاريخ:</span>
+                  <p className="mt-1">{new Date(selectedReceipt.date).toLocaleDateString('ar-EG')}</p>
+                </div>
+                
+                <div>
+                  <span className="font-semibold">المبلغ:</span>
+                  <p className="mt-1 text-2xl font-bold text-green-600">
+                    {hasPermission('view_financial_data') ? 
+                      formatCurrency(parseFloat(selectedReceipt.amount)) : 
+                      <span className="flex items-center gap-1 text-gray-400">
+                        <FaLock className="text-sm" />
+                        مخفي
+                      </span>
+                    }
+                  </p>
+                </div>
+                
+                <div>
+                  <span className="font-semibold">الفئة:</span>
+                  <p className="mt-1">{categoryLabels[selectedReceipt.category]}</p>
+                </div>
+                
+                <div className="col-span-2">
+                  <span className="font-semibold">طريقة الدفع:</span>
+                  <p className="mt-1">{paymentMethodLabels[selectedReceipt.paymentMethod]}</p>
                 </div>
               </div>
               
               {/* معلومات المصدر */}
-              <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-6 border border-blue-200">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                  <FaUsers className="text-blue-600" />
-                  معلومات المصدر
-                </h3>
+              <div className="border-t pt-4">
+                <h4 className="font-semibold mb-3">معلومات المصدر:</h4>
                 {sourceDetails ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="bg-white rounded-lg p-4 shadow-sm border">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                          <FaUsers className="text-blue-600" />
-                        </div>
-                        <div>
-                          <div className="text-sm text-gray-600">الاسم</div>
-                          <div className="font-bold text-gray-800">{sourceDetails.name}</div>
-                          <div className="text-xs text-gray-500">
-                            {selectedReceipt.fromType === 'customer' ? 'عميل' : 'مورد'}
-                          </div>
-                        </div>
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <span className="text-sm text-gray-600">الاسم:</span>
+                        <p className="font-medium">{sourceDetails.name}</p>
                       </div>
+                      <div>
+                        <span className="text-sm text-gray-600">النوع:</span>
+                        <p className="font-medium">
+                          {selectedReceipt.fromType === 'customer' ? 'عميل' : 'مورد'}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-sm text-gray-600">رقم الهاتف:</span>
+                        <p className="font-medium">{sourceDetails.phone || '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm text-gray-600">البريد الإلكتروني:</span>
+                        <p className="font-medium">{sourceDetails.email || '-'}</p>
+                      </div>
+                      {sourceDetails.address && (
+                        <div className="col-span-2">
+                          <span className="text-sm text-gray-600">العنوان:</span>
+                          <p className="font-medium">{sourceDetails.address}</p>
+                        </div>
+                      )}
                     </div>
-                    
-                    <div className="bg-white rounded-lg p-4 shadow-sm border">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                          <FaPhone className="text-green-600" />
-                        </div>
-                        <div>
-                          <div className="text-sm text-gray-600">رقم الهاتف</div>
-                          <div className="font-medium text-gray-800">
-                            {sourceDetails.phone1 || sourceDetails.phone2 ? 
-                              `${sourceDetails.phone1 || ''}${sourceDetails.phone1 && sourceDetails.phone2 ? ' / ' : ''}${sourceDetails.phone2 || ''}` : 
-                              <span className="text-gray-400">غير محدد</span>
-                            }
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="bg-white rounded-lg p-4 shadow-sm border">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center">
-                          <FaMapMarkerAlt className="text-yellow-600" />
-                        </div>
-                        <div>
-                          <div className="text-sm text-gray-600">المنطقة</div>
-                          <div className="font-medium text-gray-800">{sourceDetails.area || 'غير محدد'}</div>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {sourceDetails.address && (
-                      <div className="bg-white rounded-lg p-4 shadow-sm border md:col-span-2">
-                        <div className="flex items-start gap-3">
-                          <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center mt-1">
-                            <FaMapMarkerAlt className="text-red-600" />
-                          </div>
-                          <div>
-                            <div className="text-sm text-gray-600">العنوان</div>
-                            <div className="font-medium text-gray-800">{sourceDetails.address}</div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
                   </div>
                 ) : (
-                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
-                    <FaInfoCircle className="text-gray-400 text-2xl mx-auto mb-2" />
-                    <p className="text-gray-600">المصدر: {selectedReceipt.fromName || 'غير محدد'}</p>
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <p>المصدر: {selectedReceipt.fromName || 'غير محدد'}</p>
                   </div>
                 )}
               </div>
               
-              {/* الوصف والملاحظات */}
-              {(selectedReceipt.description || selectedReceipt.notes) && (
-                <div className="space-y-4">
-                  {selectedReceipt.description && (
-                    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                      <h4 className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
-                        <FaFileInvoice className="text-gray-600" />
-                        الوصف
-                      </h4>
-                      <p className="text-gray-700">{selectedReceipt.description}</p>
-                    </div>
-                  )}
-                  
-                  {selectedReceipt.notes && (
-                    <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
-                      <h4 className="font-semibold text-yellow-800 mb-2 flex items-center gap-2">
-                        <FaInfoCircle className="text-yellow-600" />
-                        ملاحظات
-                      </h4>
-                      <p className="text-yellow-700">{selectedReceipt.notes}</p>
-                    </div>
-                  )}
+              {selectedReceipt.referenceNumber && (
+                <div>
+                  <span className="font-semibold">رقم المرجع:</span>
+                  <p className="mt-1">{selectedReceipt.referenceNumber}</p>
                 </div>
               )}
               
-              {/* زر الإغلاق */}
-              <div className="flex justify-end pt-4 border-t bg-gray-50 -mx-6 -mb-6 px-6 pb-4 rounded-b-lg">
-                <Button 
-                  variant="secondary" 
-                  onClick={() => setShowViewModal(false)}
-                  className="px-8"
-                >
+              {selectedReceipt.description && (
+                <div>
+                  <span className="font-semibold">الوصف:</span>
+                  <p className="mt-1">{selectedReceipt.description}</p>
+                </div>
+              )}
+              
+              {selectedReceipt.notes && (
+                <div>
+                  <span className="font-semibold">ملاحظات:</span>
+                  <p className="mt-1 text-gray-600">{selectedReceipt.notes}</p>
+                </div>
+              )}
+              
+              <div className="pt-4 border-t">
+                <Button variant="secondary" onClick={() => setShowViewModal(false)}>
                   إغلاق
                 </Button>
               </div>
