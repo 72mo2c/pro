@@ -22,27 +22,12 @@ import {
   FaExclamationTriangle,
   FaCheckCircle,
   FaCalculator,
-  FaHistory,
-  FaFileInvoice,
-  FaSearch,
-  FaPlus,
-  FaMinus,
-  FaEye,
-  FaLink
+  FaHistory
 } from 'react-icons/fa';
 
 const NewCashReceipt = () => {
   const navigate = useNavigate();
-  const { 
-    addCashReceipt, 
-    customers, 
-    suppliers, 
-    getCustomerBalance, 
-    getSupplierBalance, 
-    treasuryBalance,
-    getCustomerDeferredInvoices,
-    addCashReceiptWithInvoiceLink
-  } = useData();
+  const { addCashReceipt, customers, suppliers, getCustomerBalance, getSupplierBalance, treasuryBalance } = useData();
   const { settings } = useSystemSettings();
   const { showError, showSuccess, showInfo } = useNotification();
   const { openTab } = useTab();
@@ -67,9 +52,7 @@ const NewCashReceipt = () => {
   });
   
   const [selectedSource, setSelectedSource] = useState(null);
-  const [deferredInvoices, setDeferredInvoices] = useState([]);
-  const [selectedInvoices, setSelectedInvoices] = useState([]);
-  const [showInvoicesList, setShowInvoicesList] = useState(false);
+  
   const [errors, setErrors] = useState({});
   const [processing, setProcessing] = useState(false);
   
@@ -156,96 +139,6 @@ const NewCashReceipt = () => {
     return [];
   };
   
-  // تحميل الفواتير الآجلة للعميل المختار
-  const loadDeferredInvoices = (sourceId, sourceType) => {
-    if (sourceType === 'customer' && sourceId) {
-      try {
-        const invoices = getCustomerDeferredInvoices(parseInt(sourceId));
-        setDeferredInvoices(invoices);
-        console.log('تم تحميل الفواتير الآجلة للعميل:', invoices);
-      } catch (error) {
-        console.error('خطأ في تحميل الفواتير الآجلة:', error);
-        setDeferredInvoices([]);
-      }
-    } else {
-      setDeferredInvoices([]);
-    }
-  };
-  
-  // إضافة فاتورة إلى قائمة المختارة
-  const addInvoiceToSelection = (invoice) => {
-    const existingIndex = selectedInvoices.findIndex(selected => selected.invoiceId === invoice.id);
-    
-    if (existingIndex >= 0) {
-      // الفاتورة مختارة مسبقاً - لا نضيفها مرة أخرى
-      return;
-    }
-    
-    const newSelection = {
-      invoiceId: invoice.id,
-      invoiceNumber: invoice.id,
-      invoiceDate: invoice.date,
-      totalAmount: invoice.originalAmount,
-      remainingAmount: invoice.remainingAmount,
-      paymentAmount: 0,
-      isFullySelected: false
-    };
-    
-    setSelectedInvoices(prev => [...prev, newSelection]);
-  };
-  
-  // إزالة فاتورة من قائمة المختارة
-  const removeInvoiceFromSelection = (invoiceId) => {
-    setSelectedInvoices(prev => prev.filter(selected => selected.invoiceId !== invoiceId));
-  };
-  
-  // تحديث مبلغ الدفع لفاتورة محددة
-  const updateInvoicePaymentAmount = (invoiceId, paymentAmount) => {
-    setSelectedInvoices(prev => prev.map(selected => {
-      if (selected.invoiceId === invoiceId) {
-        const maxAmount = selected.remainingAmount;
-        const amount = Math.min(parseFloat(paymentAmount) || 0, maxAmount);
-        return {
-          ...selected,
-          paymentAmount: amount,
-          isFullySelected: amount >= maxAmount
-        };
-      }
-      return selected;
-    }));
-  };
-  
-  // تحديد الفاتورة بالكامل
-  const selectInvoiceFully = (invoiceId) => {
-    setSelectedInvoices(prev => prev.map(selected => {
-      if (selected.invoiceId === invoiceId) {
-        return {
-          ...selected,
-          paymentAmount: selected.remainingAmount,
-          isFullySelected: true
-        };
-      }
-      return selected;
-    }));
-  };
-  
-  // حساب إجمالي مبالغ الفواتير المختارة
-  const getTotalSelectedInvoicePayments = () => {
-    return selectedInvoices.reduce((total, selected) => total + (selected.paymentAmount || 0), 0);
-  };
-  
-  // تحديد ما إذا كان يمكن استخدام وضع الفواتير المحددة
-  const canUseInvoiceMode = () => {
-    return formData.fromType === 'customer' && formData.fromId && selectedInvoices.length > 0;
-  };
-  
-  // حساب المبلغ الإضافي للخزينة (ما لا يذهب للفواتير)
-  const getAdditionalTreasuryAmount = () => {
-    const paymentAmount = parseFloat(formData.amount) || 0;
-    const totalInvoicePayments = getTotalSelectedInvoicePayments();
-    return Math.max(0, paymentAmount - totalInvoicePayments);
-  };
-  
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({
@@ -277,16 +170,8 @@ const NewCashReceipt = () => {
           ...prev,
           fromName: selected.name
         }));
-        
-        // تحميل الفواتير الآجلة للعميل المختار
-        if (formData.fromType === 'customer') {
-          loadDeferredInvoices(value, 'customer');
-          setSelectedInvoices([]); // مسح الفواتير المختارة السابقة
-        }
       } else {
         setSelectedSource(null);
-        setDeferredInvoices([]);
-        setSelectedInvoices([]);
       }
     }
   };
@@ -304,26 +189,6 @@ const NewCashReceipt = () => {
     
     if (formData.fromType === 'other' && !formData.fromName) {
       newErrors.fromName = 'يرجى إدخال اسم المصدر';
-    }
-    
-    // التحقق من الفواتير المختارة
-    if (canUseInvoiceMode()) {
-      const totalInvoicePayments = getTotalSelectedInvoicePayments();
-      const paymentAmount = parseFloat(formData.amount) || 0;
-      
-      if (totalInvoicePayments > paymentAmount) {
-        newErrors.invoices = `إجمالي مبالغ الفواتير المختارة (${formatCurrency(totalInvoicePayments)}) أكبر من مبلغ الدفع (${formatCurrency(paymentAmount)})`;
-      }
-      
-      // التحقق من أن المبالغ المدخلة للفواتير منطقية
-      selectedInvoices.forEach(selected => {
-        if (selected.paymentAmount > selected.remainingAmount) {
-          newErrors[`invoice_${selected.invoiceId}`] = `مبلغ السداد للفاتورة ${selected.invoiceNumber} أكبر من المتبقي`;
-        }
-        if (selected.paymentAmount < 0) {
-          newErrors[`invoice_${selected.invoiceId}`] = `مبلغ السداد للفاتورة ${selected.invoiceNumber} لا يمكن أن يكون سالباً`;
-        }
-      });
     }
     
     // التحقق من الرصيد الكافي في الخزينة
@@ -351,11 +216,6 @@ const NewCashReceipt = () => {
       const receiptData = {
         ...formData,
         date: `${formData.date}T${formData.time}:00`,
-        // الفواتير المرتبطة (إذا وجدت)
-        linkedInvoices: canUseInvoiceMode() ? selectedInvoices.map(selected => ({
-          invoiceId: selected.invoiceId,
-          paymentAmount: selected.paymentAmount
-        })) : [],
         // معلومات إضافية لحركة الخزينة
         transactionInfo: {
           currentBalance: transactionInfo.currentBalance,
@@ -364,38 +224,18 @@ const NewCashReceipt = () => {
           transactionType: transactionInfo.transactionType,
           newBalanceAfterPayment: transactionInfo.newBalanceAfterPayment,
           willReduceBalance: transactionInfo.willReduceBalance,
-          willIncreaseBalance: transactionInfo.willIncreaseBalance,
-          hasInvoiceLinks: canUseInvoiceMode(),
-          totalInvoicePayments: getTotalSelectedInvoicePayments(),
-          additionalTreasuryAmount: getAdditionalTreasuryAmount()
+          willIncreaseBalance: transactionInfo.willIncreaseBalance
         }
       };
       
-      // استخدام الدالة المحسنة التي تدعم ربط الفواتير
-      addCashReceiptWithInvoiceLink(receiptData);
+      addCashReceipt(receiptData);
       
       // عرض رسالة تفصيلية حسب نوع المعاملة
       const { transactionType, currentBalance, remainingAmount, newBalanceAfterPayment } = transactionInfo;
       
       let successMessage = `تم إضافة إيصال الاستلام بنجاح!\n`;
       
-      if (canUseInvoiceMode()) {
-        // رسالة مع ربط الفواتير
-        const totalInvoicePayments = getTotalSelectedInvoicePayments();
-        const additionalAmount = getAdditionalTreasuryAmount();
-        
-        successMessage += `تم ربط السداد بالفواتير: ${formatCurrency(totalInvoicePayments)}\n`;
-        
-        if (additionalAmount > 0) {
-          successMessage += `تم إضافة للخزينة: ${formatCurrency(additionalAmount)}\n`;
-        }
-        
-        selectedInvoices.forEach(selected => {
-          if (selected.paymentAmount > 0) {
-            successMessage += `- فاتورة ${selected.invoiceNumber}: ${formatCurrency(selected.paymentAmount)}\n`;
-          }
-        });
-      } else if (transactionType === 'دفع دين كامل') {
+      if (transactionType === 'دفع دين كامل') {
         successMessage += `تم سداد الدين بالكامل (${formatCurrency(currentBalance)})`;
         if (remainingAmount > 0) {
           successMessage += ` وإضافة ${formatCurrency(remainingAmount)} للخزينة`;
@@ -709,158 +549,6 @@ const NewCashReceipt = () => {
               )}
             </div>
           </div>
-          
-          {/* ==================== قسم إدارة الفواتير الآجلة (للمديرين فقط) ==================== */}
-          {formData.fromType === 'customer' && formData.fromId && deferredInvoices.length > 0 && (
-            <div>
-              <div className="bg-purple-50 border border-purple-200 rounded-md p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-md font-semibold text-purple-800 flex items-center gap-2">
-                    <FaFileInvoice className="text-purple-600" />
-                    إدارة فواتير العميل الآجلة
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={() => setShowInvoicesList(!showInvoicesList)}
-                    className="text-purple-600 hover:text-purple-800 text-sm font-medium flex items-center gap-1"
-                  >
-                    <FaEye />
-                    {showInvoicesList ? 'إخفاء' : 'عرض'} الفواتير ({deferredInvoices.length})
-                  </button>
-                </div>
-                
-                {showInvoicesList && (
-                  <div className="space-y-3">
-                    {/* قائمة الفواتير المتاحة */}
-                    <div className="bg-white border border-purple-100 rounded-md p-3">
-                      <h4 className="font-medium text-purple-700 mb-2 text-sm">الفواتير الآجلة المتاحة</h4>
-                      <div className="max-h-40 overflow-y-auto space-y-2">
-                        {deferredInvoices.map(invoice => {
-                          const isSelected = selectedInvoices.some(selected => selected.invoiceId === invoice.id);
-                          return (
-                            <div key={invoice.id} className="flex items-center justify-between p-2 bg-gray-50 rounded text-xs">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-medium">فاتورة #{invoice.id}</span>
-                                  <span className="text-gray-500">({new Date(invoice.date).toLocaleDateString('ar-EG')})</span>
-                                </div>
-                                <div className="text-gray-600 mt-1">
-                                  المبلغ الأصلي: {formatCurrency(invoice.originalAmount)} | 
-                                  المتبقي: <span className="text-orange-600 font-medium">{formatCurrency(invoice.remainingAmount)}</span>
-                                </div>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => addInvoiceToSelection(invoice)}
-                                disabled={isSelected}
-                                className={`px-2 py-1 rounded text-xs font-medium flex items-center gap-1 ${
-                                  isSelected 
-                                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
-                                    : 'bg-purple-600 text-white hover:bg-purple-700'
-                                }`}
-                              >
-                                <FaPlus />
-                                {isSelected ? 'مختارة' : 'اختيار'}
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                    
-                    {/* الفواتير المختارة */}
-                    {selectedInvoices.length > 0 && (
-                      <div className="bg-white border border-purple-100 rounded-md p-3">
-                        <div className="flex items-center justify-between mb-3">
-                          <h4 className="font-medium text-purple-700 text-sm">الفواتير المختارة للسداد</h4>
-                          <button
-                            type="button"
-                            onClick={() => setSelectedInvoices([])}
-                            className="text-red-600 hover:text-red-800 text-xs font-medium"
-                          >
-                            مسح الكل
-                          </button>
-                        </div>
-                        
-                        <div className="space-y-2 max-h-32 overflow-y-auto">
-                          {selectedInvoices.map(selected => {
-                            const invoice = deferredInvoices.find(inv => inv.id === selected.invoiceId);
-                            return (
-                              <div key={selected.invoiceId} className="bg-purple-50 border border-purple-200 rounded p-2">
-                                <div className="flex items-center justify-between mb-2">
-                                  <span className="font-medium text-purple-700 text-xs">
-                                    فاتورة #{selected.invoiceNumber}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => removeInvoiceFromSelection(selected.invoiceId)}
-                                    className="text-red-600 hover:text-red-800 text-xs"
-                                  >
-                                    <FaMinus />
-                                  </button>
-                                </div>
-                                
-                                <div className="grid grid-cols-3 gap-2 text-xs">
-                                  <div>
-                                    <span className="text-gray-600">المتبقي:</span>
-                                    <p className="font-medium">{formatCurrency(selected.remainingAmount)}</p>
-                                  </div>
-                                  
-                                  <div>
-                                    <label className="block text-gray-600 mb-1">مبلغ السداد:</label>
-                                    <input
-                                      type="number"
-                                      value={selected.paymentAmount}
-                                      onChange={(e) => updateInvoicePaymentAmount(selected.invoiceId, e.target.value)}
-                                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-purple-500"
-                                      min="0"
-                                      max={selected.remainingAmount}
-                                      step="0.01"
-                                    />
-                                    {errors[`invoice_${selected.invoiceId}`] && (
-                                      <p className="text-red-500 text-xs mt-1">{errors[`invoice_${selected.invoiceId}`]}</p>
-                                    )}
-                                  </div>
-                                  
-                                  <div className="flex items-end">
-                                    <button
-                                      type="button"
-                                      onClick={() => selectInvoiceFully(selected.invoiceId)}
-                                      className="w-full bg-purple-600 hover:bg-purple-700 text-white px-2 py-1 rounded text-xs font-medium"
-                                    >
-                                      دفع كامل
-                                    </button>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                        
-                        {/* ملخص الفواتير المختارة */}
-                        <div className="mt-3 pt-3 border-t border-purple-200">
-                          <div className="flex justify-between items-center text-sm">
-                            <span className="font-medium text-purple-700">إجمالي مبالغ الفواتير:</span>
-                            <span className="font-bold text-purple-600">{formatCurrency(getTotalSelectedInvoicePayments())}</span>
-                          </div>
-                          <div className="flex justify-between items-center text-sm mt-1">
-                            <span className="font-medium text-purple-700">سيتم إضافته للخزينة:</span>
-                            <span className="font-bold text-green-600">{formatCurrency(getAdditionalTreasuryAmount())}</span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    
-                    {errors.invoices && (
-                      <p className="text-red-500 text-xs mt-2 bg-red-50 border border-red-200 rounded p-2">
-                        {errors.invoices}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
           
           {/* معلومات إضافية */}
           <div>
