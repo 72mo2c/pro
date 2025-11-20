@@ -121,10 +121,48 @@ export const DataProvider = ({ children }) => {
   const [shipments, setShipments] = useState([]);  // شحنات التوصيل
   const [shippingRecords, setShippingRecords] = useState([]);  // سجلات الشحن
 
+  // ==================== نظام سلة المهملات ====================
+  const [deletedItems, setDeletedItems] = useState([]);  // سجل المحذوفات
+
+  // ==================== نظام تسجيل الأنشطة ====================
+  const [dailyActivities, setDailyActivities] = useState([]);  // أنشطة الجلسة/اليوم الحالي
+  const [activitiesArchive, setActivitiesArchive] = useState([]);  // أرشيف الأنشطة السابقة
+  const [currentSessionDate, setCurrentSessionDate] = useState(new Date().toISOString().split('T')[0]);  // تاريخ الجلسة الحالية
+
   // تحميل البيانات من LocalStorage
   useEffect(() => {
     loadAllData();
   }, []);
+
+  // دالة أرشفة الأنشطة السابقة (عند بداية يوم جديد)
+  const archivePreviousActivities = () => {
+    const storedActivities = localStorage.getItem('bero_daily_activities');
+    const storedArchive = localStorage.getItem('bero_activities_archive');
+    const storedSessionDate = localStorage.getItem('bero_session_date');
+    
+    if (storedActivities && storedSessionDate) {
+      try {
+        const activities = JSON.parse(storedActivities);
+        if (activities.length > 0) {
+          const archiveEntry = {
+            id: Date.now(),
+            date: storedSessionDate,
+            activities: activities,
+            archivedAt: new Date().toISOString(),
+            totalActivities: activities.length
+          };
+          
+          const currentArchive = storedArchive ? JSON.parse(storedArchive) : [];
+          const updatedArchive = [...currentArchive, archiveEntry];
+          
+          localStorage.setItem('bero_activities_archive', JSON.stringify(updatedArchive));
+          localStorage.setItem('bero_daily_activities', JSON.stringify([]));
+        }
+      } catch (error) {
+        console.error('خطأ في أرشفة الأنشطة:', error);
+      }
+    }
+  };
 
   // تحميل جميع البيانات
   const loadAllData = () => {
@@ -203,6 +241,24 @@ export const DataProvider = ({ children }) => {
     loadData('bero_shipping_vehicles', setShippingVehicles);
     loadData('bero_shipments', setShipments);
     loadData('bero_shipping_records', setShippingRecords);
+
+    // تحميل سلة المهملات
+    loadData('bero_deleted_items', setDeletedItems);
+    loadData('bero_daily_activities', setDailyActivities);
+    loadData('bero_activities_archive', setActivitiesArchive);
+    
+    // التحقق من تاريخ الجلسة
+    const storedSessionDate = localStorage.getItem('bero_session_date');
+    const today = new Date().toISOString().split('T')[0];
+    
+    if (storedSessionDate !== today) {
+      // يوم جديد - أرشفة الأنشطة السابقة
+      archivePreviousActivities();
+      setCurrentSessionDate(today);
+      localStorage.setItem('bero_session_date', today);
+    } else {
+      setCurrentSessionDate(storedSessionDate);
+    }
 
     // إضافة بيانات تجريبية للشاحنات إذا لم تكن موجودة
     if (!localStorage.getItem('bero_shipping_vehicles')) {
@@ -335,6 +391,43 @@ export const DataProvider = ({ children }) => {
   const saveData = (key, data) => {
     localStorage.setItem(key, JSON.stringify(data));
   };
+  
+  // ==================== دالة تسجيل النشاط ====================
+  // دالة مساعدة لتسجيل الأنشطة (يمكن استخدامها من أي دالة)
+  const logActivity = (activityType, details, relatedData = {}) => {
+    const activity = {
+      id: Date.now(),
+      type: activityType,
+      details: details,
+      relatedData: relatedData,
+      timestamp: new Date().toISOString(),
+      date: new Date().toLocaleDateString('ar-EG'),
+      time: new Date().toLocaleTimeString('ar-EG'),
+      sessionDate: currentSessionDate
+    };
+    
+    const updatedActivities = [...dailyActivities, activity];
+    setDailyActivities(updatedActivities);
+    saveData('bero_daily_activities', updatedActivities);
+    
+    return activity;
+  };
+
+  // ==================== دوال توليد أرقام الفواتير ====================
+  
+  // دالة للحصول على رقم فاتورة المشتريات التالي
+  const getNextPurchaseInvoiceId = () => {
+    if (purchaseInvoices.length === 0) return 1;
+    const maxId = Math.max(...purchaseInvoices.map(inv => inv.id));
+    return maxId + 1;
+  };
+
+  // دالة للحصول على رقم فاتورة المبيعات التالي
+  const getNextSalesInvoiceId = () => {
+    if (salesInvoices.length === 0) return 1;
+    const maxId = Math.max(...salesInvoices.map(inv => inv.id));
+    return maxId + 1;
+  };
 
   // ==================== دوال المخازن ====================
   
@@ -343,16 +436,39 @@ export const DataProvider = ({ children }) => {
     const updated = [...warehouses, newWarehouse];
     setWarehouses(updated);
     saveData('bero_warehouses', updated);
+    logActivity('warehouse_add', `إضافة مخزن جديد: ${newWarehouse.name}`, { warehouseId: newWarehouse.id, warehouseName: newWarehouse.name });
     return newWarehouse;
   };
 
   const updateWarehouse = (id, updatedData) => {
+    const warehouse = warehouses.find(w => w.id === id);
     const updated = warehouses.map(w => w.id === id ? { ...w, ...updatedData } : w);
     setWarehouses(updated);
     saveData('bero_warehouses', updated);
+    if (warehouse) {
+      logActivity('warehouse_edit', `تعديل مخزن: ${warehouse.name}`, { warehouseId: id, warehouseName: warehouse.name });
+    }
   };
 
   const deleteWarehouse = (id) => {
+    const warehouse = warehouses.find(w => w.id === id);
+    
+    // حفظ المخزن في سلة المهملات
+    if (warehouse) {
+      const deletedItem = {
+        id: Date.now(),
+        type: 'warehouse',
+        data: { ...warehouse },
+        deletedAt: new Date().toISOString(),
+        deletedBy: 'system'
+      };
+      const updatedDeleted = [...deletedItems, deletedItem];
+      setDeletedItems(updatedDeleted);
+      saveData('bero_deleted_items', updatedDeleted);
+      
+      logActivity('warehouse_delete', `حذف مخزن: ${warehouse.name}`, { warehouseId: id, warehouseName: warehouse.name });
+    }
+    
     const updated = warehouses.filter(w => w.id !== id);
     setWarehouses(updated);
     saveData('bero_warehouses', updated);
@@ -365,16 +481,39 @@ export const DataProvider = ({ children }) => {
     const updated = [...categories, newCategory];
     setCategories(updated);
     saveData('bero_categories', updated);
+    logActivity('category_add', `إضافة فئة جديدة: ${newCategory.name}`, { categoryId: newCategory.id, categoryName: newCategory.name });
     return newCategory;
   };
 
   const updateCategory = (id, updatedData) => {
+    const category = categories.find(c => c.id === id);
     const updated = categories.map(c => c.id === id ? { ...c, ...updatedData } : c);
     setCategories(updated);
     saveData('bero_categories', updated);
+    if (category) {
+      logActivity('category_edit', `تعديل فئة: ${category.name}`, { categoryId: id, categoryName: category.name });
+    }
   };
 
   const deleteCategory = (id) => {
+    const category = categories.find(c => c.id === id);
+    
+    // حفظ الفئة في سلة المهملات
+    if (category) {
+      const deletedItem = {
+        id: Date.now(),
+        type: 'category',
+        data: { ...category },
+        deletedAt: new Date().toISOString(),
+        deletedBy: 'system'
+      };
+      const updatedDeleted = [...deletedItems, deletedItem];
+      setDeletedItems(updatedDeleted);
+      saveData('bero_deleted_items', updatedDeleted);
+      
+      logActivity('category_delete', `حذف فئة: ${category.name}`, { categoryId: id, categoryName: category.name });
+    }
+    
     const updated = categories.filter(c => c.id !== id);
     setCategories(updated);
     saveData('bero_categories', updated);
@@ -387,16 +526,49 @@ export const DataProvider = ({ children }) => {
     const updated = [...products, newProduct];
     setProducts(updated);
     saveData('bero_products', updated);
+    
+    // تسجيل النشاط
+    logActivity('product_add', `إضافة منتج جديد: ${newProduct.name}`, { productId: newProduct.id, productName: newProduct.name });
+    
     return newProduct;
   };
 
   const updateProduct = (id, updatedData) => {
+    const product = products.find(p => p.id === id);
     const updated = products.map(p => p.id === id ? { ...p, ...updatedData } : p);
     setProducts(updated);
     saveData('bero_products', updated);
+    
+    // تسجيل النشاط
+    if (product) {
+      logActivity('product_edit', `تعديل منتج: ${product.name}`, { productId: id, productName: product.name });
+    }
   };
 
   const deleteProduct = (id) => {
+    // حفظ المنتج في سلة المهملات قبل الحذف
+    const productToDelete = products.find(p => p.id === id);
+    console.log('حذف منتج - المنتج المراد حذفه:', productToDelete);
+    
+    if (productToDelete) {
+      const deletedItem = {
+        id: Date.now(),
+        type: 'product',
+        data: { ...productToDelete },
+        deletedAt: new Date().toISOString(),
+        deletedBy: 'system'
+      };
+      const updatedDeleted = [...deletedItems, deletedItem];
+      console.log('تم إضافة المنتج لسلة المهملات:', deletedItem);
+      console.log('جميع العناصر المحذوفة بعد الإضافة:', updatedDeleted);
+      
+      setDeletedItems(updatedDeleted);
+      saveData('bero_deleted_items', updatedDeleted);
+      
+      // تسجيل النشاط
+      logActivity('product_delete', `حذف منتج: ${productToDelete.name}`, { productId: id, productName: productToDelete.name });
+    }
+    
     const updated = products.filter(p => p.id !== id);
     setProducts(updated);
     saveData('bero_products', updated);
@@ -405,20 +577,54 @@ export const DataProvider = ({ children }) => {
   // ==================== دوال الموردين ====================
   
   const addSupplier = (supplier) => {
-    const newSupplier = { id: Date.now(), ...supplier };
+    const newSupplier = { 
+      id: Date.now(), 
+      ...supplier,
+      balance: supplier.balance !== undefined ? supplier.balance : 0,
+      lastTransactionDate: null,
+      lastTransactionType: null
+    };
     const updated = [...suppliers, newSupplier];
     setSuppliers(updated);
     saveData('bero_suppliers', updated);
+    
+    // تسجيل النشاط
+    logActivity('supplier_add', `إضافة مورد جديد: ${newSupplier.name}`, { supplierId: newSupplier.id, supplierName: newSupplier.name });
+    
     return newSupplier;
   };
 
   const updateSupplier = (id, updatedData) => {
+    const supplier = suppliers.find(s => s.id === id);
     const updated = suppliers.map(s => s.id === id ? { ...s, ...updatedData } : s);
     setSuppliers(updated);
     saveData('bero_suppliers', updated);
+    
+    // تسجيل النشاط
+    if (supplier) {
+      logActivity('supplier_edit', `تعديل مورد: ${supplier.name}`, { supplierId: id, supplierName: supplier.name });
+    }
   };
 
   const deleteSupplier = (id) => {
+    const supplier = suppliers.find(s => s.id === id);
+    
+    // حفظ المورد في سلة المهملات
+    if (supplier) {
+      const deletedItem = {
+        id: Date.now(),
+        type: 'supplier',
+        data: { ...supplier },
+        deletedAt: new Date().toISOString(),
+        deletedBy: 'system'
+      };
+      const updatedDeleted = [...deletedItems, deletedItem];
+      setDeletedItems(updatedDeleted);
+      saveData('bero_deleted_items', updatedDeleted);
+      
+      logActivity('supplier_delete', `حذف مورد: ${supplier.name}`, { supplierId: id, supplierName: supplier.name });
+    }
+    
     const updated = suppliers.filter(s => s.id !== id);
     setSuppliers(updated);
     saveData('bero_suppliers', updated);
@@ -427,20 +633,59 @@ export const DataProvider = ({ children }) => {
   // ==================== دوال العملاء ====================
   
   const addCustomer = (customer) => {
-    const newCustomer = { id: Date.now(), ...customer };
+    const newCustomer = { 
+      id: Date.now(), 
+      ...customer,
+      balance: customer.balance !== undefined ? customer.balance : 0,
+      lastTransactionDate: null,
+      lastTransactionType: null
+    };
     const updated = [...customers, newCustomer];
     setCustomers(updated);
     saveData('bero_customers', updated);
+    
+    // تسجيل النشاط
+    logActivity('customer_add', `إضافة عميل جديد: ${newCustomer.name}`, { customerId: newCustomer.id, customerName: newCustomer.name });
+    
     return newCustomer;
   };
 
   const updateCustomer = (id, updatedData) => {
+    const customer = customers.find(c => c.id === id);
     const updated = customers.map(c => c.id === id ? { ...c, ...updatedData } : c);
     setCustomers(updated);
     saveData('bero_customers', updated);
+    
+    // تسجيل النشاط
+    if (customer) {
+      logActivity('customer_edit', `تعديل عميل: ${customer.name}`, { customerId: id, customerName: customer.name });
+    }
   };
 
   const deleteCustomer = (id) => {
+    // حفظ العميل في سلة المهملات قبل الحذف
+    const customerToDelete = customers.find(c => c.id === id);
+    console.log('حذف عميل - العميل المراد حذفه:', customerToDelete);
+    
+    if (customerToDelete) {
+      const deletedItem = {
+        id: Date.now(),
+        type: 'customer',
+        data: { ...customerToDelete },
+        deletedAt: new Date().toISOString(),
+        deletedBy: 'system'
+      };
+      const updatedDeleted = [...deletedItems, deletedItem];
+      console.log('تم إضافة العميل لسلة المهملات:', deletedItem);
+      console.log('جميع العناصر المحذوفة بعد الإضافة:', updatedDeleted);
+      
+      setDeletedItems(updatedDeleted);
+      saveData('bero_deleted_items', updatedDeleted);
+      
+      // تسجيل النشاط
+      logActivity('customer_delete', `حذف عميل: ${customerToDelete.name}`, { customerId: id, customerName: customerToDelete.name });
+    }
+    
     const updated = customers.filter(c => c.id !== id);
     setCustomers(updated);
     saveData('bero_customers', updated);
@@ -459,7 +704,7 @@ export const DataProvider = ({ children }) => {
     });
     
     const newInvoice = { 
-      id: Date.now(), 
+      id: getNextPurchaseInvoiceId(), 
       date: new Date().toISOString(), 
       ...invoice,
       items: enrichedItems,
@@ -486,7 +731,7 @@ export const DataProvider = ({ children }) => {
         toType: 'supplier',
         toId: invoice.supplierId,
         description: `شراء نقدي من المورد - فاتورة رقم ${newInvoice.id}`,
-        reference: `فاتورة مشتريات #${newInvoice.id}`,
+        reference: `فاتورة مشتريات ${newInvoice.id}`,
         type: 'purchase_payment'
       };
       
@@ -528,9 +773,15 @@ export const DataProvider = ({ children }) => {
       saveData('bero_products', updatedProducts);
     }
     
-    // === الكود الجديد: تحديث رصيد المورد ===
-    updateSupplierBalance(newInvoice.supplierId, newInvoice.total, 'debit');
-    // === نهاية الكود الجديد ===
+    // ✅ تم إزالة التحديث اليدوي للرصيد - سيتم حسابه تلقائياً من getSupplierBalance()
+    
+    // تسجيل النشاط
+    const supplier = suppliers.find(s => s.id === parseInt(invoice.supplierId));
+    logActivity('invoice_purchase_add', `فاتورة مشتريات جديدة #${newInvoice.id} - ${supplier?.name || 'غير محدد'} - ${newInvoice.total.toFixed(2)} ج.م`, { 
+      invoiceId: newInvoice.id, 
+      supplierId: invoice.supplierId, 
+      total: newInvoice.total 
+    });
     
     return newInvoice;
   };
@@ -603,6 +854,13 @@ export const DataProvider = ({ children }) => {
       setProducts(updatedProducts);
       saveData('bero_products', updatedProducts);
     }
+    
+    // تسجيل النشاط
+    const supplier = suppliers.find(s => s.id === parseInt(updatedData.supplierId || oldInvoice.supplierId));
+    logActivity('invoice_purchase_edit', `تعديل فاتورة مشتريات #${invoiceId} - ${supplier?.name || 'غير محدد'}`, { 
+      invoiceId: invoiceId,
+      supplierId: updatedData.supplierId || oldInvoice.supplierId 
+    });
   };
 
   const deletePurchaseInvoice = (invoiceId) => {
@@ -618,6 +876,23 @@ export const DataProvider = ({ children }) => {
       throw new Error('لا يمكن حذف الفاتورة: توجد مرتجعات مرتبطة بها');
     }
     
+    // ==================== حفظ الفاتورة في سلة المهملات ====================
+    const deletedItem = {
+      id: Date.now(),
+      type: 'invoice',
+      invoiceType: 'purchase',
+      data: { ...invoice },
+      deletedAt: new Date().toISOString(),
+      deletedBy: 'system'
+    };
+    const updatedDeleted = [...deletedItems, deletedItem];
+    console.log('حذف فاتورة مشتريات - الفاتورة المراد حذفها:', invoice);
+    console.log('تم إضافة الفاتورة لسلة المهملات:', deletedItem);
+    console.log('جميع العناصر المحذوفة بعد الإضافة:', updatedDeleted);
+    
+    setDeletedItems(updatedDeleted);
+    saveData('bero_deleted_items', updatedDeleted);
+    
     // === الكود الجديد: إرجاع المبلغ للخزينة ===
     if (invoice.paymentType === 'cash') {
       // إرجاع المبلغ للخزينة
@@ -627,16 +902,14 @@ export const DataProvider = ({ children }) => {
       
       // حذف حركة الصرف المرتبطة
       const disbursementToDelete = cashDisbursements.find(d => 
-        d.description?.includes(`فاتورة مشتريات #${invoiceId}`)
+        d.description?.includes(`فاتورة مشتريات ${invoiceId}`)
       );
       if (disbursementToDelete) {
         deleteCashDisbursement(disbursementToDelete.id);
       }
     }
     
-    // تحديث رصيد المورد (إلغاء الدين)
-    updateSupplierBalance(invoice.supplierId, invoice.total, 'credit');
-    // === نهاية الكود الجديد ===
+    // ✅ تم إزالة التحديث اليدوي للرصيد - سيتم حسابه تلقائياً من getSupplierBalance()
     
     // إعادة الكميات من المخزون (عكس عملية الشراء) مع المنطق الذكي
     if (invoice.items && Array.isArray(invoice.items)) {
@@ -697,6 +970,15 @@ export const DataProvider = ({ children }) => {
     const updated = purchaseInvoices.filter(inv => inv.id !== invoiceId);
     setPurchaseInvoices(updated);
     saveData('bero_purchase_invoices', updated);
+    
+    // تسجيل النشاط
+    const supplier = suppliers.find(s => s.id === parseInt(invoice.supplierId));
+    logActivity('invoice_delete', `حذف فاتورة مشتريات #${invoiceId} - ${supplier?.name || 'غير محدد'} - ${invoice.total.toFixed(2)} ج.م`, { 
+      invoiceId: invoiceId, 
+      invoiceType: 'purchase',
+      supplierId: invoice.supplierId, 
+      total: invoice.total 
+    });
   };
 
   // ==================== دوال مرتجعات المشتريات ====================
@@ -803,15 +1085,24 @@ export const DataProvider = ({ children }) => {
         fromType: 'supplier',
         fromId: invoice.supplierId,
         description: `مرتجع مشتريات نقدية - فاتورة رقم ${invoiceId}`,
-        reference: `مرتجع مشتريات #${newReturn.id}`,
+        reference: `مرتجع مشتريات ${newReturn.id}`,
         type: 'purchase_return'
       };
       
       addCashReceipt(receiptData);
     }
     
-    // تحديث رصيد المورد (تخفيض الدين)
-    updateSupplierBalance(invoice.supplierId, totalAmount, 'credit');
+    // ✅ تحديث رصيد المورد (تخفيض الدين)
+    const supplierId = parseInt(invoice.supplierId);
+    const supplierIndex = suppliers.findIndex(s => s.id === supplierId);
+    
+    if (supplierIndex !== -1) {
+      const currentBalance = suppliers[supplierIndex].balance || 0;
+      const newBalance = currentBalance - parseFloat(totalAmount);
+      
+      // ✅ تم إزالة التحديث اليدوي للرصيد - سيتم حسابه تلقائياً من getSupplierBalance()
+      console.log(`✅ مرتجع مشتريات: سيتم حساب رصيد المورد تلقائياً`);
+    }
     // === نهاية الكود الجديد ===
     
     // حفظ المرتجع
@@ -833,6 +1124,15 @@ export const DataProvider = ({ children }) => {
     setPurchaseInvoices(updatedInvoices);
     saveData('bero_purchase_invoices', updatedInvoices);
     
+    // تسجيل النشاط
+    const supplier = suppliers.find(s => s.id === parseInt(invoice.supplierId));
+    logActivity('return_purchase_add', `إضافة مرتجع مشتريات #${newReturn.id} - فاتورة #${invoiceId} - ${supplier?.name || 'غير محدد'} - ${totalAmount.toFixed(2)} ج.م`, { 
+      returnId: newReturn.id,
+      invoiceId: invoiceId,
+      supplierId: invoice.supplierId, 
+      totalAmount: totalAmount 
+    });
+    
     return newReturn;
   };
   
@@ -849,6 +1149,18 @@ export const DataProvider = ({ children }) => {
       throw new Error('الفاتورة الأصلية غير موجودة');
     }
     
+    // حفظ المرتجع في سلة المهملات
+    const deletedItem = {
+      id: Date.now(),
+      type: 'purchase_return',
+      data: { ...returnRecord },
+      deletedAt: new Date().toISOString(),
+      deletedBy: 'system'
+    };
+    const updatedDeleted = [...deletedItems, deletedItem];
+    setDeletedItems(updatedDeleted);
+    saveData('bero_deleted_items', updatedDeleted);
+    
     // === الكود الجديد: خصم المبلغ من الخزينة ===
     if (invoice.paymentType === 'cash') {
       // خصم المبلغ المرتجع من الخزينة
@@ -862,16 +1174,14 @@ export const DataProvider = ({ children }) => {
       
       // حذف إيصال الاستلام المرتبط
       const receiptToDelete = cashReceipts.find(r => 
-        r.description?.includes(`مرتجع مشتريات #${returnId}`)
+        r.description?.includes(`مرتجع مشتريات ${returnId}`)
       );
       if (receiptToDelete) {
         deleteCashReceipt(receiptToDelete.id);
       }
     }
     
-    // تحديث رصيد المورد (إعادة الدين)
-    updateSupplierBalance(invoice.supplierId, returnRecord.totalAmount, 'debit');
-    // === نهاية الكود الجديد ===
+    // ✅ تم إزالة التحديث اليدوي للرصيد - سيتم حسابه تلقائياً من getSupplierBalance()
     
     // إعادة الكميات المرتجعة للمخزون (فصل أساسي وفرعي)
     const updatedProducts = [...products];
@@ -896,6 +1206,13 @@ export const DataProvider = ({ children }) => {
     const updated = purchaseReturns.filter(ret => ret.id !== returnId);
     setPurchaseReturns(updated);
     saveData('bero_purchase_returns', updated);
+    
+    // تسجيل النشاط
+    const supplier = suppliers.find(s => s.id === parseInt(invoice.supplierId));
+    logActivity('return_purchase_delete', `حذف مرتجع مشتريات #${returnId} - فاتورة #${returnRecord.invoiceId} - ${supplier?.name || 'غير محدد'}`, { 
+      returnId: returnId,
+      invoiceId: returnRecord.invoiceId 
+    });
   };
 
   // ==================== دوال فواتير المبيعات ====================
@@ -957,7 +1274,7 @@ export const DataProvider = ({ children }) => {
     });
     
     const newInvoice = { 
-      id: Date.now(), 
+      id: getNextSalesInvoiceId(), 
       date: new Date().toISOString(), 
       ...invoice,
       items: enrichedItems,
@@ -1142,7 +1459,7 @@ export const DataProvider = ({ children }) => {
         fromType: 'customer',
         fromId: newInvoice.customerId,
         description: `مبيعات نقدية - فاتورة رقم ${newInvoice.id}`,
-        reference: `فاتورة مبيعات #${newInvoice.id}`,
+        reference: `فاتورة مبيعات ${newInvoice.id}`,
         type: 'sales_payment'
       };
       
@@ -1158,7 +1475,12 @@ export const DataProvider = ({ children }) => {
     
     // 2. تسجيل دين العميل للدفع الآجل والجزئي
     if (invoice.paymentType === 'deferred' || invoice.paymentType === 'partial') {
-      // سيتم حساب الرصيد تلقائياً بواسطة getCustomerBalance
+      // ✅ تحديث رصيد العميل مباشرة
+      const customerId = parseInt(invoice.customerId);
+      const customerIndex = customers.findIndex(c => c.id === customerId);
+      
+      // ✅ تم إزالة التحديث اليدوي للرصيد - سيتم حسابه تلقائياً من getCustomerBalance()
+      console.log(`✅ فاتورة آجلة: سيتم حساب الرصيد تلقائياً`);
     }
     
     // تحديث حالة الفاتورة
@@ -1173,6 +1495,14 @@ export const DataProvider = ({ children }) => {
     const updatedInvoices = [...salesInvoices, invoiceWithStatus];
     setSalesInvoices(updatedInvoices);
     saveData('bero_sales_invoices', updatedInvoices);
+    
+    // تسجيل النشاط
+    const customer = customers.find(c => c.id === parseInt(invoice.customerId));
+    logActivity('invoice_sales_add', `فاتورة مبيعات جديدة #${invoiceWithStatus.id} - ${customer?.name || 'غير محدد'} - ${invoiceWithStatus.total.toFixed(2)} ج.م`, { 
+      invoiceId: invoiceWithStatus.id, 
+      customerId: invoice.customerId, 
+      total: invoiceWithStatus.total 
+    });
     
     return invoiceWithStatus;
   };
@@ -1189,6 +1519,23 @@ export const DataProvider = ({ children }) => {
     if (hasReturns) {
       throw new Error('لا يمكن حذف الفاتورة: توجد مرتجعات مرتبطة بها');
     }
+    
+    // ==================== حفظ الفاتورة في سلة المهملات ====================
+    const deletedItem = {
+      id: Date.now(),
+      type: 'invoice',
+      invoiceType: 'sales',
+      data: { ...invoice },
+      deletedAt: new Date().toISOString(),
+      deletedBy: 'system'
+    };
+    const updatedDeleted = [...deletedItems, deletedItem];
+    console.log('حذف فاتورة مبيعات - الفاتورة المراد حذفها:', invoice);
+    console.log('تم إضافة الفاتورة لسلة المهملات:', deletedItem);
+    console.log('جميع العناصر المحذوفة بعد الإضافة:', updatedDeleted);
+    
+    setDeletedItems(updatedDeleted);
+    saveData('bero_deleted_items', updatedDeleted);
     
     // ==================== إضافة: عكس المعاملات المالية ====================
     
@@ -1217,8 +1564,8 @@ export const DataProvider = ({ children }) => {
       
       // البحث عن الإيصال المحدد للفاتورة
       const relatedReceipt = possibleReceipts.find(r => 
-        r.reference === `فاتورة مبيعات #${invoiceIdStr}` ||
-        r.reference === `فاتورة مبيعات #${invoiceId}` ||
+        r.reference === `فاتورة مبيعات ${invoiceIdStr}` ||
+        r.reference === `فاتورة مبيعات ${invoiceId}` ||
         r.description.includes(`فاتورة رقم ${invoiceIdStr}`) ||
         r.description.includes(`فاتورة رقم ${invoiceId}`)
       );
@@ -1321,6 +1668,15 @@ export const DataProvider = ({ children }) => {
     const updated = salesInvoices.filter(inv => inv.id !== invoiceId);
     setSalesInvoices(updated);
     saveData('bero_sales_invoices', updated);
+    
+    // تسجيل النشاط
+    const customer = customers.find(c => c.id === parseInt(invoice.customerId));
+    logActivity('invoice_delete', `حذف فاتورة مبيعات #${invoiceId} - ${customer?.name || 'غير محدد'} - ${invoice.total.toFixed(2)} ج.م`, { 
+      invoiceId: invoiceId, 
+      invoiceType: 'sales',
+      customerId: invoice.customerId, 
+      total: invoice.total 
+    });
   };
 
   // ==================== دوال مرتجعات المبيعات ====================
@@ -1423,8 +1779,8 @@ export const DataProvider = ({ children }) => {
       
       // البحث عن الإيصال المحدد للفاتورة
       const relatedReceipt = possibleReceipts.find(r => 
-        r.reference === `فاتورة مبيعات #${invoiceIdStr}` ||
-        r.reference === `فاتورة مبيعات #${invoiceId}` ||
+        r.reference === `فاتورة مبيعات ${invoiceIdStr}` ||
+        r.reference === `فاتورة مبيعات ${invoiceId}` ||
         r.description.includes(`فاتورة رقم ${invoiceIdStr}`) ||
         r.description.includes(`فاتورة رقم ${invoiceId}`)
       );
@@ -1453,6 +1809,13 @@ export const DataProvider = ({ children }) => {
     
     // 2. إذا كان الإرجاع آجل، تقليل دين العميل
     if (invoice.paymentType === 'deferred' || invoice.paymentType === 'partial') {
+      // ✅ تحديث رصيد العميل
+      const customerId = parseInt(invoice.customerId);
+      const customerIndex = customers.findIndex(c => c.id === customerId);
+      
+      // ✅ تم إزالة التحديث اليدوي للرصيد - سيتم حسابه تلقائياً من getCustomerBalance()
+      console.log(`✅ مرتجع مبيعات: سيتم حساب الرصيد تلقائياً`);
+      
       const updatedSalesInvoices = salesInvoices.map(inv => {
         if (inv.id === invoiceId) {
           const currentRemaining = inv.remaining || inv.total || 0;
@@ -1486,6 +1849,15 @@ export const DataProvider = ({ children }) => {
     setSalesInvoices(updatedInvoices);
     saveData('bero_sales_invoices', updatedInvoices);
     
+    // تسجيل النشاط
+    const customer = customers.find(c => c.id === parseInt(invoice.customerId));
+    logActivity('return_sales_add', `إضافة مرتجع مبيعات #${newReturn.id} - فاتورة #${invoiceId} - ${customer?.name || 'غير محدد'} - ${totalAmount.toFixed(2)} ج.م`, { 
+      returnId: newReturn.id,
+      invoiceId: invoiceId,
+      customerId: invoice.customerId, 
+      totalAmount: totalAmount 
+    });
+    
     return newReturn;
   };
   
@@ -1495,6 +1867,18 @@ export const DataProvider = ({ children }) => {
     if (!returnRecord) {
       throw new Error('المرتجع غير موجود');
     }
+    
+    // حفظ المرتجع في سلة المهملات
+    const deletedItem = {
+      id: Date.now(),
+      type: 'sales_return',
+      data: { ...returnRecord },
+      deletedAt: new Date().toISOString(),
+      deletedBy: 'system'
+    };
+    const updatedDeleted = [...deletedItems, deletedItem];
+    setDeletedItems(updatedDeleted);
+    saveData('bero_deleted_items', updatedDeleted);
     
     // خصم الكميات المرتجعة من المخزون (لأن الإرجاع كان قد أضافها) - فصل أساسي وفرعي
     const updatedProducts = [...products];
@@ -1519,6 +1903,14 @@ export const DataProvider = ({ children }) => {
     const updated = salesReturns.filter(ret => ret.id !== returnId);
     setSalesReturns(updated);
     saveData('bero_sales_returns', updated);
+    
+    // تسجيل النشاط
+    const invoice = salesInvoices.find(inv => inv.id === returnRecord.invoiceId);
+    const customer = customers.find(c => c.id === parseInt(invoice?.customerId));
+    logActivity('return_sales_delete', `حذف مرتجع مبيعات #${returnId} - فاتورة #${returnRecord.invoiceId} - ${customer?.name || 'غير محدد'}`, { 
+      returnId: returnId,
+      invoiceId: returnRecord.invoiceId 
+    });
   };
 
   // ==================== دوال الخزينة الشاملة ====================
@@ -1569,6 +1961,14 @@ export const DataProvider = ({ children }) => {
       treasuryBalanceAfter: hasTransactionInfo ? treasuryBalance + (hasTransactionInfo.remainingAmount || 0) : treasuryBalance + parseFloat(receiptData.amount)
     });
     
+    // تسجيل النشاط
+    const fromName = receiptData.fromName || receiptData.from || 'غير محدد';
+    logActivity('cash_receipt', `إيصال استلام نقدي #${newReceipt.id} - ${fromName} - ${receiptData.amount} ج.م`, { 
+      receiptId: newReceipt.id, 
+      amount: receiptData.amount, 
+      from: fromName 
+    });
+    
     return newReceipt;
   };
   
@@ -1601,7 +2001,23 @@ export const DataProvider = ({ children }) => {
       throw new Error('الإيصال غير موجود');
     }
     
-    // إعادة المبلغ من الخزينة
+    // حفظ الإيصال في سلة المهملات قبل الحذف
+    if (receipt) {
+      const deletedItem = {
+        id: Date.now(),
+        type: 'cash_receipt',
+        data: { ...receipt },
+        deletedAt: new Date().toISOString(),
+        deletedBy: 'system'
+      };
+      const updatedDeleted = [...deletedItems, deletedItem];
+      console.log('تم إضافة إيصال الاستلام لسلة المهملات:', deletedItem);
+      
+      setDeletedItems(updatedDeleted);
+      saveData('bero_deleted_items', updatedDeleted);
+    }
+    
+    // إصلاح: خصم المبلغ من الخزينة عند حذف الإيصال (استلام يزيد الرصيد، فحذفه يخفضه)
     const newBalance = treasuryBalance - parseFloat(receipt.amount);
     
     if (newBalance < 0) {
@@ -1614,6 +2030,9 @@ export const DataProvider = ({ children }) => {
     const updated = cashReceipts.filter(r => r.id !== id);
     setCashReceipts(updated);
     saveData('bero_cash_receipts', updated);
+    
+    // تسجيل النشاط في التقارير العامة
+    logActivity('cash_receipt_delete', `حذف إيصال استلام نقدي #${receipt.id} - ${receipt.from} - ${receipt.amount} ج.م`, { receiptId: receipt.id, amount: receipt.amount });
   };
   
   // إضافة إيصال صرف نقدي
@@ -1635,10 +2054,40 @@ export const DataProvider = ({ children }) => {
     setCashDisbursements(updatedDisbursements);
     saveData('bero_cash_disbursements', updatedDisbursements);
     
-    // تحديث رصيد الخزينة (خصم)
+    // ✅ خصم من رصيد الخزينة
     const newBalance = treasuryBalance - parseFloat(disbursementData.amount);
     setTreasuryBalance(newBalance);
     saveData('bero_treasury_balance', newBalance);
+    
+    // ✅ تحديث رصيد المورد/العميل إذا كان الصرف لهم
+    if (disbursementData.toType === 'supplier' && disbursementData.toId) {
+      const supplierId = parseInt(disbursementData.toId);
+      const supplierIndex = suppliers.findIndex(s => s.id === supplierId);
+      
+      if (supplierIndex !== -1) {
+        const currentBalance = suppliers[supplierIndex].balance || 0;
+        const newSupplierBalance = currentBalance - parseFloat(disbursementData.amount);
+        
+        // ✅ تم إزالة التحديث اليدوي للرصيد - سيتم حسابه تلقائياً من getSupplierBalance()
+        console.log(`✅ صرف نقدية: سيتم حساب رصيد المورد تلقائياً`);
+      }
+    } 
+    
+    if (disbursementData.toType === 'customer' && disbursementData.toId) {
+      const customerId = parseInt(disbursementData.toId);
+      const customerIndex = customers.findIndex(c => c.id === customerId);
+      
+      // ✅ تم إزالة التحديث اليدوي للرصيد - سيتم حسابه تلقائياً من getCustomerBalance()
+      console.log(`✅ صرف نقدية: سيتم حساب رصيد العميل تلقائياً`);
+    }
+    
+    // تسجيل النشاط
+    const toName = disbursementData.toName || disbursementData.to || 'غير محدد';
+    logActivity('cash_disbursement', `إيصال صرف نقدي #${newDisbursement.id} - ${toName} - ${disbursementData.amount} ج.م`, { 
+      disbursementId: newDisbursement.id, 
+      amount: disbursementData.amount, 
+      to: toName 
+    });
     
     return newDisbursement;
   };
@@ -1677,7 +2126,24 @@ export const DataProvider = ({ children }) => {
       throw new Error('الإيصال غير موجود');
     }
     
-    // إعادة المبلغ للخزينة
+    // حفظ الإيصال في سلة المهملات قبل الحذف
+    if (disbursement) {
+      const deletedItem = {
+        id: Date.now(),
+        type: 'cash_disbursement',
+        data: { ...disbursement },
+        deletedAt: new Date().toISOString(),
+        deletedBy: 'system'
+      };
+      const updatedDeleted = [...deletedItems, deletedItem];
+      console.log('تم إضافة إيصال الصرف لسلة المهملات:', deletedItem);
+      
+      setDeletedItems(updatedDeleted);
+      saveData('bero_deleted_items', updatedDeleted);
+    }
+    
+    // إصلاح: إضافة المبلغ للخزينة عند حذف الصرف النقدي
+    // (الصرف النقدي يخفض الرصيد، فحذفه يجب أن يزيد الرصيد)
     const newBalance = treasuryBalance + parseFloat(disbursement.amount);
     setTreasuryBalance(newBalance);
     saveData('bero_treasury_balance', newBalance);
@@ -1685,6 +2151,9 @@ export const DataProvider = ({ children }) => {
     const updated = cashDisbursements.filter(d => d.id !== id);
     setCashDisbursements(updated);
     saveData('bero_cash_disbursements', updated);
+    
+    // تسجيل النشاط في التقارير العامة
+    logActivity('cash_disbursement_delete', `حذف إيصال صرف نقدي #${disbursement.id} - ${disbursement.to} - ${disbursement.amount} ج.م`, { disbursementId: disbursement.id, amount: disbursement.amount });
   };
   
   // حساب رصيد عميل معين
@@ -1708,7 +2177,8 @@ export const DataProvider = ({ children }) => {
     
     // الاستلامات من العميل (تخفض من دين العميل)
     cashReceipts.forEach(receipt => {
-      if (receipt.fromType === 'customer' && receipt.fromId === customerId) {
+      if (receipt.fromType === 'customer' && parseInt(receipt.fromId) === customerId) {
+        // إصلاح: حساب بسيط وواضح للأرصدة
         balance -= parseFloat(receipt.amount || 0);
       }
     });
@@ -1737,7 +2207,8 @@ export const DataProvider = ({ children }) => {
     
     // الصرف للمورد (تخفض من ديوننا للمورد)
     cashDisbursements.forEach(disbursement => {
-      if (disbursement.toType === 'supplier' && disbursement.toId === supplierId) {
+      if (disbursement.toType === 'supplier' && parseInt(disbursement.toId) === supplierId) {
+        // إصلاح: حساب بسيط وواضح للأرصدة
         balance -= parseFloat(disbursement.amount || 0);
       }
     });
@@ -1746,105 +2217,40 @@ export const DataProvider = ({ children }) => {
   };
   
   // دالة مساعدة لتحديث رصيد المورد
-  const updateSupplierBalance = (supplierId, amount, type = 'debit') => {
-    const supplierIndex = suppliers.findIndex(s => s.id === supplierId);
-    if (supplierIndex !== -1) {
-      const currentBalance = suppliers[supplierIndex].balance || 0;
-      const newBalance = type === 'debit' 
-        ? currentBalance + amount  // زيادة الدين على المورد
-        : currentBalance - amount; // تخفيض الدين على المورد
-      
-      const updatedSuppliers = [...suppliers];
-      updatedSuppliers[supplierIndex] = {
-        ...updatedSuppliers[supplierIndex],
-        balance: newBalance
-      };
-      
-      setSuppliers(updatedSuppliers);
-      saveData('bero_suppliers', updatedSuppliers);
-    }
-  };
-
-  // دالة مساعدة لتحديث رصيد العميل
-  const updateCustomerBalance = (customerId, amount, type = 'credit') => {
-    const customerIndex = customers.findIndex(c => c.id === customerId);
-    if (customerIndex !== -1) {
-      const currentBalance = customers[customerIndex].balance || 0;
-      const newBalance = type === 'debit' 
-        ? currentBalance + amount  // زيادة الدين على العميل
-        : currentBalance - amount; // تخفيض الدين على العميل
-      
-      const updatedCustomers = [...customers];
-      updatedCustomers[customerIndex] = {
-        ...updatedCustomers[customerIndex],
-        balance: newBalance
-      };
-      
-      setCustomers(updatedCustomers);
-      saveData('bero_customers', updatedCustomers);
-    }
-  };
+  // ✅ تم حذف دالة updateSupplierBalance - لم تعد مطلوبة بعد الإصلاح
+  
+  // ✅ تم حذف دالة updateCustomerBalance - لم تعد مطلوبة بعد الإصلاح
 
   // دالة إدارة شاملة لحركة الخزينة مع أرصدة العملاء والموردين
   const processTreasuryTransactionWithBalances = (receiptData) => {
     const { fromType, fromId, amount, transactionInfo } = receiptData;
     const transactionAmount = parseFloat(amount);
     
-    // تحديث رصيد العميل/المورد حسب نوع المعاملة
+    // إصلاح: حساب منطقي لحركة الخزينة
+    let treasuryChange = 0;
+    
+    if (fromType === 'customer') {
+      // استلام من العميل يزيد رصيد الخزينة
+      treasuryChange = transactionAmount;
+    } else if (fromType === 'other') {
+      // إيداع نقدي يزيد رصيد الخزينة
+      treasuryChange = transactionAmount;
+    } else {
+      // حالة غير متوقعة
+      console.warn(`نوع المعاملة غير معروف: ${fromType}`);
+    }
+    
+    const newTreasuryBalance = treasuryBalance + treasuryChange;
+    setTreasuryBalance(newTreasuryBalance);
+    saveData('bero_treasury_balance', newTreasuryBalance);
+    
     if (fromType === 'customer' && fromId) {
       const customerId = parseInt(fromId);
-      if (transactionInfo.willReduceBalance) {
-        // سداد دين - تخفيض من دين العميل
-        updateCustomerBalance(customerId, transactionAmount, 'credit');
-      } else if (transactionInfo.willIncreaseBalance && transactionInfo.currentBalance < 0) {
-        // دفع مقدماً - زيادة رصيد العميل المسبق
-        updateCustomerBalance(customerId, transactionAmount, 'debit');
-      }
-    } else if (fromType === 'supplier' && fromId) {
-      const supplierId = parseInt(fromId);
-      if (transactionInfo.willReduceBalance) {
-        // سداد دين - تخفيض من دين المورد
-        updateSupplierBalance(supplierId, transactionAmount, 'credit');
-      } else if (transactionInfo.willIncreaseBalance && transactionInfo.currentBalance < 0) {
-        // دفع مقدماً - زيادة رصيد المورد المسبق
-        updateSupplierBalance(supplierId, transactionAmount, 'debit');
-      }
+      console.log(`✅ تم تسجيل حركة خزينة من العميل ${customerId} بمبلغ ${transactionAmount} جنيه`);
     }
     
-    // تحديث رصيد الخزينة بالمبلغ المتبقي (إذا وجد)
-    if (transactionInfo.remainingAmount > 0) {
-      const newBalance = treasuryBalance + transactionInfo.remainingAmount;
-      setTreasuryBalance(newBalance);
-      saveData('bero_treasury_balance', newBalance);
-    }
-    
-    // تسجيل حركة الخزينة التفصيلية
-    const treasuryMovement = {
-      id: Date.now(),
-      date: receiptData.date,
-      type: 'receipt',
-      amount: transactionAmount,
-      remainingAmount: transactionInfo.remainingAmount,
-      sourceType: fromType,
-      sourceId: fromId,
-      sourceName: receiptData.fromName,
-      transactionType: transactionInfo.transactionType,
-      paymentMethod: receiptData.paymentMethod,
-      receiptNumber: receiptData.receiptNumber,
-      description: receiptData.description || '',
-      referenceNumber: receiptData.referenceNumber || '',
-      previousBalance: transactionInfo.currentBalance,
-      newBalance: transactionInfo.newBalanceAfterPayment,
-      treasuryBalanceBefore: treasuryBalance,
-      treasuryBalanceAfter: treasuryBalance + transactionInfo.remainingAmount,
-      notes: receiptData.notes || '',
-      createdAt: new Date().toISOString()
-    };
-    
-    // حفظ حركة الخزينة (يمكن إضافة نظام حفظ منفصل للحركات لاحقاً)
-    console.log('🏦 تسجيل حركة الخزينة:', treasuryMovement);
-    
-    return treasuryMovement;
+    console.log(`✅ تم تحديث رصيد الخزينة: ${treasuryBalance} -> ${newTreasuryBalance} جنيه`);
+    return newTreasuryBalance;
   };
   
   // الحصول على جميع أرصدة العملاء
@@ -1962,6 +2368,17 @@ export const DataProvider = ({ children }) => {
     setTransfers(updatedTransfers);
     saveData('bero_transfers', updatedTransfers);
     
+    // تسجيل النشاط
+    const fromWarehouse = warehouses.find(w => w.id === fromWarehouseId);
+    const toWarehouse = warehouses.find(w => w.id === toWarehouseId);
+    logActivity('transfer', `تحويل منتج: ${sourceProduct.name} من ${fromWarehouse?.name || 'غير محدد'} إلى ${toWarehouse?.name || 'غير محدد'} - كمية: ${quantity || 0}`, { 
+      transferId: newTransfer.id,
+      productId: productId,
+      fromWarehouseId: fromWarehouseId,
+      toWarehouseId: toWarehouseId,
+      quantity: quantity 
+    });
+    
     return newTransfer;
   };
 
@@ -2017,6 +2434,14 @@ export const DataProvider = ({ children }) => {
     const updated = [...accounts, newAccount];
     setAccounts(updated);
     saveData('bero_accounts', updated);
+    
+    // تسجيل النشاط
+    logActivity('account_add', `إضافة حساب جديد: ${newAccount.code} - ${newAccount.name}`, { 
+      accountId: newAccount.id,
+      accountCode: newAccount.code,
+      accountName: newAccount.name 
+    });
+    
     return newAccount;
   };
   
@@ -2050,6 +2475,13 @@ export const DataProvider = ({ children }) => {
     );
     setAccounts(updated);
     saveData('bero_accounts', updated);
+    
+    // تسجيل النشاط
+    logActivity('account_edit', `تعديل حساب: ${existingAccount.code} - ${existingAccount.name}`, { 
+      accountId: id,
+      accountCode: existingAccount.code,
+      accountName: existingAccount.name 
+    });
   };
   
   const deleteAccount = (id) => {
@@ -2078,9 +2510,28 @@ export const DataProvider = ({ children }) => {
       throw new Error('لا يمكن حذف الحساب: يوجد حركات محاسبية مرتبطة به');
     }
     
+    // حفظ الحساب في سلة المهملات
+    const deletedItem = {
+      id: Date.now(),
+      type: 'account',
+      data: { ...account },
+      deletedAt: new Date().toISOString(),
+      deletedBy: 'system'
+    };
+    const updatedDeleted = [...deletedItems, deletedItem];
+    setDeletedItems(updatedDeleted);
+    saveData('bero_deleted_items', updatedDeleted);
+    
     const updated = accounts.filter(acc => acc.id !== id);
     setAccounts(updated);
     saveData('bero_accounts', updated);
+    
+    // تسجيل النشاط
+    logActivity('account_delete', `حذف حساب: ${account.code} - ${account.name}`, { 
+      accountId: id,
+      accountCode: account.code,
+      accountName: account.name 
+    });
   };
   
   // ==================== دوال القيود اليومية ====================
@@ -2323,7 +2774,6 @@ export const DataProvider = ({ children }) => {
     deleteCashDisbursement,
     getCustomerBalance,
     getSupplierBalance,
-    updateSupplierBalance,
     getAllCustomerBalances,
     getAllSupplierBalances,
     transferProduct,
@@ -4109,6 +4559,272 @@ export const DataProvider = ({ children }) => {
         averageCostPerShipment: filteredShipments.length > 0 ? 
           (totalRevenue / filteredShipments.length).toFixed(2) : 0
       };
+    },
+
+    // ==================== نظام سلة المهملات ====================
+    deletedItems,
+    
+    // استعادة عنصر محذوف
+    restoreDeletedItem: (deletedItemId) => {
+      const deletedItem = deletedItems.find(item => item.id === deletedItemId);
+      if (!deletedItem) {
+        throw new Error('العنصر المحذوف غير موجود');
+      }
+
+      // استعادة العنصر حسب نوعه
+      switch (deletedItem.type) {
+        case 'product':
+          const restoredProduct = { ...deletedItem.data };
+          const updatedProducts = [...products, restoredProduct];
+          setProducts(updatedProducts);
+          saveData('bero_products', updatedProducts);
+          logActivity('product_restore', `استعادة منتج: ${restoredProduct.name}`, { productId: restoredProduct.id, productName: restoredProduct.name });
+          break;
+          
+        case 'customer':
+          const restoredCustomer = { ...deletedItem.data };
+          const updatedCustomers = [...customers, restoredCustomer];
+          setCustomers(updatedCustomers);
+          saveData('bero_customers', updatedCustomers);
+          logActivity('customer_restore', `استعادة عميل: ${restoredCustomer.name}`, { customerId: restoredCustomer.id, customerName: restoredCustomer.name });
+          break;
+          
+        case 'invoice':
+          const restoredInvoice = { ...deletedItem.data };
+          const updatedInvoices = [...salesInvoices, restoredInvoice];
+          setSalesInvoices(updatedInvoices);
+          saveData('bero_sales_invoices', updatedInvoices);
+          
+          // استعادة المعاملات المالية المرتبطة إذا كانت نقدية
+          if (restoredInvoice.paymentType === 'cash') {
+            const receiptData = {
+              amount: restoredInvoice.total,
+              fromType: 'customer',
+              fromId: restoredInvoice.customerId,
+              description: `مبيعات نقدية من العميل - فاتورة رقم ${restoredInvoice.id} (مستعادة)`,
+              reference: `فاتورة مبيعات ${restoredInvoice.id}`,
+              type: 'sales_payment'
+            };
+            
+            const newReceipt = {
+              id: Date.now(),
+              ...receiptData,
+              date: new Date().toISOString()
+            };
+            
+            const updatedReceipts = [...cashReceipts, newReceipt];
+            setCashReceipts(updatedReceipts);
+            saveData('bero_cash_receipts', updatedReceipts);
+            
+            const newBalance = treasuryBalance + restoredInvoice.total;
+            setTreasuryBalance(newBalance);
+            saveData('bero_treasury_balance', newBalance);
+          }
+          
+          // خصم الكميات من المخزون
+          if (restoredInvoice.items && Array.isArray(restoredInvoice.items)) {
+            let productsCopy = [...products];
+            restoredInvoice.items.forEach(item => {
+              const productIndex = productsCopy.findIndex(p => p.id === parseInt(item.productId));
+              if (productIndex !== -1) {
+                const mainQty = parseInt(item.mainQuantity || item.quantity) || 0;
+                const subQty = parseInt(item.subQuantity) || 0;
+                
+                productsCopy[productIndex] = {
+                  ...productsCopy[productIndex],
+                  mainQuantity: (productsCopy[productIndex].mainQuantity || 0) - mainQty,
+                  subQuantity: (productsCopy[productIndex].subQuantity || 0) - subQty
+                };
+              }
+            });
+            setProducts(productsCopy);
+            saveData('bero_products', productsCopy);
+          }
+          
+          // تسجيل النشاط
+          const customer = customers.find(c => c.id === parseInt(restoredInvoice.customerId));
+          logActivity('invoice_restore', `استعادة فاتورة مبيعات #${restoredInvoice.id} - ${customer?.name || 'غير محدد'}`, { 
+            invoiceId: restoredInvoice.id, 
+            customerId: restoredInvoice.customerId 
+          });
+          break;
+        
+        case 'cash_receipt':
+          // استعادة إيصال الاستلام النقدي
+          const restoredReceipt = { ...deletedItem.data };
+          const updatedCashReceipts = [...cashReceipts, restoredReceipt];
+          setCashReceipts(updatedCashReceipts);
+          saveData('bero_cash_receipts', updatedCashReceipts);
+          
+          // إضافة المبلغ للخزينة
+          const newReceiptBalance = treasuryBalance + parseFloat(restoredReceipt.amount);
+          setTreasuryBalance(newReceiptBalance);
+          saveData('bero_treasury_balance', newReceiptBalance);
+          
+          // تسجيل النشاط
+          logActivity('cash_receipt', `استعادة إيصال استلام نقدي #${restoredReceipt.id} - ${restoredReceipt.from} - ${restoredReceipt.amount} ج.م`, { receiptId: restoredReceipt.id, amount: restoredReceipt.amount });
+          break;
+        
+        case 'cash_disbursement':
+          // استعادة إيصال الصرف النقدي
+          const restoredDisbursement = { ...deletedItem.data };
+          const updatedCashDisbursements = [...cashDisbursements, restoredDisbursement];
+          setCashDisbursements(updatedCashDisbursements);
+          saveData('bero_cash_disbursements', updatedCashDisbursements);
+          
+          // خصم المبلغ من الخزينة
+          const newDisbursementBalance = treasuryBalance - parseFloat(restoredDisbursement.amount);
+          if (newDisbursementBalance < 0) {
+            throw new Error('لا يمكن استعادة إيصال الصرف: الرصيد غير كافٍ');
+          }
+          setTreasuryBalance(newDisbursementBalance);
+          saveData('bero_treasury_balance', newDisbursementBalance);
+          
+          // تسجيل النشاط
+          logActivity('cash_disbursement', `استعادة إيصال صرف نقدي #${restoredDisbursement.id} - ${restoredDisbursement.to} - ${restoredDisbursement.amount} ج.م`, { disbursementId: restoredDisbursement.id, amount: restoredDisbursement.amount });
+          break;
+        
+        case 'warehouse':
+          // استعادة المخزن
+          const restoredWarehouse = { ...deletedItem.data };
+          const updatedWarehouses = [...warehouses, restoredWarehouse];
+          setWarehouses(updatedWarehouses);
+          saveData('bero_warehouses', updatedWarehouses);
+          logActivity('warehouse_restore', `استعادة مخزن: ${restoredWarehouse.name}`, { warehouseId: restoredWarehouse.id, warehouseName: restoredWarehouse.name });
+          break;
+        
+        case 'category':
+          // استعادة الفئة
+          const restoredCategory = { ...deletedItem.data };
+          const updatedCategories = [...categories, restoredCategory];
+          setCategories(updatedCategories);
+          saveData('bero_categories', updatedCategories);
+          logActivity('category_restore', `استعادة فئة: ${restoredCategory.name}`, { categoryId: restoredCategory.id, categoryName: restoredCategory.name });
+          break;
+        
+        case 'supplier':
+          // استعادة المورد
+          const restoredSupplier = { ...deletedItem.data };
+          const updatedSuppliers = [...suppliers, restoredSupplier];
+          setSuppliers(updatedSuppliers);
+          saveData('bero_suppliers', updatedSuppliers);
+          logActivity('supplier_restore', `استعادة مورد: ${restoredSupplier.name}`, { supplierId: restoredSupplier.id, supplierName: restoredSupplier.name });
+          break;
+        
+        case 'account':
+          // استعادة الحساب
+          const restoredAccount = { ...deletedItem.data };
+          const updatedAccounts = [...accounts, restoredAccount];
+          setAccounts(updatedAccounts);
+          saveData('bero_accounts', updatedAccounts);
+          logActivity('account_restore', `استعادة حساب: ${restoredAccount.code} - ${restoredAccount.name}`, { 
+            accountId: restoredAccount.id, 
+            accountCode: restoredAccount.code,
+            accountName: restoredAccount.name 
+          });
+          break;
+        
+        case 'purchase_return':
+          // استعادة مرتجع المشتريات
+          const restoredPurchaseReturn = { ...deletedItem.data };
+          const updatedPurchaseReturns = [...purchaseReturns, restoredPurchaseReturn];
+          setPurchaseReturns(updatedPurchaseReturns);
+          saveData('bero_purchase_returns', updatedPurchaseReturns);
+          logActivity('return_purchase_restore', `استعادة مرتجع مشتريات #${restoredPurchaseReturn.id}`, { 
+            returnId: restoredPurchaseReturn.id,
+            invoiceId: restoredPurchaseReturn.invoiceId 
+          });
+          break;
+        
+        case 'sales_return':
+          // استعادة مرتجع المبيعات
+          const restoredSalesReturn = { ...deletedItem.data };
+          const updatedSalesReturns = [...salesReturns, restoredSalesReturn];
+          setSalesReturns(updatedSalesReturns);
+          saveData('bero_sales_returns', updatedSalesReturns);
+          logActivity('return_sales_restore', `استعادة مرتجع مبيعات #${restoredSalesReturn.id}`, { 
+            returnId: restoredSalesReturn.id,
+            invoiceId: restoredSalesReturn.invoiceId 
+          });
+          break;
+          
+        default:
+          throw new Error('نوع العنصر غير مدعوم');
+      }
+
+      // إزالة العنصر من سلة المهملات
+      const updatedDeleted = deletedItems.filter(item => item.id !== deletedItemId);
+      setDeletedItems(updatedDeleted);
+      saveData('bero_deleted_items', updatedDeleted);
+    },
+    
+    // حذف نهائي لعنصر من سلة المهملات
+    permanentlyDeleteItem: (deletedItemId) => {
+      const updatedDeleted = deletedItems.filter(item => item.id !== deletedItemId);
+      setDeletedItems(updatedDeleted);
+      saveData('bero_deleted_items', updatedDeleted);
+    },
+    
+    // الحصول على المحذوفات حسب النوع
+    getDeletedItemsByType: (type) => {
+      return deletedItems.filter(item => item.type === type);
+    },
+    
+    // تفريغ سلة المهملات حسب النوع
+    clearTrashByType: (type) => {
+      const updatedDeleted = deletedItems.filter(item => item.type !== type);
+      setDeletedItems(updatedDeleted);
+      saveData('bero_deleted_items', updatedDeleted);
+    },
+    
+    // تفريغ سلة المهملات بالكامل
+    clearAllTrash: () => {
+      setDeletedItems([]);
+      saveData('bero_deleted_items', []);
+    },
+
+    // ==================== دوال نظام تسجيل الأنشطة ====================
+    
+    // تسجيل نشاط جديد
+    logActivity,
+    
+    // أرشفة أنشطة اليوم السابق
+    archiveDailyActivities: () => {
+      if (dailyActivities.length === 0) return;
+      
+      const archiveEntry = {
+        id: Date.now(),
+        date: currentSessionDate,
+        activities: dailyActivities,
+        archivedAt: new Date().toISOString(),
+        totalActivities: dailyActivities.length
+      };
+      
+      const updatedArchive = [...activitiesArchive, archiveEntry];
+      setActivitiesArchive(updatedArchive);
+      saveData('bero_activities_archive', updatedArchive);
+      
+      // مسح الأنشطة اليومية
+      setDailyActivities([]);
+      saveData('bero_daily_activities', []);
+    },
+    
+    // الحصول على الأنشطة اليومية
+    getDailyActivities: () => dailyActivities,
+    
+    // الحصول على أرشيف الأنشطة
+    getActivitiesArchive: () => activitiesArchive,
+    
+    // الحصول على أرشيف يوم معين
+    getActivitiesByDate: (date) => {
+      const archive = activitiesArchive.find(a => a.date === date);
+      return archive ? archive.activities : [];
+    },
+    
+    // مسح الأنشطة اليومية
+    clearDailyActivities: () => {
+      setDailyActivities([]);
+      saveData('bero_daily_activities', []);
     },
 
     // دوال وأقسام إضافية للأصول الثابتة مدمجة في الدوال أعلاه

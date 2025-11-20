@@ -4,7 +4,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useData } from '../../context/DataContext';
-import { useNotification } from '../../context/NotificationContext';
+import { useNotification } from '../../context/NotificationContextWithSound';
 import { useNavigate } from 'react-router-dom';
 import { FaBox, FaSave, FaCheckCircle, FaTimes, FaWarehouse, FaTags, FaDollarSign, FaCubes, FaBarcode, FaUndo, FaMoneyBillWave } from 'react-icons/fa';
 
@@ -202,28 +202,7 @@ const AddProduct = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto p-4">
-      {/* الأزرار العلوية */}
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-bold text-gray-800">إضافة بضاعة جديدة</h2>
-        <div className="flex gap-2">
-          <button
-            type="submit"
-            form="product-form"
-            className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors text-sm font-semibold"
-          >
-            <FaSave /> حفظ المنتج
-          </button>
-          <button
-            type="button"
-            onClick={resetForm}
-            className="flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors text-sm font-semibold"
-          >
-            <FaUndo /> إعادة تعيين
-          </button>
-        </div>
-      </div>
-
+    <div className="max-w-7xl mx-auto p-2">
       {/* Modal تأكيد إضافة المنتج بنجاح */}
       {showSuccessModal && addedProduct && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9998] p-4">
@@ -363,12 +342,12 @@ const AddProduct = () => {
       {/* البطاقة الرئيسية */}
       <div className="bg-white rounded-lg shadow-md">
         <form id="product-form" onSubmit={handleSubmit}>
-          {/* معلومات أساسية */}
-          <div className="p-4 bg-gray-50 border-b">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+          {/* معلومات أساسية + الباركود والوصف */}
+          <div className="p-3 bg-gray-50 border-b">
+            <h3 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
               <FaBox className="text-orange-500" /> معلومات المنتج الأساسية
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
               {/* اسم المنتج */}
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">اسم المنتج *</label>
@@ -379,7 +358,7 @@ const AddProduct = () => {
                   value={formData.name}
                   onChange={handleChange}
                   className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="أدخل اسم المنتج"
+                  placeholder="اسم المنتج"
                   required
                 />
               </div>
@@ -417,69 +396,152 @@ const AddProduct = () => {
                   ))}
                 </select>
               </div>
+
+              {/* رقم الباركود */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">الباركود *</label>
+                <input
+                  type="text"
+                  name="barcode"
+                  value={formData.barcode}
+                  onChange={handleChange}
+                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="رقم الباركود"
+                  required
+                />
+              </div>
+
+              {/* الوصف */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">الوصف</label>
+                <input
+                  type="text"
+                  name="description"
+                  value={formData.description}
+                  onChange={handleChange}
+                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="وصف مختصر"
+                />
+              </div>
+
+              {/* الوحدة الأساسية */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">الوحدة</label>
+                <input
+                  type="text"
+                  value="كرتونة/بلتة"
+                  disabled
+                  className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded bg-gray-100 text-gray-500"
+                />
+              </div>
             </div>
           </div>
 
-          {/* أسعار الشراء الجديدة */}
-          <div className="p-4 border-b">
-            <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
-              <FaMoneyBillWave className="text-green-500" /> أسعار الشراء
-            </h3>
-            
-            <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {/* أسعار الشراء والكميات - جنبًا إلى جنب */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 border-b">
+            {/* أسعار الشراء */}
+            <div className="p-3 border-b lg:border-b-0 lg:border-l">
+              <h3 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                <FaMoneyBillWave className="text-green-500" /> أسعار الشراء
+              </h3>
+              <div className="p-2 bg-green-50 rounded-lg border border-green-200">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">سعر الشراء الأساسي *</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      name="purchase_basicPrice"
+                      value={formData.purchasePrices.basicPrice}
+                      onChange={handleChange}
+                      className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                      placeholder="0.00"
+                      min="0"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">سعر الشراء الفرعي</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      name="purchase_subPrice"
+                      value={formData.purchasePrices.subPrice}
+                      onChange={handleChange}
+                      className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                      placeholder="0.00"
+                      min="0"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* الكميات */}
+            <div className="p-3">
+              <h3 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                <FaCubes className="text-blue-500" /> الكميات
+              </h3>
+              <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">سعر الشراء الأساسي *</label>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">العدد/وحدة *</label>
                   <input
                     type="number"
-                    step="0.01"
-                    name="purchase_basicPrice"
-                    value={formData.purchasePrices.basicPrice}
+                    name="unitsInMain"
+                    value={formData.unitsInMain}
                     onChange={handleChange}
-                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                    placeholder="0.00"
+                    className="w-full px-2 py-1.5 text-sm border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-blue-50"
+                    placeholder="12"
+                    min="1"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">كرتونة *</label>
+                  <input
+                    type="number"
+                    name="mainQuantity"
+                    value={formData.mainQuantity}
+                    onChange={handleChange}
+                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="0"
                     min="0"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">سعر الشراء الفرعي</label>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">قطع إضافية</label>
                   <input
                     type="number"
-                    step="0.01"
-                    name="purchase_subPrice"
-                    value={formData.purchasePrices.subPrice}
+                    name="subQuantity"
+                    value={formData.subQuantity}
                     onChange={handleChange}
-                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                    placeholder="0.00"
+                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="0"
                     min="0"
                   />
                 </div>
               </div>
-              
-              {/* ملاحظة توضيحية */}
-              <div className="mt-3 p-3 bg-blue-100 rounded-lg">
-                <p className="text-xs text-blue-700">
-                  <span className="font-semibold">💡 ملاحظة مهمة:</span>
-                  <span className="mx-1">سيتم استخدام أسعار الشراء تلقائياً عند إضافة المنتجات لفواتير المشتريات</span>
-                </p>
-              </div>
+              {/* عرض الكمية الإجمالية */}
+              {formData.unitsInMain > 0 && (formData.mainQuantity || formData.subQuantity) && (
+                <div className="mt-2 p-2 bg-green-50 rounded text-xs text-green-800">
+                  الإجمالي: <strong>{((parseInt(formData.mainQuantity) || 0) * formData.unitsInMain + (parseInt(formData.subQuantity) || 0))} قطعة</strong>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* الشرائح السعرية */}
-          <div className="p-4 border-b">
-            <h3 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
-              <FaDollarSign className="text-green-500" /> الشرائح السعرية
+          {/* الشرائح السعرية - 3 أعمدة */}
+          <div className="p-3 border-b">
+            <h3 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+              <FaDollarSign className="text-green-500" /> الشرائح السعرية للبيع
             </h3>
             
-            <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
               {/* البيع المباشر */}
-              <div className="p-4 bg-orange-50 rounded-lg border border-orange-200">
-                <h4 className="text-sm font-semibold text-orange-700 mb-3 flex items-center gap-2">
-                  <FaDollarSign className="text-orange-500" /> البيع المباشر (تجزئة)
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="p-2 bg-orange-50 rounded-lg border border-orange-200">
+                <h4 className="text-xs font-semibold text-orange-700 mb-2">البيع المباشر (تجزئة)</h4>
+                <div className="space-y-2">
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">السعر الأساسي *</label>
                     <input
@@ -511,11 +573,9 @@ const AddProduct = () => {
               </div>
 
               {/* الجملة */}
-              <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                <h4 className="text-sm font-semibold text-blue-700 mb-3 flex items-center gap-2">
-                  <FaDollarSign className="text-blue-500" /> الجملة
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="p-2 bg-blue-50 rounded-lg border border-blue-200">
+                <h4 className="text-xs font-semibold text-blue-700 mb-2">الجملة</h4>
+                <div className="space-y-2">
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">السعر الأساسي *</label>
                     <input
@@ -547,11 +607,9 @@ const AddProduct = () => {
               </div>
 
               {/* جملة الجملة */}
-              <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
-                <h4 className="text-sm font-semibold text-purple-700 mb-3 flex items-center gap-2">
-                  <FaDollarSign className="text-purple-500" /> جملة الجملة
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="p-2 bg-purple-50 rounded-lg border border-purple-200">
+                <h4 className="text-xs font-semibold text-purple-700 mb-2">جملة الجملة</h4>
+                <div className="space-y-2">
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">السعر الأساسي *</label>
                     <input
@@ -560,7 +618,7 @@ const AddProduct = () => {
                       name="tier_bulk_basicPrice"
                       value={formData.tierPrices.bulk.basicPrice}
                       onChange={handleChange}
-                      className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                      className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       placeholder="0.00"
                       min="0"
                       required
@@ -574,7 +632,7 @@ const AddProduct = () => {
                       name="tier_bulk_subPrice"
                       value={formData.tierPrices.bulk.subPrice}
                       onChange={handleChange}
-                      className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                      className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       placeholder="0.00"
                       min="0"
                     />
@@ -582,145 +640,31 @@ const AddProduct = () => {
                 </div>
               </div>
             </div>
-
-            {/* ملاحظة توضيحية */}
-            <div className="mt-4 p-3 bg-gray-100 rounded-lg">
-              <p className="text-xs text-gray-600">
-                <strong>ملاحظة:</strong> 
-                <span className="mx-1">السعر الأساسي</span> 
-                للكميات الأساسية، 
-                <span className="mx-1">السعر الفرعي</span> 
-                للكميات المخفضة أو الفرعية
-              </p>
-            </div>
           </div>
 
-          {/* الكميات */}
-          <div className="p-4 border-b">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-              <FaCubes className="text-blue-500" /> الكميات
-            </h3>
-            
-            {/* العدد في الوحدة الأساسية */}
-            <div className="mb-4 p-3 bg-blue-50 rounded-lg border-l-4 border-blue-500">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <span className="text-blue-600">📦</span> العدد في الوحدة الأساسية *
-              </label>
-              <input
-                type="number"
-                name="unitsInMain"
-                value={formData.unitsInMain}
-                onChange={handleChange}
-                className="w-full px-3 py-2 text-sm border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="مثال: 12 (في الكرتونة)"
-                min="1"
-                required
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                مثال: إذا كانت الكرتونة تحتوي على 12 قطعة، أدخل 12
-              </p>
+          {/* الأزرار في الأسفل */}
+          <div className="p-3 bg-gray-50 flex justify-between items-center">
+            <div className="text-xs text-gray-500">
+              <span className="inline-block ml-3">Ctrl+S = حفظ</span>
+              <span className="inline-block">Tab = التنقل</span>
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">الكمية الأساسية (كرتونة) *</label>
-                <input
-                  type="number"
-                  name="mainQuantity"
-                  value={formData.mainQuantity}
-                  onChange={handleChange}
-                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="0"
-                  min="0"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">الكمية الفرعية (قطع إضافية)</label>
-                <input
-                  type="number"
-                  name="subQuantity"
-                  value={formData.subQuantity}
-                  onChange={handleChange}
-                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="0"
-                  min="0"
-                />
-                {formData.unitsInMain > 0 && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    متاح: {formData.unitsInMain} قطعة لكل كرتونة
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* عرض الكمية الإجمالية */}
-            {formData.unitsInMain > 0 && (formData.mainQuantity || formData.subQuantity) && (
-              <div className="mt-3 p-3 bg-green-50 rounded-lg border border-green-200">
-                <p className="text-sm font-medium text-green-800">
-                  <span className="text-green-600">📊</span> الكمية الإجمالية: {' '}
-                  <span className="font-bold">
-                    {((parseInt(formData.mainQuantity) || 0) * formData.unitsInMain + (parseInt(formData.subQuantity) || 0))} قطعة
-                  </span>
-                </p>
-                <p className="text-xs text-gray-600 mt-1">
-                  = {formData.mainQuantity || 0} كرتونة × {formData.unitsInMain} قطعة + {formData.subQuantity || 0} قطعة إضافية
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* معلومات إضافية */}
-          <div className="p-4 bg-gray-50">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-              <FaBarcode className="text-purple-500" /> معلومات إضافية
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">رقم الباركود *</label>
-                <input
-                  type="text"
-                  name="barcode"
-                  value={formData.barcode}
-                  onChange={handleChange}
-                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="أدخل رقم الباركود"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">الوصف</label>
-                <input
-                  type="text"
-                  name="description"
-                  value={formData.description}
-                  onChange={handleChange}
-                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="وصف مختصر للمنتج"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">الوحدة الأساسية</label>
-                <input
-                  type="text"
-                  value="كرتونة/بلتة"
-                  disabled
-                  className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded bg-gray-50 text-gray-500"
-                />
-              </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={resetForm}
+                className="flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors text-sm font-semibold"
+              >
+                <FaUndo /> إعادة تعيين
+              </button>
+              <button
+                type="submit"
+                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors text-sm font-semibold"
+              >
+                <FaSave /> حفظ المنتج
+              </button>
             </div>
           </div>
         </form>
-
-        {/* اختصارات الكيبورد */}
-        <div className="px-4 py-3 bg-gray-100 border-t text-xs text-gray-500 text-center">
-          <span className="inline-block mx-2">💡 اختصارات: </span>
-          <span className="inline-block mx-2">Ctrl+S = حفظ</span>
-          <span className="inline-block mx-2">Tab = التنقل</span>
-        </div>
       </div>
     </div>
   );

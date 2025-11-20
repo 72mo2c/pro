@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useData } from '../../context/DataContext';
-import { useNotification } from '../../context/NotificationContext';
+import { useNotification } from '../../context/NotificationContextWithSound';
 import { 
   FaExclamationTriangle, 
   FaTools, 

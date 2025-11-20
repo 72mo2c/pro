@@ -5,9 +5,10 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../../context/DataContext';
-import { useNotification } from '../../context/NotificationContext';
+import { useNotification } from '../../context/NotificationContextWithSound';
 import Card from '../../components/Common/Card';
 import Button from '../../components/Common/Button';
+import { PhoneInput } from '../../components/Common/Input';
 import { FaWarehouse, FaSave, FaArrowLeft } from 'react-icons/fa';
 
 const AddWarehouse = () => {
@@ -48,9 +49,9 @@ const AddWarehouse = () => {
 
     // التحقق من رقم الهاتف (إذا تم إدخاله)
     if (formData.phone && formData.phone.trim()) {
-      const phoneRegex = /^\+20[0-9]{9,10}$/;
+      const phoneRegex = /^\+20(10|11|12|15)[0-9]{8}$/;
       if (!phoneRegex.test(formData.phone.replace(/\s/g, ''))) {
-        newErrors.phone = 'رقم الهاتف يجب أن يبدأ بـ +20 ويتكون من 9-10 أرقام';
+        newErrors.phone = 'رقم الهاتف يجب أن يبدأ بـ +20 ويتبعه 10 أرقام';
       }
     }
 
@@ -176,25 +177,14 @@ const AddWarehouse = () => {
               )}
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                رقم الهاتف
-              </label>
-              <input
-                type="tel"
-                name="phone"
-                value={formData.phone}
-                onChange={handleChange}
-                placeholder="+20 XXX XXX XXXX"
-                className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-orange-400 focus:border-transparent transition-all ${
-                  errors.phone ? 'border-red-300 bg-red-50' : 'border-gray-200'
-                }`}
-              />
-              {errors.phone && (
-                <p className="text-red-500 text-xs mt-1">{errors.phone}</p>
-              )}
-              <p className="text-xs text-gray-500 mt-1">يجب أن يبدأ بـ +20</p>
-            </div>
+            <PhoneInput
+              label="رقم الهاتف"
+              name="phone"
+              value={formData.phone}
+              onChange={handleChange}
+              placeholder="1012345678"
+              error={errors.phone}
+            />
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">

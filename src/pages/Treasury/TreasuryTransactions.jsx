@@ -4,19 +4,39 @@
 
 import React, { useState } from 'react';
 import { useData } from '../../context/DataContext';
-import { useNotification } from '../../context/NotificationContext';
+import { useNotification } from '../../context/NotificationContextWithSound';
 import Card from '../../components/Common/Card';
 import Input from '../../components/Common/Input';
 import Select from '../../components/Common/Select';
 import Button from '../../components/Common/Button';
 import Table from '../../components/Common/Table';
 import { FaMoneyBillWave, FaPrint } from 'react-icons/fa';
-import { printTreasuryTransaction } from '../../utils/printUtils';
+
 
 const TreasuryTransactions = () => {
-  const { treasury, addTransaction } = useData();
+  const { treasuryBalance: balance, cashReceipts, cashDisbursements } = useData();
   const { showSuccess, showError } = useNotification();
   
+  // دمج جميع العمليات (إيصالات الاستلام كإيداعات، إيصالات الصرف كسحوبات)
+  const allTransactions = [
+    ...cashReceipts.map(receipt => ({
+      type: 'deposit',
+      amount: parseFloat(receipt.amount),
+      description: receipt.description || 'إيصال استلام نقدي',
+      reference: receipt.receiptNumber,
+      date: receipt.date,
+      id: `receipt-${receipt.id}`
+    })),
+    ...cashDisbursements.map(disbursement => ({
+      type: 'withdrawal',
+      amount: parseFloat(disbursement.amount),
+      description: disbursement.description || 'إيصال صرف نقدي',
+      reference: disbursement.disbursementNumber,
+      date: disbursement.date,
+      id: `disbursement-${disbursement.id}`
+    }))
+  ].sort((a, b) => new Date(b.date) - new Date(a.date));
+
   const [formData, setFormData] = useState({
     type: 'deposit',
     amount: '',
@@ -33,27 +53,7 @@ const TreasuryTransactions = () => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    
-    try {
-      const transactionData = {
-        type: formData.type,
-        amount: parseFloat(formData.amount),
-        description: formData.description,
-        reference: formData.reference
-      };
-
-      addTransaction(transactionData);
-      showSuccess('تمت العملية بنجاح');
-      
-      setFormData({
-        type: 'deposit',
-        amount: '',
-        description: '',
-        reference: ''
-      });
-    } catch (error) {
-      showError('حدث خطأ في إتمام العملية');
-    }
+    showError('هذه الوظيفة غير متوفرة حالياً. الرجاء استخدام إدارة إيصالات الاستلام والصرف');
   };
 
   const typeOptions = [
@@ -98,7 +98,7 @@ const TreasuryTransactions = () => {
       accessor: 'actions',
       render: (row) => (
         <button
-          onClick={() => printTreasuryTransaction(row)}
+          onClick={() => window.print()}
           className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm font-semibold transition-colors"
           title="طباعة إيصال"
         >
@@ -115,7 +115,7 @@ const TreasuryTransactions = () => {
       {/* عرض الرصيد */}
       <div className="bg-gradient-to-r from-blue-500 to-blue-700 rounded-lg p-8 mb-6 text-white shadow-lg">
         <p className="text-sm mb-2">رصيد الخزينة الحالي</p>
-        <p className="text-4xl font-bold">{treasury.balance.toLocaleString()} د.ع</p>
+        <p className="text-4xl font-bold">{balance.toLocaleString()} د.ع</p>
       </div>
 
       {/* نموذج إضافة عملية */}
@@ -162,7 +162,7 @@ const TreasuryTransactions = () => {
 
           <div className="flex gap-4">
             <Button type="submit" variant="success">
-              تنفيذ العملية
+              ملاحظة: استخدم إدارة الإيصالات
             </Button>
             <Button 
               type="button" 
@@ -181,7 +181,7 @@ const TreasuryTransactions = () => {
       <Card title="سجل العمليات" className="mt-6">
         <Table
           columns={columns}
-          data={treasury.transactions}
+          data={allTransactions}
           actions={false}
         />
       </Card>

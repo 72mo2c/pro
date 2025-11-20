@@ -6,7 +6,7 @@ import React from 'react';
 import Button from './Button';
 import { FaEye, FaTrash, FaEdit, FaUndo, FaInbox } from 'react-icons/fa';
 
-const Table = ({ columns, data, onEdit, onDelete, onView, onReturn, actions = true }) => {
+const Table = ({ columns, data, onEdit, onDelete, onView, onReturn, onRowDoubleClick, actions = true }) => {
   return (
     <div className="overflow-hidden bg-white border border-gray-200 rounded-lg shadow-sm">
       <div className="overflow-x-auto">
@@ -34,7 +34,12 @@ const Table = ({ columns, data, onEdit, onDelete, onView, onReturn, actions = tr
           <tbody className="divide-y divide-gray-100">
             {data && data.length > 0 ? (
               data.map((row, rowIndex) => (
-                <tr key={rowIndex} className="hover:bg-blue-50 transition-colors duration-150">
+                <tr 
+                  key={rowIndex} 
+                  className="hover:bg-blue-50 transition-colors duration-150 cursor-pointer"
+                  onDoubleClick={() => onRowDoubleClick && onRowDoubleClick(row)}
+                  title={onRowDoubleClick ? "اضغط مرتين لعرض التفاصيل" : ""}
+                >
                   {columns.map((column, colIndex) => (
                     <td key={colIndex} className="px-6 py-4 text-sm text-gray-900">
                       <div className="flex items-center justify-end">

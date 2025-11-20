@@ -95,6 +95,9 @@ export const TabProvider = ({ children }) => {
       '/reports/treasury': 'تقرير الخزينة',
       '/reports/cash-flow': 'التدفق النقدي',
       '/reports/profit-loss': 'الأرباح والخسائر',
+      '/reports/trash': 'سلة المهملات',
+      '/reports/activity-log': 'التقارير العامة',
+      '/reports/activity-archive': 'أرشيف الأنشطة',
       '/notifications': 'الإشعارات',
       '/settings/add-user': 'إضافة مستخدم',
       '/settings/permissions': 'الصلاحيات',
@@ -123,6 +126,9 @@ export const TabProvider = ({ children }) => {
   // الحصول على أيقونة من المسار
   const getPageIcon = (path) => {
     if (path === '/dashboard') return '🏠';
+    if (path === '/reports/trash') return '🗑️';
+    if (path === '/reports/activity-log') return '📝';
+    if (path === '/reports/activity-archive') return '📚';
     if (path.includes('warehouses')) return '📦';
     if (path.includes('purchases')) return '🛒';
     if (path.includes('sales')) return '💰';
@@ -217,6 +223,30 @@ export const TabProvider = ({ children }) => {
     return tabs.find(t => t.id === activeTabId);
   };
 
+  // إعادة ترتيب التبويبات (Drag & Drop)
+  const reorderTabs = (fromIndex, toIndex) => {
+    setTabs(prev => {
+      const newTabs = [...prev];
+      const [movedTab] = newTabs.splice(fromIndex, 1);
+      newTabs.splice(toIndex, 0, movedTab);
+      return newTabs;
+    });
+  };
+
+  // إغلاق جميع التبويبات (ما عدا الرئيسي)
+  const closeAllTabs = () => {
+    setTabs(prev => {
+      // الاحتفاظ بالتبويب الرئيسي فقط
+      const mainTab = prev.find(tab => tab.isMain);
+      if (mainTab) {
+        setActiveTabId(mainTab.id);
+        navigate(mainTab.path);
+        return [mainTab];
+      }
+      return prev;
+    });
+  };
+
   const value = {
     tabs,
     activeTabId,
@@ -225,6 +255,8 @@ export const TabProvider = ({ children }) => {
     closeTab,
     switchTab,
     getActiveTab,
+    reorderTabs,
+    closeAllTabs,
     hasMultipleTabs: tabs.length > 1
   };
 

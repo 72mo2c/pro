@@ -45,7 +45,10 @@ import {
   FaCalculator,
   FaBookOpen,
   FaClock,
-  FaCalendarAlt
+  FaCalendarAlt,
+  FaTrash,
+  FaHistory,
+  FaArchive
 } from 'react-icons/fa';
 
 const Sidebar = ({ isOpen, closeSidebar }) => {
@@ -93,7 +96,8 @@ const Sidebar = ({ isOpen, closeSidebar }) => {
       FaCalculator: '🧮',
       FaBookOpen: '📚',
       FaClock: '🕐',
-      FaCalendarAlt: '📅'
+      FaCalendarAlt: '📅',
+      FaTrash: '🗑️'
     };
     
     // استخراج اسم المكون من JSX element
@@ -282,6 +286,9 @@ const Sidebar = ({ isOpen, closeSidebar }) => {
         { title: 'تقرير الخزينة', icon: <FaMoneyBillWave />, path: '/reports/treasury' },
         { title: 'التدفق النقدي', icon: <FaCashRegister />, path: '/reports/cash-flow' },
         { title: 'الأرباح والخسائر', icon: <FaDollarSign />, path: '/reports/profit-loss' },
+        { title: 'سلة المحذوفات', icon: <FaTrash />, path: '/reports/trash' },
+        { title: 'التقارير العامة', icon: <FaHistory />, path: '/reports/activity-log' },
+        { title: 'أرشيف الأنشطة', icon: <FaArchive />, path: '/reports/activity-archive' },
       ]
     },
     {

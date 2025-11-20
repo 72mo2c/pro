@@ -5,11 +5,11 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import ConfirmationModal from '../components/Common/ConfirmationModal';
 
-const NotificationContext = createContext();
+const NotificationContextWithSound = createContext();
 
 // Hook لاستخدام Notification Context
 export const useNotification = () => {
-  const context = useContext(NotificationContext);
+  const context = useContext(NotificationContextWithSound);
   if (!context) {
     throw new Error('useNotification must be used within NotificationProvider');
   }
@@ -169,7 +169,7 @@ export const NotificationProvider = ({ children }) => {
   };
 
   return (
-    <NotificationContext.Provider value={value} style={{ zIndex: 1000 }}>
+    <NotificationContextWithSound.Provider value={value} style={{ zIndex: 1000 }}>
       {children}
       
       {/* نافذة التأكيد */}
@@ -183,6 +183,6 @@ export const NotificationProvider = ({ children }) => {
         confirmText={confirmModal.confirmText}
         cancelText={confirmModal.cancelText}
       />
-    </NotificationContext.Provider>
+    </NotificationContextWithSound.Provider>
   );
 };

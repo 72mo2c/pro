@@ -65,6 +65,9 @@ import WhatsAppBusiness from '../../pages/Integrations/WhatsAppBusiness';
 
 // Reports
 import ReportsHome from '../../pages/Reports/ReportsHome';
+import TrashManagement from '../../pages/Reports/TrashManagement';
+import ActivityLog from '../../pages/Reports/ActivityLog';
+import ActivityArchive from '../../pages/Reports/ActivityArchive';
 import InventoryReport from '../../pages/Reports/InventoryReport';
 import ProductMovementReport from '../../pages/Reports/ProductMovementReport';
 import LowStockReport from '../../pages/Reports/LowStockReport';
@@ -217,6 +220,9 @@ const getComponentForPath = (path) => {
     
     // Reports
     '/reports': ReportsHome,
+    '/reports/trash': TrashManagement,
+    '/reports/activity-log': ActivityLog,
+    '/reports/activity-archive': ActivityArchive,
     '/reports/inventory': InventoryReport,
     '/reports/product-movement': ProductMovementReport,
     '/reports/low-stock': LowStockReport,

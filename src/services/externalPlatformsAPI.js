@@ -181,7 +181,7 @@ export const cartonPlatformAPI = {
  */
 export const transformInvoicePlatformData = (externalInvoice) => {
   return {
-    id: `INV-${externalInvoice.id}`,
+    id: externalInvoice.id,
     platform: 'invoice',
     platformName: 'منصة فاتورة',
     externalId: externalInvoice.id,

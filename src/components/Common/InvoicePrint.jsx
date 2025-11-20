@@ -63,8 +63,8 @@ const InvoicePrint = ({ invoiceData, type = 'purchase', onClose }) => {
 
   const financialInfo = calculateFinancialInfo();
 
-  // رقم الفاتورة (timestamp)
-  const invoiceNumber = Date.now();
+  // رقم الفاتورة من البيانات الفعلية (أرقام فقط)
+  const invoiceNumber = formData.id || Date.now();
 
   // طباعة فورية
   const handleQuickPrint = () => {

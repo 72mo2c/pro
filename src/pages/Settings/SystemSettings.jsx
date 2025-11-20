@@ -1,126 +1,85 @@
 // ======================================
-// System Settings - إعدادات النظام
+// System Settings - إعدادات النظام الحقيقية والمترابطة
 // ======================================
 
-import React, { useState, useEffect } from 'react';
-import { useNotification } from '../../context/NotificationContext';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useSystemSettings } from '../../context/SystemSettingsContext';
+import { useNotification } from '../../context/NotificationContextWithSound';
 import Card from '../../components/Common/Card';
 import Input from '../../components/Common/Input';
 import Select from '../../components/Common/Select';
 import Button from '../../components/Common/Button';
-import { FaCog, FaBuilding, FaMoneyBillWave, FaFileInvoice, FaShieldAlt, FaDatabase, FaSave, FaUndo } from 'react-icons/fa';
-
-const STORAGE_KEY = 'bero_system_settings';
+import { FaCog, FaBuilding, FaMoneyBillWave, FaFileInvoice, FaShieldAlt, FaDatabase, FaSave, FaUndo, FaDownload, FaUpload, FaCheckCircle } from 'react-icons/fa';
 
 const SystemSettings = () => {
-  const { showSuccess, showWarning } = useNotification();
+  const { showSuccess, showWarning, showError } = useNotification();
+  const { 
+    settings, 
+    loading, 
+    lastSaved,
+    updateSettings,
+    updateMultipleSettings,
+    resetSettings,
+    exportSettings,
+    importSettings
+  } = useSystemSettings();
   
   const [activeTab, setActiveTab] = useState('company');
-  const [showSaveModal, setShowSaveModal] = useState(false);
-  const [hasChanges, setHasChanges] = useState(false);
+  const [validationErrors, setValidationErrors] = useState([]);
   
-  const [formData, setFormData] = useState({
-    // معلومات الشركة
-    companyName: 'Bero System',
-    companyAddress: '',
-    companyPhone: '',
-    companyEmail: '',
-    companyTax: '',
-    companyLogo: '',
-    
-    // الإعدادات العامة
-    currency: 'EGP',
-    language: 'ar',
-    timezone: 'Africa/Cairo',
-    dateFormat: 'DD/MM/YYYY',
-    
-    // إعدادات الفواتير
-    invoicePrefix: 'INV',
-    invoiceStartNumber: '1000',
-    invoiceFooterText: 'شكراً لتعاملكم معنا',
-    showCompanyLogo: true,
-    showTaxNumber: true,
-    autoCalculateTax: true,
-    taxRate: '0',
-    
-    // إعدادات الأمان
-    sessionTimeout: '30',
-    requirePasswordChange: false,
-    passwordMinLength: '6',
-    enableTwoFactor: false,
-    
-    // إعدادات النسخ الاحتياطي
-    autoBackup: false,
-    backupFrequency: 'daily',
-    backupTime: '00:00',
-    lastBackup: null
-  });
-
-  const [originalData, setOriginalData] = useState(null);
-
-  // تحميل البيانات عند بدء التشغيل
+  // مراقبة التغييرات - تحديث الإحصائيات
   useEffect(() => {
-    loadSettings();
-  }, []);
-
-  // مراقبة التغييرات
-  useEffect(() => {
-    if (originalData) {
-      const changed = JSON.stringify(formData) !== JSON.stringify(originalData);
-      setHasChanges(changed);
+    if (!loading && settings) {
+      // يمكن إضافة منطق إضافي هنا لمراقبة التغييرات
     }
-  }, [formData, originalData]);
+  }, [settings, loading]);
 
-  const loadSettings = () => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const data = JSON.parse(saved);
-        setFormData(data);
-        setOriginalData(data);
-      } else {
-        setOriginalData(formData);
-      }
-    } catch (error) {
-      console.error('Error loading settings:', error);
-      setOriginalData(formData);
+  // التحقق من صحة البيانات قبل الحفظ
+  const validateSettings = useCallback(() => {
+    const errors = [];
+    
+    // التحقق من معلومات الشركة
+    if (!settings.company.name.trim()) {
+      errors.push('اسم الشركة مطلوب');
     }
-  };
-
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setFormData({
-      ...formData,
-      [name]: type === 'checkbox' ? checked : value
-    });
-  };
-
-  const handleSave = () => {
-    setShowSaveModal(true);
-  };
-
-  const confirmSave = () => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(formData));
-      setOriginalData(formData);
-      setHasChanges(false);
-      setShowSaveModal(false);
-      showSuccess('تم حفظ إعدادات النظام بنجاح');
-    } catch (error) {
-      console.error('Error saving settings:', error);
-      showWarning('حدث خطأ أثناء حفظ الإعدادات');
+    
+    // التحقق من الإعدادات الأمنية
+    if (parseInt(settings.security?.sessionTimeout || 30) < 5 || parseInt(settings.security?.sessionTimeout || 30) > 480) {
+      errors.push('مهلة الجلسة يجب أن تكون بين 5 و 480 دقيقة');
     }
-  };
+    
+    if (parseInt(settings.security?.passwordMinLength || 6) < 4) {
+      errors.push('الحد الأدنى لطول كلمة المرور يجب أن يكون 4 أحرف على الأقل');
+    }
+    
+    // التحقق من إعدادات الفواتير
+    if (parseFloat(settings.invoice.taxRate) < 0 || parseFloat(settings.invoice.taxRate) > 100) {
+      errors.push('نسبة الضريبة يجب أن تكون بين 0 و 100');
+    }
+    
+    setValidationErrors(errors);
+    return errors.length === 0;
+  }, [settings]);
 
-  const handleReset = () => {
-    setFormData(originalData);
-    setHasChanges(false);
-    showWarning('تم التراجع عن التغييرات');
-  };
+  // تحديث إعدادات القسم المحدد
+  const handleSectionUpdate = useCallback((sectionName, updates) => {
+    updateMultipleSettings({ [sectionName]: updates });
+    showSuccess(`تم تحديث إعدادات ${sectionName} بنجاح`);
+  }, [updateMultipleSettings, showSuccess]);
+
+
+
+  // إعادة تعيين الإعدادات
+  const handleReset = useCallback(() => {
+    if (window.confirm('هل أنت متأكد من إعادة تعيين جميع الإعدادات؟')) {
+      resetSettings();
+      showWarning('تم إعادة تعيين جميع الإعدادات');
+    }
+  }, [resetSettings, showWarning]);
 
   const handleBackupNow = () => {
     const backupData = {
-      settings: formData,
+      settings: settings,
       timestamp: new Date().toISOString(),
       version: '1.0'
     };
@@ -136,9 +95,8 @@ const SystemSettings = () => {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
     
-    const updatedData = { ...formData, lastBackup: new Date().toISOString() };
-    setFormData(updatedData);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedData));
+    // Update backup timestamp
+    updateMultipleSettings({ backup: { ...settings.backup, lastBackup: new Date().toISOString() } });
     showSuccess('تم إنشاء النسخة الاحتياطية بنجاح');
   };
 
@@ -173,19 +131,34 @@ const SystemSettings = () => {
     { id: 'general', label: 'إعدادات عامة', icon: <FaCog /> },
     { id: 'invoice', label: 'إعدادات الفواتير', icon: <FaFileInvoice /> },
     { id: 'security', label: 'الأمان', icon: <FaShieldAlt /> },
-    { id: 'backup', label: 'النسخ الاحتياطي', icon: <FaDatabase /> }
+    { id: 'backup', label: 'النسخ الاحتياطي', icon: <FaDatabase /> },
+    { id: 'advanced', label: 'متقدم', icon: <FaCog /> }
   ];
+
+  // البيانات الحية للـ statistics
+  const companyName = settings.company.name || 'Bero System';
+  const currency = settings.general.currency || 'EGP';
+  const language = settings.general.language || 'ar';
+  const twoFactorEnabled = settings.security.enableTwoFactor || false;
+  const autoBackupEnabled = settings.backup.autoBackup || false;
 
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-gray-800">إعدادات النظام</h1>
-        {hasChanges && (
+        {loading && (
           <div className="flex gap-2">
             <Button variant="secondary" onClick={handleReset}>
               <FaUndo className="ml-2" /> تراجع
             </Button>
-            <Button variant="success" onClick={handleSave}>
+            <Button variant="success" onClick={() => {
+              if (validateSettings()) {
+                updateSettings();
+                showSuccess('تم حفظ الإعدادات بنجاح');
+              } else {
+                showError('يرجى تصحيح الأخطاء قبل الحفظ');
+              }
+            }}>
               <FaSave className="ml-2" /> حفظ التغييرات
             </Button>
           </div>
@@ -198,7 +171,7 @@ const SystemSettings = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm opacity-90">العملة الأساسية</p>
-              <p className="text-2xl font-bold">{formData.currency}</p>
+              <p className="text-2xl font-bold">{currency}</p>
             </div>
             <FaMoneyBillWave className="text-3xl opacity-75" />
           </div>
@@ -208,7 +181,9 @@ const SystemSettings = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm opacity-90">اللغة</p>
-              <p className="text-2xl font-bold">{formData.language === 'ar' ? 'عربي' : formData.language === 'en' ? 'English' : 'كوردي'}</p>
+              <p className="text-2xl font-bold">
+                {language === 'ar' ? 'عربي' : language === 'en' ? 'English' : 'كوردي'}
+              </p>
             </div>
             <FaCog className="text-3xl opacity-75" />
           </div>
@@ -217,8 +192,8 @@ const SystemSettings = () => {
         <div className="bg-gradient-to-r from-purple-500 to-purple-600 rounded-lg p-4 text-white">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm opacity-90">الأمان</p>
-              <p className="text-2xl font-bold">{formData.enableTwoFactor ? 'مفعل' : 'معطل'}</p>
+              <p className="text-sm opacity-90">المصادقة الثنائية</p>
+              <p className="text-2xl font-bold">{twoFactorEnabled ? 'مفعل' : 'معطل'}</p>
             </div>
             <FaShieldAlt className="text-3xl opacity-75" />
           </div>
@@ -228,7 +203,7 @@ const SystemSettings = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm opacity-90">النسخ الاحتياطي</p>
-              <p className="text-xl font-bold">{formData.autoBackup ? 'تلقائي' : 'يدوي'}</p>
+              <p className="text-xl font-bold">{autoBackupEnabled ? 'تلقائي' : 'يدوي'}</p>
             </div>
             <FaDatabase className="text-3xl opacity-75" />
           </div>
@@ -266,46 +241,46 @@ const SystemSettings = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Input
                 label="اسم الشركة"
-                name="companyName"
-                value={formData.companyName}
-                onChange={handleChange}
+                name="name"
+                value={settings.company.name}
+                onChange={(e) => handleSectionUpdate('company', { name: e.target.value })}
                 placeholder="أدخل اسم الشركة"
                 required
               />
               <Input
                 label="عنوان الشركة"
-                name="companyAddress"
-                value={formData.companyAddress}
-                onChange={handleChange}
+                name="address"
+                value={settings.company.address}
+                onChange={(e) => handleSectionUpdate('company', { address: e.target.value })}
                 placeholder="أدخل عنوان الشركة"
               />
               <Input
                 label="هاتف الشركة"
-                name="companyPhone"
-                value={formData.companyPhone}
-                onChange={handleChange}
+                name="phone"
+                value={settings.company.phone}
+                onChange={(e) => handleSectionUpdate('company', { phone: e.target.value })}
                 placeholder="+20 XXX XXX XXXX"
               />
               <Input
                 label="بريد الشركة الإلكتروني"
-                name="companyEmail"
+                name="email"
                 type="email"
-                value={formData.companyEmail}
-                onChange={handleChange}
+                value={settings.company.email}
+                onChange={(e) => handleSectionUpdate('company', { email: e.target.value })}
                 placeholder="info@company.com"
               />
               <Input
                 label="الرقم الضريبي"
-                name="companyTax"
-                value={formData.companyTax}
-                onChange={handleChange}
+                name="tax"
+                value={settings.company.tax}
+                onChange={(e) => handleSectionUpdate('company', { tax: e.target.value })}
                 placeholder="أدخل الرقم الضريبي"
               />
               <Input
                 label="رابط شعار الشركة"
-                name="companyLogo"
-                value={formData.companyLogo}
-                onChange={handleChange}
+                name="logo"
+                value={settings.company.logo}
+                onChange={(e) => handleSectionUpdate('company', { logo: e.target.value })}
                 placeholder="https://..."
               />
             </div>
@@ -322,28 +297,28 @@ const SystemSettings = () => {
               <Select
                 label="العملة الأساسية"
                 name="currency"
-                value={formData.currency}
-                onChange={handleChange}
+                value={settings.general.currency}
+                onChange={(e) => handleSectionUpdate('general', { currency: e.target.value })}
                 options={currencyOptions}
               />
               <Select
                 label="اللغة"
                 name="language"
-                value={formData.language}
-                onChange={handleChange}
+                value={settings.general.language}
+                onChange={(e) => handleSectionUpdate('general', { language: e.target.value })}
                 options={languageOptions}
               />
               <Input
                 label="المنطقة الزمنية"
                 name="timezone"
-                value={formData.timezone}
-                onChange={handleChange}
+                value={settings.general.timezone || 'Asia/Riyadh'}
+                onChange={(e) => handleSectionUpdate('general', { timezone: e.target.value })}
               />
               <Select
                 label="تنسيق التاريخ"
                 name="dateFormat"
-                value={formData.dateFormat}
-                onChange={handleChange}
+                value={settings.general.dateFormat}
+                onChange={(e) => handleSectionUpdate('general', { dateFormat: e.target.value })}
                 options={dateFormatOptions}
               />
             </div>
@@ -364,25 +339,25 @@ const SystemSettings = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Input
                 label="بادئة رقم الفاتورة"
-                name="invoicePrefix"
-                value={formData.invoicePrefix}
-                onChange={handleChange}
+                name="prefix"
+                value={settings.invoice.prefix}
+                onChange={(e) => handleSectionUpdate('invoices', { prefix: e.target.value })}
                 placeholder="INV"
               />
               <Input
                 label="رقم البداية للفواتير"
-                name="invoiceStartNumber"
+                name="startNumber"
                 type="number"
-                value={formData.invoiceStartNumber}
-                onChange={handleChange}
+                value={settings.invoice.startNumber}
+                onChange={(e) => handleSectionUpdate('invoices', { startNumber: e.target.value })}
                 placeholder="1000"
               />
               <div className="md:col-span-2">
                 <Input
                   label="نص تذييل الفاتورة"
-                  name="invoiceFooterText"
-                  value={formData.invoiceFooterText}
-                  onChange={handleChange}
+                  name="footerText"
+                  value={settings.invoice.footerText}
+                  onChange={(e) => handleSectionUpdate('invoices', { footerText: e.target.value })}
                   placeholder="شكراً لتعاملكم معنا"
                 />
               </div>
@@ -390,9 +365,23 @@ const SystemSettings = () => {
                 label="نسبة الضريبة (%)"
                 name="taxRate"
                 type="number"
-                value={formData.taxRate}
-                onChange={handleChange}
+                min="0"
+                max="100"
+                step="0.1"
+                value={settings.invoice.taxRate}
+                onChange={(e) => handleSectionUpdate('invoices', { taxRate: e.target.value })}
                 placeholder="0"
+              />
+              <Select
+                label="جودة PDF"
+                name="pdfQuality"
+                value={settings.invoice.pdfQuality}
+                onChange={(e) => handleSectionUpdate('invoices', { pdfQuality: e.target.value })}
+                options={[
+                  { value: 'low', label: 'منخفضة (سريع)' },
+                  { value: 'medium', label: 'متوسطة' },
+                  { value: 'high', label: 'عالية (بطيء)' }
+                ]}
               />
             </div>
             <div className="space-y-3 pt-4 border-t">
@@ -400,8 +389,8 @@ const SystemSettings = () => {
                 <input
                   type="checkbox"
                   name="showCompanyLogo"
-                  checked={formData.showCompanyLogo}
-                  onChange={handleChange}
+                  checked={settings.invoice.showCompanyLogo}
+                  onChange={(e) => handleSectionUpdate('invoices', { showCompanyLogo: e.target.checked })}
                   className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
                 />
                 <span className="text-gray-700">إظهار شعار الشركة في الفواتير</span>
@@ -410,8 +399,8 @@ const SystemSettings = () => {
                 <input
                   type="checkbox"
                   name="showTaxNumber"
-                  checked={formData.showTaxNumber}
-                  onChange={handleChange}
+                  checked={settings.invoice.showTaxNumber}
+                  onChange={(e) => handleSectionUpdate('invoices', { showTaxNumber: e.target.checked })}
                   className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
                 />
                 <span className="text-gray-700">إظهار الرقم الضريبي في الفواتير</span>
@@ -420,11 +409,21 @@ const SystemSettings = () => {
                 <input
                   type="checkbox"
                   name="autoCalculateTax"
-                  checked={formData.autoCalculateTax}
-                  onChange={handleChange}
+                  checked={settings.invoice.autoCalculateTax}
+                  onChange={(e) => handleSectionUpdate('invoices', { autoCalculateTax: e.target.checked })}
                   className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
                 />
                 <span className="text-gray-700">حساب الضريبة تلقائياً</span>
+              </label>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  name="allowPartialPayments"
+                  checked={settings.invoice.allowPartialPayments}
+                  onChange={(e) => handleSectionUpdate('invoices', { allowPartialPayments: e.target.checked })}
+                  className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                />
+                <span className="text-gray-700">السماح بالدفعات الجزئية</span>
               </label>
             </div>
           </div>
@@ -441,16 +440,16 @@ const SystemSettings = () => {
                 label="مهلة الجلسة (بالدقائق)"
                 name="sessionTimeout"
                 type="number"
-                value={formData.sessionTimeout}
-                onChange={handleChange}
+                value={settings.security.sessionTimeout || 30}
+                onChange={(e) => handleSectionUpdate('security', { sessionTimeout: e.target.value })}
                 placeholder="30"
               />
               <Input
                 label="الحد الأدنى لطول كلمة المرور"
                 name="passwordMinLength"
                 type="number"
-                value={formData.passwordMinLength}
-                onChange={handleChange}
+                value={settings.security.passwordMinLength || 6}
+                onChange={(e) => handleSectionUpdate('security', { passwordMinLength: e.target.value })}
                 placeholder="6"
               />
             </div>
@@ -459,8 +458,8 @@ const SystemSettings = () => {
                 <input
                   type="checkbox"
                   name="requirePasswordChange"
-                  checked={formData.requirePasswordChange}
-                  onChange={handleChange}
+                  checked={settings.security.requirePasswordChange || false}
+                  onChange={(e) => handleSectionUpdate('security', { requirePasswordChange: e.target.checked })}
                   className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
                 />
                 <span className="text-gray-700">طلب تغيير كلمة المرور بشكل دوري (كل 90 يوم)</span>
@@ -469,8 +468,8 @@ const SystemSettings = () => {
                 <input
                   type="checkbox"
                   name="enableTwoFactor"
-                  checked={formData.enableTwoFactor}
-                  onChange={handleChange}
+                  checked={settings.security.enableTwoFactor || false}
+                  onChange={(e) => handleSectionUpdate('security', { enableTwoFactor: e.target.checked })}
                   className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
                 />
                 <span className="text-gray-700">تفعيل المصادقة الثنائية (2FA)</span>
@@ -488,22 +487,46 @@ const SystemSettings = () => {
           <div className="space-y-6">
             <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
               <FaDatabase className="text-blue-600" />
-              النسخ الاحتياطي
+              النسخ الاحتياطي والإعدادات
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Select
                 label="تكرار النسخ الاحتياطي"
                 name="backupFrequency"
-                value={formData.backupFrequency}
-                onChange={handleChange}
-                options={backupFrequencyOptions}
+                value={settings.backup.frequency}
+                onChange={(e) => handleSectionUpdate('backup', { frequency: e.target.value })}
+                options={[
+                  { value: 'daily', label: 'يومياً' },
+                  { value: 'weekly', label: 'أسبوعياً' },
+                  { value: 'monthly', label: 'شهرياً' }
+                ]}
               />
               <Input
                 label="وقت النسخ الاحتياطي"
                 name="backupTime"
                 type="time"
-                value={formData.backupTime}
-                onChange={handleChange}
+                value={settings.backup.time}
+                onChange={(e) => handleSectionUpdate('backup', { time: e.target.value })}
+              />
+              <Input
+                label="فترة الاحتفاظ (بالأيام)"
+                name="retentionDays"
+                type="number"
+                min="1"
+                max="365"
+                value={settings.backup.retentionDays}
+                onChange={(e) => handleSectionUpdate('backup', { retentionDays: e.target.value })}
+              />
+              <Select
+                label="موقع النسخ الاحتياطي"
+                name="backupLocation"
+                value={settings.backup.backupLocation}
+                onChange={(e) => handleSectionUpdate('backup', { backupLocation: e.target.value })}
+                options={[
+                  { value: 'local', label: 'محلي' },
+                  { value: 'cloud', label: 'السحابة' },
+                  { value: 'both', label: 'محلي والسحابة' }
+                ]}
               />
             </div>
             <div className="space-y-3 pt-4 border-t">
@@ -511,11 +534,31 @@ const SystemSettings = () => {
                 <input
                   type="checkbox"
                   name="autoBackup"
-                  checked={formData.autoBackup}
-                  onChange={handleChange}
+                  checked={settings.backup.autoBackup}
+                  onChange={(e) => handleSectionUpdate('backup', { autoBackup: e.target.checked })}
                   className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
                 />
                 <span className="text-gray-700">تفعيل النسخ الاحتياطي التلقائي</span>
+              </label>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  name="compressBackup"
+                  checked={settings.backup.compressBackup}
+                  onChange={(e) => handleSectionUpdate('backup', { compressBackup: e.target.checked })}
+                  className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                />
+                <span className="text-gray-700">ضغط النسخ الاحتياطية</span>
+              </label>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  name="includeImages"
+                  checked={settings.backup.includeImages}
+                  onChange={(e) => handleSectionUpdate('backup', { includeImages: e.target.checked })}
+                  className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                />
+                <span className="text-gray-700">تضمين الصور والملفات</span>
               </label>
             </div>
             
@@ -524,8 +567,8 @@ const SystemSettings = () => {
                 <div>
                   <h4 className="font-semibold text-gray-800 text-lg">النسخة الاحتياطية اليدوية</h4>
                   <p className="text-sm text-gray-600 mt-1">
-                    {formData.lastBackup 
-                      ? `آخر نسخة احتياطية: ${new Date(formData.lastBackup).toLocaleString('ar-EG')}`
+                    {settings.backup?.lastBackup 
+                      ? `آخر نسخة احتياطية: ${new Date(settings.backup.lastBackup).toLocaleString('ar-EG')}`
                       : 'لم يتم إنشاء نسخة احتياطية بعد'}
                   </p>
                 </div>
@@ -540,42 +583,197 @@ const SystemSettings = () => {
             </div>
           </div>
         )}
+
+        {activeTab === 'advanced' && (
+          <div className="space-y-6">
+            <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+              <FaCog className="text-blue-600" />
+              الميزات المتقدمة
+            </h3>
+            
+            {/* أخطاء التحقق */}
+            {validationErrors.length > 0 && (
+              <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                <h4 className="font-semibold text-red-800 mb-2">أخطاء في الإعدادات:</h4>
+                <ul className="text-sm text-red-700 space-y-1 list-disc list-inside">
+                  {validationErrors.map((error, index) => (
+                    <li key={index}>{error}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* معلومات النظام */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Card title="معلومات النظام">
+                <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">الإصدار:</span>
+                    <span className="font-semibold">1.0.0</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">آخر تحديث:</span>
+                    <span className="font-semibold">
+                      {lastSaved ? new Date(lastSaved).toLocaleString('ar-EG') : 'غير محدد'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">الحفظ التلقائي:</span>
+                    <span className="font-semibold text-green-600">
+                      مفعل
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">حالة التغييرات:</span>
+                    <span className="font-semibold text-green-600">
+                      محفوظ
+                    </span>
+                  </div>
+                </div>
+              </Card>
+
+              <Card title="إدارة الإعدادات">
+                <div className="space-y-3">
+                  <Button 
+                    variant="outline" 
+                    fullWidth 
+                    onClick={exportSettings}
+                    disabled={loading}
+                  >
+                    <FaDownload className="ml-2" />
+                    تصدير الإعدادات
+                  </Button>
+                  
+                  <div>
+                    <input
+                      type="file"
+                      accept=".json"
+                      onChange={(e) => {
+                        const file = e.target.files[0];
+                        if (file) {
+                          importSettings(file).then(success => {
+                            if (success) {
+                              showSuccess('تم استيراد الإعدادات بنجاح');
+                            }
+                          });
+                        }
+                      }}
+                      className="hidden"
+                      id="import-settings"
+                    />
+                    <Button 
+                      variant="outline" 
+                      fullWidth
+                      onClick={() => {
+                        document.getElementById('import-settings').click();
+                      }}
+                      disabled={loading}
+                    >
+                      <FaUpload className="ml-2" />
+                      استيراد الإعدادات
+                    </Button>
+                  </div>
+                  
+                  <Button 
+                    variant="danger" 
+                    fullWidth 
+                    onClick={() => {
+                      if (window.confirm('هل أنت متأكد من إعادة تعيين جميع الإعدادات؟ هذا الإجراء لا يمكن التراجع عنه.')) {
+                        resetSettings();
+                        showWarning('تم إعادة تعيين جميع الإعدادات');
+                      }
+                    }}
+                    disabled={loading}
+                  >
+                    <FaUndo className="ml-2" />
+                    إعادة تعيين الإعدادات
+                  </Button>
+                </div>
+              </Card>
+            </div>
+
+            {/* إعدادات المطورين */}
+            <Card title="إعدادات المطورين">
+              <div className="space-y-4">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={settings.developer?.enableDebugMode || false}
+                    onChange={(e) => handleSectionUpdate('developer', { enableDebugMode: e.target.checked })}
+                    className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                  />
+                  <div>
+                    <span className="text-gray-700 font-medium">وضع التطوير</span>
+                    <p className="text-sm text-gray-500">تفعيل خيارات التطوير والتصحيح</p>
+                  </div>
+                </label>
+                
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={settings.developer?.showConsoleLogs || false}
+                    onChange={(e) => handleSectionUpdate('developer', { showConsoleLogs: e.target.checked })}
+                    className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                  />
+                  <div>
+                    <span className="text-gray-700 font-medium">رسائل Console</span>
+                    <p className="text-sm text-gray-500">عرض رسائل التطوير في Console</p>
+                  </div>
+                </label>
+                
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={settings.developer?.testMode || false}
+                    onChange={(e) => handleSectionUpdate('developer', { testMode: e.target.checked })}
+                    className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                  />
+                  <div>
+                    <span className="text-gray-700 font-medium">وضع الاختبار</span>
+                    <p className="text-sm text-gray-500">استخدام البيانات التجريبية</p>
+                  </div>
+                </label>
+              </div>
+            </Card>
+
+            {/* إحصائيات الاستخدام */}
+            <Card title="إحصائيات الاستخدام">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="text-center p-4 bg-blue-50 rounded-lg">
+                  <div className="text-2xl font-bold text-blue-600">
+                    {Object.keys(settings).length}
+                  </div>
+                  <div className="text-sm text-gray-600">أقسام الإعدادات</div>
+                </div>
+                
+                <div className="text-center p-4 bg-green-50 rounded-lg">
+                  <div className="text-2xl font-bold text-green-600">
+                    {Object.values(settings).reduce((acc, section) => 
+                      acc + Object.keys(section || {}).length, 0
+                    )}
+                  </div>
+                  <div className="text-sm text-gray-600">إعداد مفصل</div>
+                </div>
+                
+                <div className="text-center p-4 bg-purple-50 rounded-lg">
+                  <div className="text-2xl font-bold text-purple-600">
+                    0
+                  </div>
+                  <div className="text-sm text-gray-600">تغييرات معلقة</div>
+                </div>
+                
+                <div className="text-center p-4 bg-orange-50 rounded-lg">
+                  <div className="text-2xl font-bold text-orange-600">
+                    {validationErrors.length}
+                  </div>
+                  <div className="text-sm text-gray-600">أخطاء التحقق</div>
+                </div>
+              </div>
+            </Card>
+          </div>
+        )}
       </Card>
 
-      {/* Save Confirmation Modal */}
-      {showSaveModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9998] p-4">
-          <div className="bg-white rounded-lg max-w-md w-full p-6 shadow-2xl">
-            <div className="text-center mb-6">
-              <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
-                <FaSave className="text-3xl text-blue-600" />
-              </div>
-              <h3 className="text-xl font-bold text-gray-800 mb-2">تأكيد حفظ الإعدادات</h3>
-              <p className="text-gray-600">
-                هل أنت متأكد من حفظ التغييرات؟ سيتم تطبيق الإعدادات الجديدة على النظام بالكامل.
-              </p>
-            </div>
-
-            <div className="flex gap-3">
-              <Button 
-                variant="secondary" 
-                fullWidth
-                onClick={() => setShowSaveModal(false)}
-              >
-                إلغاء
-              </Button>
-              <Button 
-                variant="success" 
-                fullWidth
-                onClick={confirmSave}
-              >
-                <FaSave className="ml-2" />
-                حفظ
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

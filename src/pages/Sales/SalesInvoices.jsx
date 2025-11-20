@@ -237,9 +237,7 @@ const SalesInvoices = () => {
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-gray-800 mb-4">سجل فواتير المبيعات</h1>
-
-      <Card icon={<FaList />}>
+      <Card>
         {/* قسم الفلاتر */}
         <div className="mb-4 pb-4 border-b">
           <div className="grid grid-cols-12 gap-3 items-end">

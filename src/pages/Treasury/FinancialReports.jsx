@@ -4,13 +4,25 @@
 
 import React from 'react';
 import { useData } from '../../context/DataContext';
+import { useSystemSettings } from '../../hooks/useSystemSettings';
 import Card from '../../components/Common/Card';
 import Button from '../../components/Common/Button';
 import { FaFileInvoice, FaChartLine, FaPrint } from 'react-icons/fa';
-import { printFinancialReport } from '../../utils/printUtils';
+
 
 const FinancialReports = () => {
   const { treasury, purchaseInvoices, salesInvoices } = useData();
+  const { currency: currentCurrency, settings } = useSystemSettings();
+
+  // دالة تنسيق العملة
+  const formatCurrency = (amount) => {
+    const currency = currentCurrency || settings?.currency || 'EGP';
+    const locale = settings?.language === 'ar' ? 'ar-EG' : 'en-US';
+    return new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency: currency
+    }).format(amount);
+  };
 
   // حساب الإحصائيات
   const totalPurchases = purchaseInvoices.reduce((sum, invoice) => sum + (invoice.total || 0), 0);
@@ -21,25 +33,25 @@ const FinancialReports = () => {
   const stats = [
     {
       title: 'إجمالي المبيعات',
-      value: '•••••• د.ع',
+      value: formatCurrency(totalSales),
       color: 'bg-green-500',
       icon: <FaChartLine />
     },
     {
       title: 'إجمالي المشتريات',
-      value: '•••••• د.ع',
+      value: formatCurrency(totalPurchases),
       color: 'bg-red-500',
       icon: <FaChartLine />
     },
     {
       title: 'الأرباح',
-      value: '•••••• د.ع',
+      value: formatCurrency(profit),
       color: 'bg-blue-500',
       icon: <FaFileInvoice />
     },
     {
       title: 'نسبة الربح',
-      value: '••••••%',
+      value: `${profitPercentage}%`,
       color: 'bg-purple-500',
       icon: <FaChartLine />
     },
@@ -50,7 +62,7 @@ const FinancialReports = () => {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-gray-800">التقارير المالية</h1>
         <Button
-          onClick={() => printFinancialReport({ totalIncome: totalSales, totalExpense: totalPurchases, balance: treasury.balance })}
+          onClick={() => window.print()}
           variant="primary"
           className="flex items-center gap-2"
         >

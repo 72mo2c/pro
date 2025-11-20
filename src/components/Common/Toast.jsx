@@ -4,7 +4,7 @@
 
 import React, { useEffect } from 'react';
 import { FaCheckCircle, FaExclamationCircle, FaInfoCircle, FaExclamationTriangle, FaTimes } from 'react-icons/fa';
-import { useNotification } from '../../context/NotificationContext';
+import { useNotification } from '../../context/NotificationContextWithSound';
 
 const Toast = () => {
   const { notifications, removeNotification } = useNotification();

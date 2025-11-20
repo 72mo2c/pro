@@ -5,7 +5,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useData } from '../../context/DataContext';
-import { useNotification } from '../../context/NotificationContext';
+import { useNotification } from '../../context/NotificationContextWithSound';
 import { useTab } from '../../contexts/TabContext';
 import { FaSave, FaPrint, FaSearch, FaTrash, FaPercent, FaMoneyBillWave, FaExclamationTriangle, FaInfoCircle, FaList } from 'react-icons/fa';
 import { printInvoiceDirectly } from '../../utils/printUtils';
@@ -26,8 +26,8 @@ const NewPurchaseInvoice = () => {
     time: new Date().toTimeString().slice(0, 5),
     paymentType: 'main',
     notes: '',
-    discountType: 'percentage', // 'percentage' or 'fixed'
-    discountValue: 0
+    discountPercentage: 0, // نسبة الخصم المئوية
+    discountFixed: 0 // مبلغ الخصم الثابت
   });
 
   const [items, setItems] = useState([{
@@ -99,13 +99,12 @@ const NewPurchaseInvoice = () => {
   };
 
   // حساب قيمة الخصم
+  // حساب قيمة الخصم (النسبة المئوية + المبلغ الثابت)
   const calculateDiscountAmount = () => {
     const subTotal = calculateSubTotal();
-    if (formData.discountType === 'percentage') {
-      return (subTotal * (formData.discountValue / 100));
-    } else {
-      return parseFloat(formData.discountValue) || 0;
-    }
+    const percentageDiscount = (subTotal * (parseFloat(formData.discountPercentage) || 0) / 100);
+    const fixedDiscount = parseFloat(formData.discountFixed) || 0;
+    return percentageDiscount + fixedDiscount;
   };
 
   // حساب الإجمالي بعد الخصم
@@ -414,11 +413,11 @@ const NewPurchaseInvoice = () => {
     }
     
     // التحقق من الخصم
-    if (formData.discountValue < 0) {
+    if (formData.discountPercentage < 0 || formData.discountFixed < 0) {
       errors.discount = 'قيمة الخصم لا يمكن أن تكون سالبة';
     }
     
-    if (formData.discountType === 'percentage' && formData.discountValue > 100) {
+    if (formData.discountPercentage > 100) {
       errors.discount = 'نسبة الخصم لا يمكن أن تزيد عن 100%';
     }
     
@@ -555,8 +554,8 @@ const NewPurchaseInvoice = () => {
       time: new Date().toTimeString().slice(0, 5),
       paymentType: 'main',
       notes: '',
-      discountType: 'percentage',
-      discountValue: 0
+      discountPercentage: 0,
+      discountFixed: 0
     });
     setItems([{ 
       productId: '', 
@@ -602,9 +601,9 @@ const NewPurchaseInvoice = () => {
       {/* البطاقة الرئيسية */}
       <div className="bg-white rounded-lg shadow-md p-4">
         {/* الصف العلوي: معلومات الفاتورة */}
-        <div className="grid grid-cols-4 gap-3 mb-4 pb-4 border-b">
+        <div className="grid grid-cols-12 gap-3 mb-4 pb-4 border-b">
           {/* المورد */}
-          <div className="relative">
+          <div className="col-span-5 relative">
             <div className="relative">
               <input
                 ref={supplierInputRef}
@@ -636,7 +635,7 @@ const NewPurchaseInvoice = () => {
           </div>
 
           {/* نوع الفاتورة */}
-          <div>
+          <div className="col-span-4">
             <select
               name="paymentType"
               value={formData.paymentType}
@@ -651,7 +650,7 @@ const NewPurchaseInvoice = () => {
           </div>
 
           {/* التاريخ */}
-          <div>
+          <div className="col-span-2">
             <input
               type="date"
               name="date"
@@ -662,7 +661,7 @@ const NewPurchaseInvoice = () => {
           </div>
 
           {/* الوقت */}
-          <div>
+          <div className="col-span-1">
             <input
               type="time"
               name="time"
@@ -832,120 +831,128 @@ const NewPurchaseInvoice = () => {
         </button>
 
         {/* الجزء السفلي */}
-        <div className="mt-4 pt-4 border-t">
-          <div className="grid grid-cols-3 gap-4 items-start">
+        <div className="mt-3 pt-3 border-t">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
             {/* ملاحظات */}
-            <div className="col-span-2">
+            <div>
               <textarea
                 name="notes"
                 value={formData.notes}
                 onChange={handleChange}
-                rows="2"
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-                placeholder="أدخل ملاحظات إضافية..."
+                rows="1"
+                className="w-full h-full px-2 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 resize-none"
+                placeholder="ملاحظات..."
               />
             </div>
 
-            {/* الخصم والمجموع */}
-            <div className="space-y-3">
-              {/* قسم الخصم */}
-              <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200">
-                <div className="flex items-center gap-2 mb-2">
-                  <FaPercent className="text-yellow-600" />
-                  <span className="text-sm font-semibold text-gray-700">الخصم</span>
-                </div>
-                <div className="grid grid-cols-2 gap-2 mb-2">
-                  <select
-                    name="discountType"
-                    value={formData.discountType}
-                    onChange={handleChange}
-                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="percentage">نسبة مئوية %</option>
-                    <option value="fixed">مبلغ ثابت</option>
-                  </select>
+            {/* الخصم */}
+            <div className="bg-yellow-50 p-2 rounded-lg border border-yellow-200">
+              <div className="flex items-center gap-1 mb-1">
+                <FaPercent className="text-yellow-600 text-xs" />
+                <span className="text-xs font-semibold text-gray-700">الخصم</span>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-1 mb-1">
+                <div className="flex items-center gap-1 bg-white rounded border border-gray-300 px-1 py-1">
+                  <FaPercent className="text-gray-400 text-xs" />
                   <input
                     type="number"
-                    name="discountValue"
-                    value={formData.discountValue}
+                    name="discountPercentage"
+                    value={formData.discountPercentage}
                     onChange={handleChange}
-                    className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                    className="w-full text-xs text-center border-0 focus:ring-0 p-0"
                     min="0"
-                    step={formData.discountType === 'percentage' ? '0.1' : '0.01'}
-                    placeholder={formData.discountType === 'percentage' ? '0.0%' : '0.00'}
+                    max="100"
+                    step="0.1"
+                    placeholder="%"
                   />
                 </div>
-                {formData.discountValue > 0 && (
-                  <div className="text-xs text-gray-600 text-center">
-                    قيمة الخصم: {calculateDiscountAmount().toFixed(2)} ج.م
+                
+                <div className="flex items-center gap-1 bg-white rounded border border-gray-300 px-1 py-1">
+                  <FaMoneyBillWave className="text-gray-400 text-xs" />
+                  <input
+                    type="number"
+                    name="discountFixed"
+                    value={formData.discountFixed}
+                    onChange={handleChange}
+                    className="w-full text-xs text-center border-0 focus:ring-0 p-0"
+                    min="0"
+                    step="0.01"
+                    placeholder="ثابت"
+                  />
+                </div>
+              </div>
+              
+              {(formData.discountPercentage > 0 || formData.discountFixed > 0) && (
+                <div className="text-xs text-gray-600 text-center bg-white px-1 py-1 rounded border border-yellow-200">
+                  <span className="font-semibold text-red-600">{calculateDiscountAmount().toFixed(2)}</span>
+                </div>
+              )}
+            </div>
+
+            {/* المجموع */}
+            <div className="bg-blue-50 p-2 rounded-lg border border-blue-200">
+              <div className="space-y-1">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-semibold text-gray-700">الفرعي:</span>
+                  <span className="text-xs font-medium text-gray-600">{calculateSubTotal().toFixed(2)}</span>
+                </div>
+                
+                {(formData.discountPercentage > 0 || formData.discountFixed > 0) && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-semibold text-gray-700">الخصم:</span>
+                    <span className="text-xs font-medium text-red-600">-{calculateDiscountAmount().toFixed(2)}</span>
                   </div>
                 )}
+                
+                <div className="flex justify-between items-center pt-1 border-t border-blue-200">
+                  <span className="text-xs font-semibold text-gray-700">الإجمالي:</span>
+                  <span className="text-sm font-bold text-blue-700">{calculateTotal().toFixed(2)}</span>
+                </div>
               </div>
-
-              {/* المجموع */}
-              <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-semibold text-gray-700">المجموع الفرعي:</span>
-                    <span className="text-sm font-medium text-gray-600">{calculateSubTotal().toFixed(2)} ج.م</span>
-                  </div>
-                  
-                  {formData.discountValue > 0 && (
-                    <div className="flex justify-between items-center pt-1 border-t border-blue-200">
-                      <span className="text-sm font-semibold text-gray-700">الخصم:</span>
-                      <span className="text-sm font-medium text-red-600">-{calculateDiscountAmount().toFixed(2)} ج.م</span>
-                    </div>
-                  )}
-                  
-                  <div className="flex justify-between items-center pt-2 border-t border-blue-200">
-                    <span className="text-sm font-semibold text-gray-700">المجموع الكلي:</span>
-                    <span className="text-lg font-bold text-blue-700">{calculateTotal().toFixed(2)} ج.م</span>
-                  </div>
-                </div>
-                <div className="text-xs text-gray-500 text-center mt-2">
-                  عدد المنتجات: {items.length}
-                </div>
+              <div className="text-xs text-gray-500 text-center mt-1">
+                {items.length} منتج
               </div>
             </div>
-          </div>
-        </div>
 
-        {/* الأزرار */}
-        <div className="mt-6 pt-4 border-t">
-          <div className="flex flex-wrap justify-center gap-3">
-            {/* زر السجل */}
-            <button
-              type="button"
-              onClick={handleOpenPurchaseRecord}
-              className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white px-4 py-2.5 rounded-lg transition-colors font-medium text-sm shadow-sm hover:shadow-md"
-              title="فتح سجل فواتير المشتريات في تبويبة جديدة"
-            >
-              <FaList /> سجل المشتريات
-            </button>
-            
-            {/* أزرار العمليات الرئيسية */}
-            <button
-              type="button"
-              onClick={resetForm}
-              className="flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white px-5 py-2.5 rounded-lg transition-colors font-medium shadow-sm hover:shadow-md"
-              title="إعادة تعيين الفاتورة بالكامل"
-            >
-              <FaTrash /> إعادة تعيين
-            </button>
-            <button
-              type="button"
-              onClick={(e) => handleSubmit(e, false)}
-              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-lg transition-colors font-medium shadow-sm hover:shadow-md"
-            >
-              <FaSave /> حفظ الفاتورة
-            </button>
-            <button
-              type="button"
-              onClick={(e) => handleSubmit(e, true)}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg transition-colors font-medium shadow-sm hover:shadow-md"
-            >
-              <FaPrint /> حفظ وطباعة
-            </button>
+            {/* الأزرار */}
+            <div className="flex flex-col gap-1">
+              <button
+                type="button"
+                onClick={handleOpenPurchaseRecord}
+                className="flex items-center justify-center gap-1 bg-orange-600 hover:bg-orange-700 text-white px-2 py-1.5 rounded transition-colors text-xs font-medium"
+                title="سجل المشتريات"
+              >
+                <FaList /> السجل
+              </button>
+              
+              <div className="grid grid-cols-3 gap-1">
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  className="flex items-center justify-center bg-gray-600 hover:bg-gray-700 text-white px-1 py-1.5 rounded transition-colors text-xs"
+                  title="إعادة تعيين"
+                >
+                  <FaTrash />
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => handleSubmit(e, false)}
+                  className="flex items-center justify-center bg-green-600 hover:bg-green-700 text-white px-1 py-1.5 rounded transition-colors text-xs"
+                  title="حفظ"
+                >
+                  <FaSave />
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => handleSubmit(e, true)}
+                  className="flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white px-1 py-1.5 rounded transition-colors text-xs"
+                  title="طباعة"
+                >
+                  <FaPrint />
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1016,11 +1023,8 @@ const NewPurchaseInvoice = () => {
         )}
 
         {/* اختصارات الكيبورد */}
-        <div className="mt-4 pt-3 border-t text-xs text-gray-500 text-center">
-          <span className="inline-block mx-2">💡 اختصارات: </span>
-          <span className="inline-block mx-2">Ctrl+S = حفظ</span>
-          <span className="inline-block mx-2">Enter = صف جديد</span>
-          <span className="inline-block mx-2">Tab = التنقل</span>
+        <div className="mt-2 pt-2 border-t text-xs text-gray-400 text-center">
+          Ctrl+S: حفظ | Enter: صف جديد | Tab: تنقل
         </div>
       </div>
     </div>

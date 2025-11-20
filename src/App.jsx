@@ -8,7 +8,8 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 // Providers
 import { CompanyProvider, useCompany } from './contexts/CompanyContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { NotificationProvider } from './context/NotificationContext';
+import { NotificationProvider } from './context/NotificationContextWithSound';
+import { SystemSettingsProvider } from './context/SystemSettingsContext';
 import { DataProvider } from './context/DataContext';
 import { TabProvider } from './contexts/TabContext';
 
@@ -17,9 +18,13 @@ import Layout from './components/Layout/Layout';
 import Loading from './components/Common/Loading';
 import Toast from './components/Common/Toast';
 
+// Guards
+import SubscriptionGuard from './middleware/SubscriptionGuard';
+
 // Pages
 import Login from './pages/Auth/Login';
 import CompanySelectionPage from './pages/CompanySelectionPage';
+import SubscriptionExpired from './pages/Subscription/SubscriptionExpired';
 
 // مكون حماية المسارات - يتطلب اختيار شركة
 const CompanyRoute = ({ children }) => {
@@ -75,7 +80,7 @@ const CompanySelectionRoute = ({ children }) => {
   }
 
   if (selectedCompany) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to="/login" replace />;
   }
 
   return children;
@@ -85,10 +90,11 @@ function App() {
   return (
     <Router>
       <CompanyProvider>
-        <AuthProvider>
-          <NotificationProvider>
-            <DataProvider>
-              <TabProvider>
+        <SystemSettingsProvider>
+          <AuthProvider>
+            <NotificationProvider>
+              <DataProvider>
+                <TabProvider>
                 {/* Toast Component - عرض الإشعارات المنبثقة */}
                 <Toast />
               
@@ -103,24 +109,38 @@ function App() {
                     }
                   />
 
-                  {/* مسار تسجيل الدخول - يتطلب اختيار شركة */}
+                  {/* مسار صفحة انتهاء الاشتراك */}
                   <Route
-                    path="/login"
+                    path="/subscription-expired"
                     element={
                       <CompanyRoute>
-                        <PublicRoute>
-                          <Login />
-                        </PublicRoute>
+                        <SubscriptionExpired />
                       </CompanyRoute>
                     }
                   />
 
-                  {/* جميع المسارات المحمية - تتطلب اختيار شركة + تسجيل دخول */}
+                  {/* مسار تسجيل الدخول - يتطلب اختيار شركة واشتراك ساري */}
+                  <Route
+                    path="/login"
+                    element={
+                      <CompanyRoute>
+                        <SubscriptionGuard>
+                          <PublicRoute>
+                            <Login />
+                          </PublicRoute>
+                        </SubscriptionGuard>
+                      </CompanyRoute>
+                    }
+                  />
+
+                  {/* جميع المسارات المحمية - تتطلب اختيار شركة + اشتراك ساري + تسجيل دخول */}
                   <Route
                     path="/*"
                     element={
                       <CompanyRoute>
-                        <ProtectedRoute />
+                        <SubscriptionGuard>
+                          <ProtectedRoute />
+                        </SubscriptionGuard>
                       </CompanyRoute>
                     }
                   />
@@ -129,8 +149,9 @@ function App() {
             </DataProvider>
           </NotificationProvider>
         </AuthProvider>
-      </CompanyProvider>
-    </Router>
+      </SystemSettingsProvider>
+    </CompanyProvider>
+  </Router>
   );
 }
 

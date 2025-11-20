@@ -3,11 +3,11 @@
 // ======================================
 
 import React, { useState, useEffect } from 'react';
-import { useNotification } from '../../context/NotificationContext';
+import { useNotification } from '../../context/NotificationContextWithSound';
 import { useAuth } from '../../context/AuthContext';
 import { hashPassword } from '../../utils/security';
 import Card from '../../components/Common/Card';
-import Input from '../../components/Common/Input';
+import Input, { PhoneInput } from '../../components/Common/Input';
 import Select from '../../components/Common/Select';
 import Button from '../../components/Common/Button';
 import { FaUserPlus, FaEdit, FaTrash, FaSearch, FaUserShield, FaCheckCircle, FaLock } from 'react-icons/fa';
@@ -307,12 +307,12 @@ const AddUser = () => {
               placeholder="example@email.com"
               required
             />
-            <Input
+            <PhoneInput
               label="رقم الهاتف"
               name="phone"
               value={formData.phone}
               onChange={handleChange}
-              placeholder="+964 XXX XXX XXXX"
+              placeholder="1012345678"
             />
             <Input
               label="كلمة المرور"
@@ -592,7 +592,7 @@ const AddUser = () => {
                   onChange={handleEditChange}
                   required
                 />
-                <Input
+                <PhoneInput
                   label="رقم الهاتف"
                   name="phone"
                   value={editFormData.phone}

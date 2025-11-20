@@ -16,7 +16,7 @@ const TreasuryReceiptPrint = ({ receiptData, type = 'receipt', onClose }) => {
   };
 
   // معلومات الإيصال
-  const receiptNumber = receiptData.receiptNumber || `REC-${Date.now()}`;
+  const receiptNumber = receiptData.id || receiptData.receiptNumber || Date.now();
   const amount = parseFloat(receiptData.amount || 0);
   const dateTime = receiptData.date ? new Date(receiptData.date) : new Date();
 

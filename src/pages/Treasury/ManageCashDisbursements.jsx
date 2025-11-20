@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { useData } from '../../context/DataContext';
 import { useSystemSettings } from '../../hooks/useSystemSettings';
 import { useAuth } from '../../context/AuthContext';
-import { useNotification } from '../../context/NotificationContext';
+import { useNotification } from '../../context/NotificationContextWithSound';
 import PageHeader from '../../components/Common/PageHeader';
 import Card from '../../components/Common/Card';
 import Button from '../../components/Common/Button';
@@ -42,17 +42,7 @@ const ManageCashDisbursements = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDisbursement, setSelectedDisbursement] = useState(null);
   const [showViewModal, setShowViewModal] = useState(false);
-  const [filterCategory, setFilterCategory] = useState('all');
-  
-  // خيارات الفئات
-  const categoryLabels = {
-    invoice_payment: 'سداد فاتورة مشتريات',
-    return_refund: 'استرداد مرتجعات مبيعات',
-    salary: 'رواتب',
-    expenses: 'مصاريف عامة',
-    bank: 'إيداع في بنك',
-    other: 'أخرى'
-  };
+
   
   const paymentMethodLabels = {
     cash: 'نقداً',
@@ -80,23 +70,20 @@ const ManageCashDisbursements = () => {
   const filteredDisbursements = cashDisbursements.filter(disbursement => {
     const recipientName = getRecipientName(disbursement);
     const matchesSearch = 
-      disbursement.disbursementNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      recipientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      disbursement.description?.toLowerCase().includes(searchTerm.toLowerCase());
+      String(disbursement.disbursementNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      String(recipientName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      String(disbursement.description || '').toLowerCase().includes(searchTerm.toLowerCase());
     
-    const matchesCategory = filterCategory === 'all' || disbursement.category === filterCategory;
-    
-    return matchesSearch && matchesCategory;
+    return matchesSearch;
   });
   
   // أعمدة الجدول
   const columns = [
-    { key: 'disbursementNumber', label: 'رقم الإيصال' },
-    { key: 'date', label: 'التاريخ' },
-    { key: 'recipientName', label: 'إلى' },
-    { key: 'amount', label: 'المبلغ' },
-    { key: 'category', label: 'الفئة' },
-    { key: 'paymentMethod', label: 'طريقة الدفع' },
+    { accessor: 'disbursementNumber', header: 'رقم الإيصال' },
+    { accessor: 'date', header: 'التاريخ' },
+    { accessor: 'recipientName', header: 'إلى' },
+    { accessor: 'amount', header: 'المبلغ' },
+    { accessor: 'paymentMethod', header: 'طريقة الدفع' },
   ];
   
   // تنسيق البيانات للجدول
@@ -111,7 +98,6 @@ const ManageCashDisbursements = () => {
         مخفي
       </span>
     ),
-    category: categoryLabels[disbursement.category] || disbursement.category,
     paymentMethod: paymentMethodLabels[disbursement.paymentMethod] || disbursement.paymentMethod
   }));
   
@@ -226,17 +212,6 @@ const ManageCashDisbursements = () => {
               className="w-full pr-10 pl-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          
-          <select
-            value={filterCategory}
-            onChange={(e) => setFilterCategory(e.target.value)}
-            className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="all">جميع الفئات</option>
-            {Object.entries(categoryLabels).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
         </div>
         
         {/* الجدول */}
@@ -282,11 +257,6 @@ const ManageCashDisbursements = () => {
                   </p>
                 </div>
                 
-                <div>
-                  <span className="font-semibold">الفئة:</span>
-                  <p className="mt-1">{categoryLabels[selectedDisbursement.category]}</p>
-                </div>
-                
                 <div className="col-span-2">
                   <span className="font-semibold">طريقة الدفع:</span>
                   <p className="mt-1">{paymentMethodLabels[selectedDisbursement.paymentMethod]}</p>
@@ -312,11 +282,16 @@ const ManageCashDisbursements = () => {
                       </div>
                       <div>
                         <span className="text-sm text-gray-600">رقم الهاتف:</span>
-                        <p className="font-medium">{recipientDetails.phone || '-'}</p>
+                        <p className="font-medium">
+                          {recipientDetails.phone1 || recipientDetails.phone2 ? 
+                            `${recipientDetails.phone1 || ''}${recipientDetails.phone1 && recipientDetails.phone2 ? ' / ' : ''}${recipientDetails.phone2 || ''}` : 
+                            '-'
+                          }
+                        </p>
                       </div>
                       <div>
-                        <span className="text-sm text-gray-600">البريد الإلكتروني:</span>
-                        <p className="font-medium">{recipientDetails.email || '-'}</p>
+                        <span className="text-sm text-gray-600">المنطقة:</span>
+                        <p className="font-medium">{recipientDetails.area || '-'}</p>
                       </div>
                       {recipientDetails.address && (
                         <div className="col-span-2">

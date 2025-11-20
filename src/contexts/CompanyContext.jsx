@@ -1,4 +1,6 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import companyAPI from '../services/companyAPI';
+import { saveToken, getToken, clearTokens, isTokenValid, getRefreshToken, needsRefresh } from '../utils/tokenManager';
 
 // السياق الأساسي للشركات (Companies Context)
 const CompanyContext = createContext();
@@ -8,263 +10,203 @@ export function CompanyProvider({ children }) {
     // حالة الشركة المختارة حالياً
     const [selectedCompany, setSelectedCompany] = useState(null);
     
-    // قائمة جميع الشركات المتاحة
-    const [availableCompanies, setAvailableCompanies] = useState([]);
+    // معلومات الاشتراك
+    const [subscription, setSubscription] = useState(null);
     
     // حالة تحميل البيانات
     const [isLoading, setIsLoading] = useState(true);
     
     // حالة الأخطاء
     const [error, setError] = useState(null);
+    
+    // حالة الاتصال بالإنترنت
+    const [isOnline, setIsOnline] = useState(navigator.onLine);
 
-    // تحميل قائمة الشركات عند بدء التشغيل
+    // مراقبة حالة الاتصال
     useEffect(() => {
-        loadCompanies();
+        const handleOnline = () => setIsOnline(true);
+        const handleOffline = () => setIsOnline(false);
+        
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+        
+        return () => {
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+        };
     }, []);
 
-    // تحميل قائمة الشركات من localStorage
-    const loadCompanies = async () => {
+    // تحميل بيانات الشركة عند بدء التشغيل
+    useEffect(() => {
+        initializeCompany();
+    }, []);
+
+    // تهيئة الشركة من Token المحفوظ
+    const initializeCompany = async () => {
         try {
             setIsLoading(true);
             setError(null);
             
-            // جلب قائمة الشركات من localStorage
-            const companies = JSON.parse(localStorage.getItem('available_companies') || '[]');
-            setAvailableCompanies(companies);
+            // التحقق من وجود Token صالح
+            if (!isTokenValid()) {
+                console.log('لا يوجد Token صالح');
+                setIsLoading(false);
+                return;
+            }
             
-            // جلب الشركة المختارة حالياً من localStorage
-            const savedCompany = localStorage.getItem('selected_company');
-            if (savedCompany) {
-                const companyData = JSON.parse(savedCompany);
-                // التأكد من أن الشركة ما زالت موجودة في القائمة
-                const companyExists = companies.find(c => c.id === companyData.id);
-                if (companyExists) {
-                    setSelectedCompany(companyData);
+            // محاولة جلب بيانات الشركة
+            const companyData = await companyAPI.getCompanyDetails();
+            const subscriptionData = await companyAPI.getSubscription();
+            
+            setSelectedCompany(companyData.data.company);
+            setSubscription(subscriptionData.data.subscription);
+            
+            // حفظ في localStorage كنسخة احتياطية
+            localStorage.setItem('selected_company', JSON.stringify(companyData.data.company));
+            localStorage.setItem('company_subscription', JSON.stringify(subscriptionData.data.subscription));
+            
+            console.log('✅ تم تحميل بيانات الشركة بنجاح');
+            
+        } catch (err) {
+            console.error('خطأ في تهيئة الشركة:', err);
+            
+            // محاولة التحميل من localStorage كنسخة احتياطية
+            try {
+                const savedCompany = localStorage.getItem('selected_company');
+                const savedSubscription = localStorage.getItem('company_subscription');
+                
+                if (savedCompany && savedSubscription) {
+                    setSelectedCompany(JSON.parse(savedCompany));
+                    setSubscription(JSON.parse(savedSubscription));
+                    console.log('⚠️ تم التحميل من النسخة الاحتياطية (Offline Mode)');
                 } else {
-                    // إزالة الشركة المحفوظة إذا لم تعد موجودة
-                    localStorage.removeItem('selected_company');
+                    // لا توجد بيانات محفوظة
+                    clearTokens();
                 }
+            } catch (error) {
+                console.error('فشل التحميل من النسخة الاحتياطية:', error);
+                clearTokens();
             }
-            
-        } catch (err) {
-            console.error('خطأ في تحميل قائمة الشركات:', err);
-            setError('فشل في تحميل قائمة الشركات');
         } finally {
             setIsLoading(false);
         }
     };
 
-    // تحميل إعدادات الشركة (لوجو، ألوان، backend URL)
-    const loadCompanyConfig = async (companyId) => {
+    // التحقق من معرف الشركة
+    const verifyCompanyIdentifier = async (identifier) => {
         try {
             setError(null);
             
-            const companies = JSON.parse(localStorage.getItem('available_companies') || '[]');
-            const company = companies.find(c => c.id === companyId);
-            
-            if (!company) {
-                throw new Error('الشركة غير موجودة');
+            if (!isOnline) {
+                throw { message: 'لا يوجد اتصال بالإنترنت' };
             }
-
-            // جلب إعدادات تفصيلية للشركة
-            const companySettings = JSON.parse(localStorage.getItem(`company_${companyId}_settings`) || '{}');
             
-            // دمج الإعدادات الأساسية مع الإعدادات التفصيلية
-            const fullCompanyData = {
-                ...company,
-                ...companySettings,
-                // إعدادات افتراضية إذا لم تكن موجودة
-                logo: companySettings.logo || '/default-logo.png',
-                primaryColor: companySettings.primaryColor || '#3B82F6',
-                secondaryColor: companySettings.secondaryColor || '#64748B',
-                theme: companySettings.theme || 'light',
-                backendUrl: companySettings.backendUrl || company.backendUrl || '',
-            };
-
-            return fullCompanyData;
+            const response = await companyAPI.verifyIdentifier(identifier);
+            
+            if (!response.success) {
+                throw { message: response.message || 'معرف الشركة غير صحيح' };
+            }
+            
+            return response.data;
             
         } catch (err) {
-            console.error('خطأ في تحميل إعدادات الشركة:', err);
-            setError(`فشل في تحميل إعدادات الشركة: ${err.message}`);
-            return null;
+            console.error('خطأ في التحقق من المعرف:', err);
+            setError(err.message || 'فشل في التحقق من معرف الشركة');
+            throw err;
         }
     };
 
-    // اختيار شركة جديدة
-    const selectCompany = async (companyId) => {
+    // تسجيل دخول الشركة
+    const loginCompany = async (identifier, password) => {
         try {
             setIsLoading(true);
             setError(null);
             
-            const companyData = await loadCompanyConfig(companyId);
-            
-            if (!companyData) {
-                throw new Error('فشل في تحميل بيانات الشركة');
+            if (!isOnline) {
+                throw { message: 'لا يوجد اتصال بالإنترنت. يرجى التحقق من الاتصال والمحاولة مرة أخرى.' };
             }
-
-            // حفظ الشركة المختارة في localStorage
-            localStorage.setItem('selected_company', JSON.stringify(companyData));
             
-            // تحديث الحالة
-            setSelectedCompany(companyData);
+            const response = await companyAPI.login(identifier, password);
             
-            // إعادة تحميل البيانات حسب الشركة الجديدة
-            window.location.reload(); // إعادة تحميل التطبيق لتطبيق الإعدادات الجديدة
+            if (!response.success) {
+                throw { message: response.message || 'فشل تسجيل الدخول' };
+            }
+            
+            const { company, subscription, tokens } = response.data;
+            
+            // حفظ Tokens
+            saveToken(tokens.accessToken, tokens.refreshToken, tokens.expiresIn);
+            
+            // حفظ بيانات الشركة
+            setSelectedCompany(company);
+            setSubscription(subscription);
+            
+            // حفظ نسخة احتياطية في localStorage
+            localStorage.setItem('selected_company', JSON.stringify(company));
+            localStorage.setItem('company_subscription', JSON.stringify(subscription));
+            
+            console.log('✅ تم تسجيل دخول الشركة بنجاح');
+            
+            return { success: true, message: 'تم تسجيل الدخول بنجاح' };
             
         } catch (err) {
-            console.error('خطأ في اختيار الشركة:', err);
-            setError(`فشل في اختيار الشركة: ${err.message}`);
+            console.error('خطأ في تسجيل دخول الشركة:', err);
+            const errorMessage = err.message || 'حدث خطأ أثناء تسجيل الدخول';
+            setError(errorMessage);
+            return { success: false, message: errorMessage };
         } finally {
             setIsLoading(false);
         }
     };
 
-    // تسجيل خروج من الشركة الحالية
-    const logoutCompany = () => {
+    // تسجيل خروج الشركة
+    const logoutCompany = async () => {
         try {
-            // إزالة الشركة المختارة من localStorage
+            // محاولة تسجيل الخروج من API
+            if (isOnline && getToken()) {
+                await companyAPI.logout();
+            }
+        } catch (err) {
+            console.error('خطأ في تسجيل الخروج:', err);
+        } finally {
+            // حذف جميع البيانات المحلية
+            clearTokens();
             localStorage.removeItem('selected_company');
+            localStorage.removeItem('company_subscription');
             
-            // إعادة تعيين الحالة
             setSelectedCompany(null);
+            setSubscription(null);
+            setError(null);
             
-            // إعادة توجيه إلى صفحة اختيار الشركة
+            // إعادة التوجيه
             window.location.href = '/company-select';
-            
-        } catch (err) {
-            console.error('خطأ في تسجيل خروج الشركة:', err);
-            setError('فشل في تسجيل خروج الشركة');
         }
     };
 
-    // إضافة شركة جديدة
-    const addCompany = async (companyData) => {
+    // تحديث بيانات الشركة
+    const refreshCompanyData = async () => {
         try {
-            setIsLoading(true);
-            setError(null);
-            
-            // التحقق من وجود الشركة مسبقاً
-            const existingCompany = availableCompanies.find(c => 
-                c.id === companyData.id || c.identifier === companyData.identifier
-            );
-            
-            if (existingCompany) {
-                throw new Error('الشركة موجودة مسبقاً');
-            }
-
-            // إنشاء بيانات الشركة الكاملة
-            const newCompany = {
-                id: companyData.id,
-                name: companyData.name,
-                identifier: companyData.identifier,
-                password: companyData.password, // سيتم تشفيره في المستقبل
-                createdAt: new Date().toISOString(),
-                isActive: true,
-                // إعدادات افتراضية
-                logo: '/default-logo.png',
-                primaryColor: '#3B82F6',
-                secondaryColor: '#64748B',
-                theme: 'light',
-                backendUrl: companyData.backendUrl || '',
-            };
-
-            // إضافة للشركة للقائمة
-            const updatedCompanies = [...availableCompanies, newCompany];
-            setAvailableCompanies(updatedCompanies);
-            
-            // حفظ في localStorage
-            localStorage.setItem('available_companies', JSON.stringify(updatedCompanies));
-            
-            return newCompany;
-            
-        } catch (err) {
-            console.error('خطأ في إضافة الشركة:', err);
-            setError(`فشل في إضافة الشركة: ${err.message}`);
-            return null;
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    // تحديث بيانات شركة
-    const updateCompany = async (companyId, updates) => {
-        try {
-            setIsLoading(true);
-            setError(null);
-            
-            const updatedCompanies = availableCompanies.map(company => 
-                company.id === companyId 
-                    ? { ...company, ...updates, updatedAt: new Date().toISOString() }
-                    : company
-            );
-            
-            setAvailableCompanies(updatedCompanies);
-            localStorage.setItem('available_companies', JSON.stringify(updatedCompanies));
-            
-            // تحديث الشركة المختارة حالياً إذا كانت نفسها
-            if (selectedCompany && selectedCompany.id === companyId) {
-                const updatedCompany = { ...selectedCompany, ...updates };
-                setSelectedCompany(updatedCompany);
-                localStorage.setItem('selected_company', JSON.stringify(updatedCompany));
+            if (!isOnline || !isTokenValid()) {
+                return;
             }
             
-            return true;
+            const companyData = await companyAPI.getCompanyDetails();
+            const subscriptionData = await companyAPI.getSubscription();
+            
+            setSelectedCompany(companyData.data.company);
+            setSubscription(subscriptionData.data.subscription);
+            
+            // تحديث localStorage
+            localStorage.setItem('selected_company', JSON.stringify(companyData.data.company));
+            localStorage.setItem('company_subscription', JSON.stringify(subscriptionData.data.subscription));
             
         } catch (err) {
-            console.error('خطأ في تحديث الشركة:', err);
-            setError(`فشل في تحديث الشركة: ${err.message}`);
-            return false;
-        } finally {
-            setIsLoading(false);
+            console.error('خطأ في تحديث بيانات الشركة:', err);
         }
-    };
-
-    // حذف شركة
-    const deleteCompany = async (companyId) => {
-        try {
-            setIsLoading(true);
-            setError(null);
-            
-            // التحقق من وجود مستخدمين مرتبطين بالشركة
-            // (سيتم إضافة هذه الخطوة عند تطوير قاعدة البيانات)
-            
-            // إزالة الشركة من القائمة
-            const updatedCompanies = availableCompanies.filter(c => c.id !== companyId);
-            setAvailableCompanies(updatedCompanies);
-            
-            // حفظ القائمة المحدثة
-            localStorage.setItem('available_companies', JSON.stringify(updatedCompanies));
-            
-            // إزالة إعدادات الشركة
-            localStorage.removeItem(`company_${companyId}_settings`);
-            
-            // إذا كانت الشركة المختارة هي التي تم حذفها، قم بإزالة الاختيار
-            if (selectedCompany && selectedCompany.id === companyId) {
-                localStorage.removeItem('selected_company');
-                setSelectedCompany(null);
-                window.location.href = '/company-select';
-            }
-            
-            return true;
-            
-        } catch (err) {
-            console.error('خطأ في حذف الشركة:', err);
-            setError(`فشل في حذف الشركة: ${err.message}`);
-            return false;
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    // الحصول على معلومات الشركة بالاسم المعرف
-    const getCompanyByIdentifier = (identifier) => {
-        return availableCompanies.find(company => 
-            company.identifier.toLowerCase() === identifier.toLowerCase()
-        );
     };
 
     // تطبيق إعدادات الشركة على الواجهة
-    const applyCompanyTheme = (company) => {
+    const applyCompanyTheme = useCallback((company) => {
         if (!company) return;
         
         const root = document.documentElement;
@@ -280,39 +222,107 @@ export function CompanyProvider({ children }) {
             document.body.classList.remove('dark-theme');
         }
         
-        // تطبيق اللوجو (سيتم تطويره لاحقاً)
+        // تطبيق اللوجو
         const logoElement = document.querySelector('.company-logo');
         if (logoElement && company.logo) {
             logoElement.src = company.logo;
         }
-    };
+    }, []);
 
     // تطبيق إعدادات الشركة عند تغيير الشركة المختارة
     useEffect(() => {
         if (selectedCompany) {
             applyCompanyTheme(selectedCompany);
         }
-    }, [selectedCompany]);
+    }, [selectedCompany, applyCompanyTheme]);
+
+    // تجديد Token تلقائياً
+    useEffect(() => {
+        const refreshInterval = setInterval(async () => {
+            if (needsRefresh() && isOnline) {
+                try {
+                    const refreshToken = getRefreshToken();
+                    if (refreshToken) {
+                        const response = await companyAPI.refreshToken(refreshToken);
+                        saveToken(
+                            response.data.accessToken,
+                            response.data.refreshToken,
+                            response.data.expiresIn
+                        );
+                        console.log('✅ تم تجديد Token بنجاح');
+                    }
+                } catch (err) {
+                    console.error('فشل تجديد Token:', err);
+                    // تسجيل خروج عند فشل التجديد
+                    logoutCompany();
+                }
+            }
+        }, 60000); // كل دقيقة
+        
+        return () => clearInterval(refreshInterval);
+    }, [isOnline]);
+
+    // التحقق من صلاحية الاشتراك
+    const isSubscriptionValid = useCallback(() => {
+        if (!subscription) return false;
+        
+        return subscription.status === 'active' && 
+               new Date(subscription.endDate) > new Date();
+    }, [subscription]);
+
+    // الحصول على الأيام المتبقية
+    const getDaysRemaining = useCallback(() => {
+        if (!subscription || !subscription.endDate) return 0;
+        
+        const endDate = new Date(subscription.endDate);
+        const today = new Date();
+        const diffTime = endDate - today;
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        return Math.max(0, diffDays);
+    }, [subscription]);
+
+    // التحقق من وجود ميزة في الخطة
+    const hasFeature = useCallback((feature) => {
+        if (!subscription || !subscription.features) return false;
+        
+        return subscription.features.includes(feature);
+    }, [subscription]);
+
+    // التحقق من الحدود
+    const checkLimit = useCallback((limitType, currentValue) => {
+        if (!subscription || !subscription.limits) return true;
+        
+        const limit = subscription.limits[limitType];
+        if (!limit) return true;
+        
+        return currentValue < limit;
+    }, [subscription]);
 
     // القيم الممررة للسياق
     const value = {
         // الحالة
         selectedCompany,
-        availableCompanies,
+        subscription,
         isLoading,
         error,
+        isOnline,
         
         // Methods
-        loadCompanies,
-        loadCompanyConfig,
-        selectCompany,
+        verifyCompanyIdentifier,
+        loginCompany,
         logoutCompany,
-        addCompany,
-        updateCompany,
-        deleteCompany,
-        getCompanyByIdentifier,
+        refreshCompanyData,
         applyCompanyTheme,
-        refreshCompanies: loadCompanies
+        
+        // Subscription Methods
+        isSubscriptionValid,
+        getDaysRemaining,
+        hasFeature,
+        checkLimit,
+        
+        // Utilities
+        isAuthenticated: !!selectedCompany && isTokenValid(),
     };
 
     return (

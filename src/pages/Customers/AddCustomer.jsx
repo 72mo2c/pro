@@ -5,34 +5,27 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../../context/DataContext';
-import { useNotification } from '../../context/NotificationContext';
+import { useNotification } from '../../context/NotificationContextWithSound';
 import Card from '../../components/Common/Card';
-import Input from '../../components/Common/Input';
+import Input, { PhoneInput } from '../../components/Common/Input';
 import { Select } from '../../components/Common/Input';
 import Button from '../../components/Common/Button';
 import { FaUserPlus, FaSave, FaCheckCircle, FaPlus, FaList, FaExclamationTriangle } from 'react-icons/fa';
 
-// دالة للتحقق من أرقام الهواتف المصرية (11 رقم بالضبط)
+// دالة للتحقق من أرقام الهواتف المصرية
 const validatePhoneNumber = (phone) => {
   if (!phone) return { isValid: true, error: null };
   
   // إزالة المسافات والشرطات
   const cleanPhone = phone.replace(/[\s-]/g, '');
   
-  // التحقق من أن الرقم يبدأ برقم مصري (010, 011, 012, 015, 0100-0199)
-  const egyptianPhoneRegex = /^(010|011|012|015|0100|0101|0102|0103|0104|0105|0106|0107|0108|0109|0110|0111|0112|0113|0114|0115|0116|0117|0118|0119|0120|0121|0122|0123|0124|0125|0126|0127|0128|0129|0150|0151|0152|0153|0154|0155|0156|0157|0158|0159)[0-9]{7}$/;
-  
-  if (!cleanPhone.match(/^[0-9]{11}$/)) {
-    return {
-      isValid: false,
-      error: 'رقم الهاتف يجب أن يكون 11 رقم بالضبط (مثال: 01012345678)',
-    };
-  }
+  // التحقق من أن الرقم يبدأ بـ +20 ويتبعه 10 أرقام
+  const egyptianPhoneRegex = /^\+20(10|11|12|15)[0-9]{8}$/;
   
   if (!egyptianPhoneRegex.test(cleanPhone)) {
     return {
       isValid: false,
-      error: 'رقم الهاتف يجب أن يبدأ برقم مصري صحيح (010, 011, 012, 015)',
+      error: 'رقم الهاتف يجب أن يبدأ بـ +20 ويتبعه 10 أرقام (مثال: +201012345678)',
     };
   }
   
@@ -203,22 +196,22 @@ const AddCustomer = () => {
               placeholder="مثال: مصر ,القاهرة..."
             />
 
-            <Input
+            <PhoneInput
               label="رقم الهاتف 1"
               name="phone1"
               value={formData.phone1}
               onChange={handleChange}
-              placeholder="مثال: 01012345678 (11 رقم)"
+              placeholder="1012345678"
               required
               error={errors.phone1}
             />
 
-            <Input
+            <PhoneInput
               label="رقم الهاتف 2 (اختياري)"
               name="phone2"
               value={formData.phone2}
               onChange={handleChange}
-              placeholder="مثال: 01112345678 (11 رقم)"
+              placeholder="1112345678"
               error={errors.phone2}
             />
 

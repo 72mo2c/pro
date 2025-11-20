@@ -4,7 +4,7 @@
 
 import React, { useState } from 'react';
 import { useData } from '../../context/DataContext';
-import { useNotification } from '../../context/NotificationContext';
+import { useNotification } from '../../context/NotificationContextWithSound';
 import Card from '../../components/Common/Card';
 import Button from '../../components/Common/Button';
 import { 
@@ -35,14 +35,46 @@ const Transfer = () => {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [lastTransfer, setLastTransfer] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showSearchResults, setShowSearchResults] = useState(false);
 
-  // الحصول على المنتجات المتوفرة في المخزن المصدر
-  const availableProducts = () => {
-    if (!formData.fromWarehouseId) return [];
+  // البحث عن المنتجات (بالاسم أو الباركود)
+  const searchProducts = () => {
+    if (!searchTerm.trim()) return [];
     
+    const term = searchTerm.toLowerCase();
     return products.filter(p => 
-      p.warehouseId === parseInt(formData.fromWarehouseId)
+      p.name.toLowerCase().includes(term) || 
+      (p.barcode && p.barcode.toLowerCase().includes(term))
     );
+  };
+
+  // الحصول على الكميات المتوفرة للمنتج في كل المخازن
+  const getProductQuantitiesInWarehouses = (productId) => {
+    if (!productId) return [];
+    
+    const productInWarehouses = products.filter(p => 
+      p.id === productId || p.name === products.find(prod => prod.id === productId)?.name
+    );
+    
+    return warehouses.map(warehouse => {
+      const productInWarehouse = productInWarehouses.find(p => p.warehouseId === warehouse.id);
+      return {
+        warehouseId: warehouse.id,
+        warehouseName: warehouse.name,
+        mainQuantity: productInWarehouse?.mainQuantity || 0,
+        subQuantity: productInWarehouse?.subQuantity || 0,
+        hasStock: (productInWarehouse?.mainQuantity || 0) > 0 || (productInWarehouse?.subQuantity || 0) > 0
+      };
+    });
+  };
+
+  // الحصول على المخازن التي تحتوي على المنتج المختار
+  const getWarehousesWithProduct = () => {
+    if (!selectedProduct) return [];
+    
+    const quantities = getProductQuantitiesInWarehouses(selectedProduct.id);
+    return quantities.filter(q => q.hasStock);
   };
 
   const handleChange = (e) => {
@@ -51,22 +83,40 @@ const Transfer = () => {
       ...formData,
       [name]: value
     });
+  };
 
-    // عند اختيار منتج، نحفظ بياناته
-    if (name === 'productId' && value) {
-      const product = availableProducts().find(p => p.id === parseInt(value));
-      setSelectedProduct(product);
-    }
+  // اختيار منتج من نتائج البحث
+  const handleSelectProduct = (product) => {
+    setSelectedProduct(product);
+    setSearchTerm(product.name);
+    setShowSearchResults(false);
+    setFormData({
+      ...formData,
+      productId: product.id,
+      fromWarehouseId: '',
+      toWarehouseId: '',
+      quantity: '',
+      subQuantity: ''
+    });
+  };
 
-    // إعادة تعيين المنتج المختار عند تغيير المخزن المصدر
-    if (name === 'fromWarehouseId') {
-      setFormData(prev => ({
-        ...prev,
+  // التعامل مع البحث
+  const handleSearchChange = (e) => {
+    const value = e.target.value;
+    setSearchTerm(value);
+    setShowSearchResults(value.trim().length > 0);
+    
+    // إعادة تعيين المنتج المختار إذا تم تغيير البحث
+    if (selectedProduct && value !== selectedProduct.name) {
+      setSelectedProduct(null);
+      setFormData({
+        ...formData,
         productId: '',
+        fromWarehouseId: '',
+        toWarehouseId: '',
         quantity: '',
         subQuantity: ''
-      }));
-      setSelectedProduct(null);
+      });
     }
   };
 
@@ -88,14 +138,19 @@ const Transfer = () => {
       return;
     }
 
+    // الحصول على المنتج من المخزن المصدر للتحقق من الكمية
+    const productInSourceWarehouse = products.find(p => 
+      p.id === selectedProduct.id && p.warehouseId === parseInt(formData.fromWarehouseId)
+    );
+
     // التحقق من الكميات المتاحة
-    if (selectedProduct && quantity > (selectedProduct.mainQuantity || 0)) {
-      showError(`الكمية الأساسية المتوفرة فقط ${selectedProduct.mainQuantity || 0}`);
+    if (productInSourceWarehouse && quantity > (productInSourceWarehouse.mainQuantity || 0)) {
+      showError(`الكمية الأساسية المتوفرة في المخزن المصدر فقط ${productInSourceWarehouse.mainQuantity || 0}`);
       return;
     }
 
-    if (selectedProduct && subQuantity > (selectedProduct.subQuantity || 0)) {
-      showError(`الكمية الفرعية المتوفرة فقط ${selectedProduct.subQuantity || 0}`);
+    if (productInSourceWarehouse && subQuantity > (productInSourceWarehouse.subQuantity || 0)) {
+      showError(`الكمية الفرعية المتوفرة في المخزن المصدر فقط ${productInSourceWarehouse.subQuantity || 0}`);
       return;
     }
 
@@ -131,20 +186,13 @@ const Transfer = () => {
         notes: ''
       });
       setSelectedProduct(null);
+      setSearchTerm('');
     } catch (error) {
       showError(error.message || 'حدث خطأ في عملية التحويل');
     }
   };
 
-  const warehouseOptions = warehouses.map(w => ({
-    value: w.id,
-    label: w.name
-  }));
 
-  const productOptions = availableProducts().map(p => ({
-    value: p.id,
-    label: `${p.name} - ${p.category} (متوفر: ${p.mainQuantity || 0}${p.subQuantity ? ` + ${p.subQuantity}` : ''})`
-  }));
 
   // دالة لحساب الوقت المنقضي
   const getTimeAgo = (date) => {
@@ -250,115 +298,167 @@ const Transfer = () => {
 
       {/* نموذج التحويل */}
       <Card icon={<FaExchangeAlt />} title="نموذج التحويل">
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* اختيار المخازن */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm font-medium mb-1 block">من المخزن (المصدر)</label>
-              <select
-                name="fromWarehouseId"
-                value={formData.fromWarehouseId}
-                onChange={handleChange}
+        <form onSubmit={handleSubmit} className="space-y-3">
+          
+          {/* 1. البحث عن المنتج */}
+          <div>
+            <label className="text-sm font-medium mb-1 block">ابحث عن المنتج (بالاسم أو الباركود)</label>
+            <div className="relative">
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={handleSearchChange}
+                onFocus={() => searchTerm && setShowSearchResults(true)}
+                placeholder="ابحث بالاسم أو الباركود..."
                 className="w-full px-3 py-2 border rounded-lg text-sm"
-                required
-              >
-                <option value="">اختر المخزن المصدر</option>
-                {warehouseOptions.map(option => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              {formData.fromWarehouseId && (
-                <p className="text-xs text-gray-500 mt-1">
-                  <FaInfoCircle className="inline ml-1" />
-                  المنتجات المتوفرة: {availableProducts().length}
-                </p>
+              />
+              <FaBox className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+              
+              {/* نتائج البحث */}
+              {showSearchResults && searchProducts().length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                  {searchProducts().slice(0, 10).map((product) => (
+                    <div
+                      key={product.id}
+                      onClick={() => handleSelectProduct(product)}
+                      className="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b last:border-b-0 transition-colors"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-gray-800">{product.name}</p>
+                          <p className="text-xs text-gray-500">{product.category} • باركود: {product.barcode || 'غير محدد'}</p>
+                        </div>
+                        <FaBox className="text-orange-400" size={14} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
-            </div>
-
-            <div>
-              <label className="text-sm font-medium mb-1 block">إلى المخزن (الوجهة)</label>
-              <select
-                name="toWarehouseId"
-                value={formData.toWarehouseId}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border rounded-lg text-sm"
-                required
-              >
-                <option value="">اختر المخزن الوجهة</option>
-                {warehouseOptions.map(option => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+              
+              {/* لا توجد نتائج */}
+              {showSearchResults && searchTerm && searchProducts().length === 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg p-3">
+                  <div className="flex items-center gap-2 text-gray-500">
+                    <FaExclamationTriangle size={16} />
+                    <p className="text-sm">لا توجد منتجات مطابقة</p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* اختيار المنتج */}
-          {formData.fromWarehouseId && (
-            <div>
-              <label className="text-sm font-medium mb-1 block">اختر المنتج</label>
-              <select
-                name="productId"
-                value={formData.productId}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border rounded-lg text-sm"
-                required
-              >
-                <option value="">اختر المنتج</option>
-                {productOptions.map(option => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              {availableProducts().length === 0 && (
-                <div className="mt-1 p-2.5 bg-yellow-50 border border-yellow-200 rounded-lg flex items-center gap-2">
-                  <FaExclamationTriangle className="text-yellow-600" size={16} />
-                  <p className="text-xs text-yellow-700">لا توجد منتجات في هذا المخزن</p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* معلومات المنتج المختار */}
+          {/* 2. جدول الكميات المتاحة في كل المخازن */}
           {selectedProduct && (
             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-3 rounded-lg border border-blue-200">
-              <h3 className="font-bold text-gray-800 mb-2 flex items-center gap-2">
-                <FaInfoCircle className="text-blue-500" size={16} />
-                معلومات المنتج
+              <h3 className="font-bold text-gray-800 mb-2 flex items-center gap-2 text-sm">
+                <FaInfoCircle className="text-blue-500" size={14} />
+                الكميات المتاحة للمنتج "{selectedProduct.name}" في المخازن
               </h3>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                <div>
-                  <p className="text-xs text-gray-500">الاسم</p>
-                  <p className="font-semibold text-gray-800 text-sm">{selectedProduct.name}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">الفئة</p>
-                  <p className="font-semibold text-gray-800 text-sm">{selectedProduct.category}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">الكمية الأساسية</p>
-                  <p className="font-bold text-green-600 text-base">{selectedProduct.mainQuantity || 0}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">الكمية الفرعية</p>
-                  <p className="font-bold text-blue-600 text-base">{selectedProduct.subQuantity || 0}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">السعر</p>
-                  <p className="font-semibold text-gray-800 text-sm">{selectedProduct.mainPrice} ج.م</p>
-                </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-blue-100 border-b border-blue-200">
+                      <th className="px-2 py-1.5 text-right font-bold text-gray-700">المخزن</th>
+                      <th className="px-2 py-1.5 text-center font-bold text-gray-700">الكمية الأساسية</th>
+                      <th className="px-2 py-1.5 text-center font-bold text-gray-700">الكمية الفرعية</th>
+                      <th className="px-2 py-1.5 text-center font-bold text-gray-700">الحالة</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {getProductQuantitiesInWarehouses(selectedProduct.id).map((item) => (
+                      <tr key={item.warehouseId} className="border-b border-blue-100 hover:bg-blue-50 transition-colors">
+                        <td className="px-2 py-1.5 text-right">
+                          <div className="flex items-center gap-1.5">
+                            <FaWarehouse className="text-blue-500" size={12} />
+                            <span className="font-semibold text-gray-800">{item.warehouseName}</span>
+                          </div>
+                        </td>
+                        <td className="px-2 py-1.5 text-center">
+                          <span className={`font-bold ${item.mainQuantity > 0 ? 'text-green-600' : 'text-gray-400'}`}>
+                            {item.mainQuantity}
+                          </span>
+                        </td>
+                        <td className="px-2 py-1.5 text-center">
+                          <span className={`font-bold ${item.subQuantity > 0 ? 'text-blue-600' : 'text-gray-400'}`}>
+                            {item.subQuantity}
+                          </span>
+                        </td>
+                        <td className="px-2 py-1.5 text-center">
+                          {item.hasStock ? (
+                            <span className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
+                              <FaCheckCircle size={10} />
+                              متوفر
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
+                              <FaTimes size={10} />
+                              غير متوفر
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
 
-          {/* الكمية والملاحظات */}
-          {formData.productId && (
+          {/* 3. اختيار المخازن */}
+          {selectedProduct && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm font-medium mb-1 block">من المخزن (المصدر)</label>
+                <select
+                  name="fromWarehouseId"
+                  value={formData.fromWarehouseId}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border rounded-lg text-sm"
+                  required
+                >
+                  <option value="">اختر المخزن المصدر</option>
+                  {getWarehousesWithProduct().map(item => (
+                    <option key={item.warehouseId} value={item.warehouseId}>
+                      {item.warehouseName} (متوفر: {item.mainQuantity}
+                      {item.subQuantity > 0 && ` + ${item.subQuantity}`})
+                    </option>
+                  ))}
+                </select>
+                {getWarehousesWithProduct().length === 0 && (
+                  <p className="text-xs text-red-500 mt-1">
+                    <FaExclamationTriangle className="inline ml-1" size={10} />
+                    المنتج غير متوفر في أي مخزن
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="text-sm font-medium mb-1 block">إلى المخزن (الوجهة)</label>
+                <select
+                  name="toWarehouseId"
+                  value={formData.toWarehouseId}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border rounded-lg text-sm"
+                  required
+                  disabled={!formData.fromWarehouseId}
+                >
+                  <option value="">اختر المخزن الوجهة</option>
+                  {warehouses
+                    .filter(w => w.id !== parseInt(formData.fromWarehouseId))
+                    .map(warehouse => (
+                      <option key={warehouse.id} value={warehouse.id}>
+                        {warehouse.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+            </div>
+          )}
+
+          {/* 4. الكمية والملاحظات */}
+          {formData.fromWarehouseId && formData.toWarehouseId && (
             <>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className="text-sm font-medium mb-1 block">الكمية الأساسية المراد تحويلها</label>
                   <input
@@ -368,7 +468,6 @@ const Transfer = () => {
                     onChange={handleChange}
                     placeholder="أدخل الكمية الأساسية"
                     min="0"
-                    max={selectedProduct?.mainQuantity}
                     className="w-full px-3 py-2 border rounded-lg text-sm"
                   />
                 </div>
@@ -382,7 +481,6 @@ const Transfer = () => {
                     onChange={handleChange}
                     placeholder="أدخل الكمية الفرعية"
                     min="0"
-                    max={selectedProduct?.subQuantity}
                     className="w-full px-3 py-2 border rounded-lg text-sm"
                   />
                 </div>
@@ -390,8 +488,8 @@ const Transfer = () => {
 
               {/* رسالة تحذيرية */}
               {!formData.quantity && !formData.subQuantity && (
-                <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-2">
-                  <FaInfoCircle className="text-blue-600" size={16} />
+                <div className="p-2 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-2">
+                  <FaInfoCircle className="text-blue-600" size={14} />
                   <p className="text-xs text-blue-700">يرجى إدخال الكمية الأساسية أو الفرعية أو كلاهما</p>
                 </div>
               )}
@@ -402,7 +500,7 @@ const Transfer = () => {
                   name="notes"
                   value={formData.notes}
                   onChange={handleChange}
-                  rows="2"
+                  rows="1"
                   className="w-full px-3 py-2 border rounded-lg text-sm"
                   placeholder="أدخل ملاحظات حول عملية التحويل..."
                 />
@@ -411,7 +509,7 @@ const Transfer = () => {
           )}
 
           {/* أزرار التحكم */}
-          <div className="flex gap-3">
+          <div className="flex gap-2 pt-1">
             <Button 
               type="submit" 
               variant="primary" 
@@ -431,9 +529,12 @@ const Transfer = () => {
                   fromWarehouseId: '',
                   toWarehouseId: '',
                   quantity: '',
+                  subQuantity: '',
                   notes: ''
                 });
                 setSelectedProduct(null);
+                setSearchTerm('');
+                setShowSearchResults(false);
               }}
             >
               إعادة تعيين

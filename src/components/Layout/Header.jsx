@@ -5,7 +5,7 @@
 import React, { useState } from 'react';
 import { FaBell, FaUser, FaSignOutAlt, FaSearch } from 'react-icons/fa';
 import { useAuth } from '../../context/AuthContext';
-import { useNotification } from '../../context/NotificationContext';
+import { useNotification } from '../../context/NotificationContextWithSound';
 import { useNavigate } from 'react-router-dom';
 import GlobalSearch from '../Common/GlobalSearch';
 import TabBar from './TabBar';
