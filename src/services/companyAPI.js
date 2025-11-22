@@ -3,7 +3,7 @@
 // متصل بلوحة التحكم الإدارية
 // ======================================
 
-const COMPANY_API_BASE_URL = process.env.REACT_APP_COMPANY_API_URL || 'http://localhost:5000/api/v1/companies';
+const COMPANY_API_BASE_URL = process.env.REACT_APP_COMPANY_API_URL || 'https://ground-production.up.railway.app/api/v1/companies';
 
 // دالة مساعدة للطلبات
 const request = async (endpoint, options = {}) => {
