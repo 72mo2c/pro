@@ -11,7 +11,7 @@
 
 @layer base {
   body {
-    @apply bg-gradient-to-br from-blue-50 via-slate-50 to-blue-50 text-gray-900;
+    @apply bg-gradient-to-br from-blue-200 via-white to-blue-100 text-gray-900;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   }
 }
