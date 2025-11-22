@@ -37,7 +37,8 @@ const NewPurchaseInvoice = () => {
     subQuantity: 0,
     price: 0,
     subPrice: 0,
-    discount: 0
+    discount: 0,
+    discountType: 'fixed' // 'fixed' or 'percentage'
   }]);
 
   // البحث في الموردين والمنتجات
@@ -90,7 +91,16 @@ const NewPurchaseInvoice = () => {
   // حساب إجمالي العنصر بعد الخصم
   const calculateItemTotal = (item) => {
     const totalWithoutDiscount = calculateItemTotalWithoutDiscount(item);
-    const itemDiscount = item.discount || 0;
+    let itemDiscount = 0;
+    
+    if (item.discountType === 'percentage') {
+      // خصم نسبة مئوية
+      itemDiscount = (totalWithoutDiscount * (item.discount || 0)) / 100;
+    } else {
+      // خصم مبلغ ثابت
+      itemDiscount = item.discount || 0;
+    }
+    
     return Math.max(0, totalWithoutDiscount - itemDiscount);
   };
 
@@ -303,6 +313,20 @@ const NewPurchaseInvoice = () => {
   // تحديث فوري للعنصر (يستخدم مع onChange)
   const handleImmediateUpdate = (index, field, value) => {
     const newItems = [...items];
+    
+    // التأكد من صحة قيم الخصم
+    if (field === 'discount' && newItems[index].discountType === 'percentage') {
+      if (value > 100) {
+        value = 100;
+      } else if (value < 0) {
+        value = 0;
+      }
+    } else if (field === 'discount' && newItems[index].discountType === 'fixed') {
+      if (value < 0) {
+        value = 0;
+      }
+    }
+    
     newItems[index][field] = value;
     setItems(newItems);
     
@@ -370,7 +394,8 @@ const NewPurchaseInvoice = () => {
       subQuantity: 0,
       price: 0,
       subPrice: 0,
-      discount: 0
+      discount: 0,
+      discountType: 'fixed'
     }]);
     setProductSearches([...productSearches, '']);
     setShowProductSuggestions([...showProductSuggestions, false]);
@@ -782,18 +807,35 @@ const NewPurchaseInvoice = () => {
                       min="0"
                     />
                   </td>
-                  {/* الخصم  */}
-                  <td className="px-2 py-2">
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={item.discount}
-                      onChange={(e) => handleItemChange(index, 'discount', parseFloat(e.target.value) || 0)}
-                      className={`w-full px-2 py-1.5 text-sm text-center border rounded-md focus:ring-2 focus:ring-blue-500 ${
-                        discountErrors[index] ? 'border-red-500 bg-red-50' : 'border-gray-300'
-                      }`}
-                      min="0"
-                    />
+                  {/* الخصم */}
+                  <td className="px-2 py-2 w-24">
+                    {/* حقل واحد للخصم مع أيقونة النوع */}
+                    <div className="relative flex items-center">
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={item.discount}
+                        onChange={(e) => handleItemChange(index, 'discount', parseFloat(e.target.value) || 0)}
+                        className={`w-full px-2 py-1.5 pr-8 text-xs text-center border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                          discountErrors[index] ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                        }`}
+                        min="0"
+                        placeholder="0.00"
+                      />
+                      <span className="absolute right-2 text-xs pointer-events-none">
+                        {item.discountType === 'fixed' ? '💰' : '%'}
+                      </span>
+                    </div>
+                    
+                    {/* اختيار نوع الخصم في قائمة منسدلة */}
+                    <select
+                      value={item.discountType}
+                      onChange={(e) => handleItemChange(index, 'discountType', e.target.value)}
+                      className="mt-1 w-full px-1 py-1 text-xs text-center border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50"
+                    >
+                      <option value="fixed">مبلغ ثابت</option>
+                      <option value="percentage">نسبة مئوية</option>
+                    </select>
                   </td>
 
                   {/* الإجمالي */}
