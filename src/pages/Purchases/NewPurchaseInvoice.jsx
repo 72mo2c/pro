@@ -33,6 +33,7 @@ const NewPurchaseInvoice = () => {
   const [items, setItems] = useState([{
     productId: '',
     productName: '',
+    barcode: '',
     quantity: 1,
     subQuantity: 0,
     price: 0,
@@ -69,6 +70,72 @@ const NewPurchaseInvoice = () => {
   const supplierInputRef = useRef(null);
   const productInputRefs = useRef([]);
   const quantityInputRefs = useRef([]);
+  const subQuantityInputRefs = useRef([]);
+  const priceInputRefs = useRef([]);
+  const subPriceInputRefs = useRef([]);
+  const discountInputRefs = useRef([]);
+
+  // دالة التنقل التلقائي عند الضغط على Enter
+  const handleEnterPress = (currentIndex, field) => {
+    console.log('Enter pressed in field:', field, 'index:', currentIndex);
+    console.log('Current items length:', items.length);
+    console.log('Items array:', items);
+    setTimeout(() => {
+      console.log('Processing navigation for field:', field, 'at index:', currentIndex);
+      switch (field) {
+        case 'product':
+          console.log('Moving to quantity field');
+          if (quantityInputRefs.current[currentIndex]) {
+            quantityInputRefs.current[currentIndex].focus();
+          }
+          break;
+        case 'quantity':
+          console.log('Moving to subQuantity field - attempting to focus subQuantity input at index:', currentIndex);
+          console.log('subQuantityInputRefs current:', subQuantityInputRefs.current);
+          if (subQuantityInputRefs.current[currentIndex]) {
+            console.log('Focusing subQuantity input at index:', currentIndex);
+            subQuantityInputRefs.current[currentIndex].focus();
+          } else {
+            console.log('ERROR: subQuantityInputRefs for index', currentIndex, 'is null/undefined');
+          }
+          break;
+        case 'subQuantity':
+          console.log('Moving to price field');
+          if (priceInputRefs.current[currentIndex]) {
+            priceInputRefs.current[currentIndex].focus();
+          }
+          break;
+        case 'price':
+          console.log('Moving to subPrice field');
+          if (subPriceInputRefs.current[currentIndex]) {
+            subPriceInputRefs.current[currentIndex].focus();
+          }
+          break;
+        case 'subPrice':
+          console.log('Moving to discount field');
+          if (discountInputRefs.current[currentIndex]) {
+            discountInputRefs.current[currentIndex].focus();
+          }
+          break;
+        case 'discount':
+          console.log('Adding new item or moving to next product');
+          console.log('Current index:', currentIndex, 'Items length:', items.length);
+          if (currentIndex === items.length - 1) {
+            console.log('Adding new item - calling addItem()');
+            addItem();
+          } else {
+            console.log('Moving to next product');
+            if (productInputRefs.current[currentIndex + 1]) {
+              productInputRefs.current[currentIndex + 1].focus();
+            }
+          }
+          break;
+        default:
+          console.log('Unknown field:', field);
+          break;
+      }
+    }, 100);
+  };
 
   // التركيز التلقائي عند التحميل
   useEffect(() => {
@@ -207,14 +274,14 @@ const NewPurchaseInvoice = () => {
         e.preventDefault();
         handleSubmit(e);
       }
-      // Enter لإضافة صف جديد (عند التركيز في حقل الكمية الأخير)
-      if (e.key === 'Enter' && e.target.name?.startsWith('quantity-')) {
-        const index = parseInt(e.target.name.split('-')[1]);
-        if (index === items.length - 1) {
-          e.preventDefault();
-          addItem();
-        }
-      }
+      // إزالة handler Enter لحقول الكمية لأنه يديره onKeyPress handlers
+      // if (e.key === 'Enter' && e.target.name?.startsWith('quantity-')) {
+      //   const index = parseInt(e.target.name.split('-')[1]);
+      //   if (index === items.length - 1) {
+      //     e.preventDefault();
+      //     addItem();
+      //   }
+      // }
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -236,9 +303,20 @@ const NewPurchaseInvoice = () => {
   };
 
   const selectSupplier = (supplier) => {
-    setFormData({ ...formData, supplierId: supplier.id });
+    const supplierBalance = supplier.balance || 0;
+    setFormData({ 
+      ...formData, 
+      supplierId: supplier.id,
+      supplierBalance: supplierBalance // إضافة رصيد المورد
+    });
     setSupplierSearch(supplier.name);
     setShowSupplierSuggestions(false);
+    
+    // إظهار رسالة برصيد المورد
+    if (supplierBalance !== 0) {
+      const balanceText = supplierBalance > 0 ? `رصيد المورد: ${supplierBalance.toFixed(2)} ج.م (له)` : `رصيد المورد: ${Math.abs(supplierBalance).toFixed(2)} ج.م (عليه)`;
+      setTimeout(() => showSuccess(balanceText), 500);
+    }
   };
   
   // إخفاء قائمة الموردين عند الخروج من الحقل
@@ -270,6 +348,7 @@ const NewPurchaseInvoice = () => {
       ...newItems[index],
       productId: product.id,
       productName: product.name,
+      barcode: product.barcode || '',
       price: parseFloat(product.purchasePrices?.basicPrice) || 0,
       subPrice: parseFloat(product.purchasePrices?.subPrice) || 0,
       purchasePrices: {
@@ -390,6 +469,7 @@ const NewPurchaseInvoice = () => {
     setItems([...items, { 
       productId: '', 
       productName: '',
+      barcode: '',
       quantity: 1, 
       subQuantity: 0,
       price: 0,
@@ -585,6 +665,7 @@ const NewPurchaseInvoice = () => {
     setItems([{ 
       productId: '', 
       productName: '',
+      barcode: '',
       quantity: 1, 
       subQuantity: 0,
       price: 0,
@@ -651,7 +732,20 @@ const NewPurchaseInvoice = () => {
                   >
                     <div className="flex justify-between items-center">
                       <span className="font-semibold text-sm text-gray-800">{supplier.name}</span>
-                      <span className="text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded">{supplier.phone}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded">{supplier.phone}</span>
+                        {supplier.balance !== undefined && (
+                          <span className={`text-xs px-2 py-1 rounded ${
+                            supplier.balance > 0 ? 'text-blue-600 bg-blue-100' : 
+                            supplier.balance < 0 ? 'text-red-600 bg-red-100' : 
+                            'text-green-600 bg-green-100'
+                          }`}>
+                            {supplier.balance === 0 ? 'متزن' : 
+                             supplier.balance > 0 ? `له: ${supplier.balance.toFixed(2)}` : 
+                             `عليه: ${Math.abs(supplier.balance).toFixed(2)}`} ج.م
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -670,7 +764,6 @@ const NewPurchaseInvoice = () => {
               <option value="main">اختر نوع الفاتورة</option>
               <option value="cash">نقدي</option>
               <option value="deferred">آجل</option>
-              <option value="partial">جزئي</option>
             </select>
           </div>
 
@@ -704,20 +797,21 @@ const NewPurchaseInvoice = () => {
             <thead>
               <tr className="bg-gray-100 border-b">
                 <th className="px-2 py-2 text-right text-xs font-semibold text-gray-700">المنتج</th>
-                <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-20">كمية أساسية</th>
-                <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-20">كمية فرعية</th>
-                <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-24">سعر أساسي</th>
-                <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-24">سعر فرعي</th>
-                <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-24">الخصم</th>
-                <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-24">الإجمالي</th>
-                <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-16">حذف</th>
+                <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-24">الباركود</th>
+                <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-16">الكمية الأساسية</th>
+                <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-16">الكمية الفرعية</th>
+                <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-20">السعر الأساسي</th>
+                <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-20">السعر الفرعي</th>
+                <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-20">الخصم</th>
+                <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-20">الإجمالي</th>
+                <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-12">حذف</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {items.map((item, index) => (
                 <tr key={index} className="hover:bg-gray-50">
                   {/* المنتج */}
-                  <td className="px-2 py-2 static">
+                  <td className="px-2 py-1 static">
                     <div className="relative z-[10]">
                       <input
                         ref={(el) => (productInputRefs.current[index] = el)}
@@ -725,10 +819,18 @@ const NewPurchaseInvoice = () => {
                         value={productSearches[index] || ''}
                         onChange={(e) => handleProductSearch(index, e.target.value)}
                         onBlur={() => handleProductBlur(index)}
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                        onKeyPress={(e) => {
+                          console.log('Product field key pressed:', e.key, 'at index:', index);
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            console.log('About to call handleEnterPress for product field');
+                            handleEnterPress(index, 'product');
+                          }
+                        }}
+                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
                         placeholder="ابحث عن المنتج..."
                       />
-                      <FaSearch className="absolute left-2 top-2.5 text-gray-400 text-xs" />
+                      <FaSearch className="absolute left-2 top-2 text-gray-400 text-xs" />
                     </div>
                     {showProductSuggestions[index] && productSearches[index]?.trim().length > 0 && getFilteredProducts(index).length > 0 && (
                       <div className="absolute z-[9999] left-0 w-full mt-1 bg-white border-2 border-blue-400 rounded-lg shadow-2xl max-h-64 overflow-y-auto">
@@ -738,12 +840,14 @@ const NewPurchaseInvoice = () => {
                             <div
                               key={product.id}
                               onClick={() => selectProduct(index, product)}
-                              className="px-4 py-2.5 hover:bg-blue-100 cursor-pointer border-b last:border-b-0 transition-colors"
+                              className="px-4 py-2 hover:bg-blue-100 cursor-pointer border-b last:border-b-0 transition-colors"
                             >
                               <div className="flex justify-between items-center">
                                 <div className="flex-1">
                                   <span className="font-semibold text-sm text-gray-800">{product.name}</span>
-                                  <span className="text-xs text-gray-600 mr-2">({warehouse?.name || 'غير محدد'} - {product.category})</span>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <span className="text-xs text-gray-600">({warehouse?.name || 'غير محدد'} - {product.category})</span>
+                                  </div>
                                 </div>
                                 <span className="text-xs font-bold text-green-700 bg-green-100 px-2 py-1 rounded">أساسي: {product.mainQuantity || 0}, فرعي: {product.subQuantity || 0}</span>
                               </div>
@@ -754,106 +858,159 @@ const NewPurchaseInvoice = () => {
                     )}
                   </td>
 
+                  {/* الباركود */}
+                  <td className="px-2 py-1 text-center">
+                    {item.barcode && (
+                      <span className="text-xs font-mono bg-purple-100 text-purple-700 px-2 py-1 rounded border">
+                        {item.barcode}
+                      </span>
+                    )}
+                  </td>
+
                   {/* الكمية الأساسية */}
-                  <td className="px-2 py-2">
+                  <td className="px-2 py-1">
                     <input
-                      ref={(el) => (quantityInputRefs.current[index] = el)}
+                      ref={(el) => {
+                        quantityInputRefs.current[index] = el;
+                      }}
                       type="number"
                       name={`quantity-${index}`}
-                      value={item.quantity}
+                      value={item.quantity > 0 ? item.quantity : ''}
                       onChange={(e) => handleItemChange(index, 'quantity', parseInt(e.target.value) || 0)}
-                      className={`w-full px-2 py-1.5 text-sm text-center border rounded-md focus:ring-2 focus:ring-blue-500 ${
+                      onKeyPress={(e) => {
+                        console.log('Quantity field key pressed:', e.key, 'at index:', index);
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          console.log('About to call handleEnterPress for quantity field');
+                          handleEnterPress(index, 'quantity');
+                        }
+                      }}
+                      className={`w-full px-2 py-1 text-sm text-center border rounded-md focus:ring-2 focus:ring-blue-500 ${
                         quantityErrors[index] ? 'border-red-500 bg-red-50' : 'border-gray-300'
                       }`}
+                      style={{appearance: 'none', '-moz-appearance': 'textfield', '::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 }, '::-webkit-outer-spin-button': { WebkitAppearance: 'none', margin: 0 }}}
                       min="0"
+                      placeholder="0"
                     />
                   </td>
 
                   {/* الكمية الفرعية */}
-                  <td className="px-2 py-2">
+                  <td className="px-2 py-1">
                     <input
+                      ref={(el) => (subQuantityInputRefs.current[index] = el)}
                       type="number"
-                      value={item.subQuantity}
+                      value={item.subQuantity > 0 ? item.subQuantity : ''}
                       onChange={(e) => handleItemChange(index, 'subQuantity', parseInt(e.target.value) || 0)}
-                      className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleEnterPress(index, 'subQuantity');
+                        }
+                      }}
+                      className="w-full px-2 py-1 text-sm text-center border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                      style={{appearance: 'none', '-moz-appearance': 'textfield', '::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 }, '::-webkit-outer-spin-button': { WebkitAppearance: 'none', margin: 0 }}}
                       min="0"
+                      placeholder="0"
                     />
                   </td>
 
                   {/* السعر الأساسي */}
-                  <td className="px-2 py-2">
+                  <td className="px-2 py-1">
                     <input
+                      ref={(el) => (priceInputRefs.current[index] = el)}
                       type="number"
                       step="0.01"
-                      value={item.price}
+                      value={item.price > 0 ? item.price : ''}
                       onChange={(e) => handleImmediateUpdate(index, 'price', parseFloat(e.target.value) || 0)}
                       onBlur={(e) => handlePriceBlur(index, 'price', e.target.value)}
-                      className={`w-full px-2 py-1.5 text-sm text-center border rounded-md focus:ring-2 focus:ring-blue-500 ${
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleEnterPress(index, 'price');
+                        }
+                      }}
+                      className={`w-full px-2 py-1 text-sm text-center border rounded-md focus:ring-2 focus:ring-blue-500 ${
                         priceErrors[index] ? 'border-red-500 bg-red-50' : 'border-gray-300'
                       }`}
+                      style={{appearance: 'none', '-moz-appearance': 'textfield', '::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 }, '::-webkit-outer-spin-button': { WebkitAppearance: 'none', margin: 0 }}}
                       min="0"
+                      placeholder="0.00"
                     />
                   </td>
 
                   {/* السعر الفرعي */}
-                  <td className="px-2 py-2">
+                  <td className="px-2 py-1">
                     <input
+                      ref={(el) => (subPriceInputRefs.current[index] = el)}
                       type="number"
                       step="0.01"
-                      value={item.subPrice}
+                      value={item.subPrice > 0 ? item.subPrice : ''}
                       onChange={(e) => handleImmediateUpdate(index, 'subPrice', parseFloat(e.target.value) || 0)}
                       onBlur={(e) => handlePriceBlur(index, 'subPrice', e.target.value)}
-                      className="w-full px-2 py-1.5 text-sm text-center border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleEnterPress(index, 'subPrice');
+                        }
+                      }}
+                      className="w-full px-2 py-1 text-sm text-center border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                      style={{appearance: 'none', '-moz-appearance': 'textfield', '::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 }, '::-webkit-outer-spin-button': { WebkitAppearance: 'none', margin: 0 }}}
                       min="0"
+                      placeholder="0.00"
                     />
                   </td>
                   {/* الخصم */}
-                  <td className="px-2 py-2 w-24">
-                    {/* حقل واحد للخصم مع أيقونة النوع */}
-                    <div className="relative flex items-center">
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={item.discount}
-                        onChange={(e) => handleItemChange(index, 'discount', parseFloat(e.target.value) || 0)}
-                        className={`w-full px-2 py-1.5 pr-8 text-xs text-center border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                          discountErrors[index] ? 'border-red-500 bg-red-50' : 'border-gray-300'
-                        }`}
-                        min="0"
-                        placeholder="0.00"
-                      />
-                      <span className="absolute right-2 text-xs pointer-events-none">
-                        {item.discountType === 'fixed' ? '💰' : '%'}
-                      </span>
+                  <td className="px-2 py-1 w-20">
+                    {/* الخصم أفقي - في صف واحد */}
+                    <div className="flex flex-col space-y-1">
+                      <div className="flex items-center gap-1">
+                        <input
+                          ref={(el) => (discountInputRefs.current[index] = el)}
+                          type="number"
+                          step="0.01"
+                          value={item.discount > 0 ? item.discount : ''}
+                          onChange={(e) => handleItemChange(index, 'discount', parseFloat(e.target.value) || 0)}
+                          onKeyPress={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleEnterPress(index, 'discount');
+                            }
+                          }}
+                          className={`flex-1 px-2 py-1 text-xs text-center border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                            discountErrors[index] ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                          }`}
+                          style={{appearance: 'none', '-moz-appearance': 'textfield', '::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 }, '::-webkit-outer-spin-button': { WebkitAppearance: 'none', margin: 0 }}}
+                          min="0"
+                          placeholder="0.00"
+                        />
+                        <select
+                          value={item.discountType}
+                          onChange={(e) => handleItemChange(index, 'discountType', e.target.value)}
+                          className="w-14 px-1 py-1 text-xs text-center border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50"
+                        >
+                          <option value="fixed">💰</option>
+                          <option value="percentage">%</option>
+                        </select>
+                      </div>
                     </div>
-                    
-                    {/* اختيار نوع الخصم في قائمة منسدلة */}
-                    <select
-                      value={item.discountType}
-                      onChange={(e) => handleItemChange(index, 'discountType', e.target.value)}
-                      className="mt-1 w-full px-1 py-1 text-xs text-center border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50"
-                    >
-                      <option value="fixed">مبلغ ثابت</option>
-                      <option value="percentage">نسبة مئوية</option>
-                    </select>
                   </td>
 
                   {/* الإجمالي */}
-                  <td className="px-2 py-2 text-center">
-                    <span className="font-semibold text-blue-600">
+                  <td className="px-2 py-1 text-center">
+                    <span className="font-semibold text-blue-600 text-xs">
                       {calculateItemTotal(item).toFixed(2)}
                     </span>
                   </td>
 
                   {/* حذف */}
-                  <td className="px-2 py-2 text-center">
+                  <td className="px-2 py-1 text-center">
                     <button
                       type="button"
                       onClick={() => removeItem(index)}
                       disabled={items.length === 1}
-                      className="text-red-600 hover:text-red-800 disabled:text-gray-400 disabled:cursor-not-allowed"
+                      className="text-red-600 hover:text-red-800 disabled:text-gray-400 disabled:cursor-not-allowed p-1"
                     >
-                      <FaTrash />
+                      <FaTrash className="text-xs" />
                     </button>
                   </td>
                 </tr>
@@ -933,6 +1090,7 @@ const NewPurchaseInvoice = () => {
             </div>
 
             {/* المجموع */}
+            {/* المجموع ورصيد المورد */}
             <div className="bg-blue-50 p-2 rounded-lg border border-blue-200">
               <div className="space-y-1">
                 <div className="flex justify-between items-center">
@@ -947,10 +1105,29 @@ const NewPurchaseInvoice = () => {
                   </div>
                 )}
                 
-                <div className="flex justify-between items-center pt-1 border-t border-blue-200">
-                  <span className="text-xs font-semibold text-gray-700">الإجمالي:</span>
+                <div className="flex justify-between items-center pt-1 border-t border-blue-300">
+                  <span className="text-xs font-bold text-gray-700">الإجمالي:</span>
                   <span className="text-sm font-bold text-blue-700">{calculateTotal().toFixed(2)}</span>
                 </div>
+                
+                {/* عرض رصيد المورد */}
+                {getSelectedSupplierBalance() !== null && getSelectedSupplierBalance() !== undefined && (
+                  <div className="mt-1 pt-1 border-t border-blue-300">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-semibold text-gray-700">رصيد المورد:</span>
+                      <span className={`text-xs font-bold ${
+                        getSelectedSupplierBalance() > 0 ? 'text-blue-600' : 
+                        getSelectedSupplierBalance() < 0 ? 'text-red-600' : 
+                        'text-green-600'
+                      }`}>
+                        {getSelectedSupplierBalance() === 0 ? '0.00' : getSelectedSupplierBalance().toFixed(2)}
+                        {getSelectedSupplierBalance() > 0 && ' ج.م (له)'}
+                        {getSelectedSupplierBalance() < 0 && ' ج.م (عليه)'}
+                        {getSelectedSupplierBalance() === 0 && ' ج.م (متزن)'}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="text-xs text-gray-500 text-center mt-1">
                 {items.length} منتج
@@ -959,39 +1136,43 @@ const NewPurchaseInvoice = () => {
 
             {/* الأزرار */}
             <div className="flex flex-col gap-1">
+              {/* سجل المشتريات */}
               <button
                 type="button"
                 onClick={handleOpenPurchaseRecord}
-                className="flex items-center justify-center gap-1 bg-orange-600 hover:bg-orange-700 text-white px-2 py-1.5 rounded transition-colors text-xs font-medium"
+                className="flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 text-white px-3 py-2 rounded transition-colors text-xs font-medium w-full"
                 title="سجل المشتريات"
               >
-                <FaList /> السجل
+                <FaList /> سجل المشتريات
               </button>
               
-              <div className="grid grid-cols-3 gap-1">
-                <button
-                  type="button"
-                  onClick={resetForm}
-                  className="flex items-center justify-center bg-gray-600 hover:bg-gray-700 text-white px-1 py-1.5 rounded transition-colors text-xs"
-                  title="إعادة تعيين"
-                >
-                  <FaTrash />
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => handleSubmit(e, false)}
-                  className="flex items-center justify-center bg-green-600 hover:bg-green-700 text-white px-1 py-1.5 rounded transition-colors text-xs"
-                  title="حفظ"
-                >
-                  <FaSave />
-                </button>
+              {/* زر الحفظ المميز */}
+              <button
+                type="button"
+                onClick={(e) => handleSubmit(e, false)}
+                className="flex items-center justify-center gap-2 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white px-5 py-2.5 rounded-lg transition-all font-bold text-sm shadow-lg transform hover:scale-105"
+                title="حفظ الفاتورة"
+              >
+                <FaSave className="text-base" /> حفظ الفاتورة
+              </button>
+              
+              {/* الأزرار الثانوية */}
+              <div className="grid grid-cols-2 gap-1">
                 <button
                   type="button"
                   onClick={(e) => handleSubmit(e, true)}
-                  className="flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white px-1 py-1.5 rounded transition-colors text-xs"
-                  title="طباعة"
+                  className="flex items-center justify-center gap-1 bg-blue-600 hover:bg-blue-700 text-white px-2 py-1.5 rounded transition-colors text-xs"
+                  title="طباعة وحفظ"
                 >
-                  <FaPrint />
+                  <FaPrint /> طباعة
+                </button>
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  className="flex items-center justify-center gap-1 bg-gray-600 hover:bg-gray-700 text-white px-2 py-1.5 rounded transition-colors text-xs"
+                  title="إعادة تعيين"
+                >
+                  <FaTrash /> إعادة تعيين
                 </button>
               </div>
             </div>
