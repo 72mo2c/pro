@@ -43,7 +43,7 @@ const validateAtLeastOnePhone = (phone1, phone2) => {
 
 const NewSalesInvoice = () => {
   const { customers, products, warehouses, shippingVehicles, addSalesInvoice, getCustomerBalance, addCustomer, updateProduct } = useData();
-  const { showSuccess, showError } = useNotification();
+  const { showSuccess, showError, showWarning } = useNotification();
   const { openTab } = useTab();
 
   // دالة لفتح سجل المبيعات في تبويبة جديدة
@@ -93,8 +93,10 @@ const NewSalesInvoice = () => {
   // البحث في العملاء والمنتجات
   const [customerSearch, setCustomerSearch] = useState('');
   const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
+  const [customerSelectedIndex, setCustomerSelectedIndex] = useState(0);
   const [productSearches, setProductSearches] = useState(['']);
   const [showProductSuggestions, setShowProductSuggestions] = useState([false]);
+  const [productSelectedIndexes, setProductSelectedIndexes] = useState([0]);
   
   // حالات الخطأ
   const [customerError, setCustomerError] = useState(false);
@@ -125,12 +127,36 @@ const NewSalesInvoice = () => {
   const priceInputRefs = useRef([]);
   const subPriceInputRefs = useRef([]);
   const discountInputRefs = useRef([]);
+  const discountPercentageInputRefs = useRef([]);
+  const discountAmountInputRefs = useRef([]);
+  
+  // مرجع للجدول والتمرير التلقائي
+  const productsTableRef = useRef(null);
+  const productRowRefs = useRef([]);
+  const [currentActiveField, setCurrentActiveField] = useState(null);
+  const [currentActiveRow, setCurrentActiveRow] = useState(null);
 
   // دالة التنقل التلقائي عند الضغط على Enter
   const handleEnterPress = (currentIndex, field) => {
     console.log('Enter pressed in field:', field, 'index:', currentIndex);
     console.log('Current items length:', items.length);
     console.log('Items array:', items);
+    
+    // التحقق من الشروط الأساسية للفاتورة قبل أي عملية
+    if (!validateInvoiceBasics()) {
+      console.log('🚫 Invoice basics validation failed - aborting action');
+      console.log('Customer ID:', formData.customerId, 'Sale Type:', formData.saleType);
+      return;
+    }
+    
+    console.log('✅ Invoice basics validation passed - proceeding with action');
+    
+    // دالة للتحقق من صحة الكمية الأساسية
+    const validateBasicQuantity = () => {
+      const currentItem = items[currentIndex];
+      return currentItem && currentItem.quantity > 0;
+    };
+
     setTimeout(() => {
       console.log('Processing navigation for field:', field, 'at index:', currentIndex);
       switch (field) {
@@ -143,42 +169,120 @@ const NewSalesInvoice = () => {
         case 'quantity':
           console.log('Moving to subQuantity field - attempting to focus subQuantity input at index:', currentIndex);
           console.log('subQuantityInputRefs current:', subQuantityInputRefs.current);
-          if (subQuantityInputRefs.current[currentIndex]) {
-            console.log('Focusing subQuantity input at index:', currentIndex);
-            subQuantityInputRefs.current[currentIndex].focus();
+          if (validateBasicQuantity()) {
+            if (subQuantityInputRefs.current[currentIndex]) {
+              console.log('Focusing subQuantity input at index:', currentIndex);
+              subQuantityInputRefs.current[currentIndex].focus();
+            } else {
+              console.log('ERROR: subQuantityInputRefs for index', currentIndex, 'is null/undefined');
+            }
           } else {
-            console.log('ERROR: subQuantityInputRefs for index', currentIndex, 'is null/undefined');
+            console.log('Basic quantity must be greater than 0');
+            showWarning('يجب إدخال كمية أساسية أكبر من صفر للمتابعة');
           }
           break;
         case 'subQuantity':
-          console.log('Moving to price field');
-          if (priceInputRefs.current[currentIndex]) {
-            priceInputRefs.current[currentIndex].focus();
+          if (validateBasicQuantity()) {
+            console.log('Moving to price field');
+            if (priceInputRefs.current[currentIndex]) {
+              priceInputRefs.current[currentIndex].focus();
+            }
+          } else {
+            console.log('Basic quantity must be greater than 0');
+            showWarning('يجب إدخال كمية أساسية أكبر من صفر للمتابعة');
           }
           break;
         case 'price':
-          console.log('Moving to subPrice field');
-          if (subPriceInputRefs.current[currentIndex]) {
-            subPriceInputRefs.current[currentIndex].focus();
+          if (validateBasicQuantity()) {
+            console.log('Moving to subPrice field');
+            if (subPriceInputRefs.current[currentIndex]) {
+              subPriceInputRefs.current[currentIndex].focus();
+            }
+          } else {
+            console.log('Basic quantity must be greater than 0');
+            showWarning('يجب إدخال كمية أساسية أكبر من صفر للمتابعة');
           }
           break;
         case 'subPrice':
-          console.log('Moving to discount field');
-          if (discountInputRefs.current[currentIndex]) {
-            discountInputRefs.current[currentIndex].focus();
+          if (validateBasicQuantity()) {
+            console.log('Moving to discountPercentage field');
+            if (discountPercentageInputRefs.current[currentIndex]) {
+              discountPercentageInputRefs.current[currentIndex].focus();
+            }
+          } else {
+            console.log('Basic quantity must be greater than 0');
+            showWarning('يجب إدخال كمية أساسية أكبر من صفر للمتابعة');
           }
           break;
         case 'discount':
-          console.log('Adding new item or moving to next product');
-          console.log('Current index:', currentIndex, 'Items length:', items.length);
-          if (currentIndex === items.length - 1) {
-            console.log('Adding new item - calling addItem()');
-            addItem();
-          } else {
-            console.log('Moving to next product');
-            if (productInputRefs.current[currentIndex + 1]) {
-              productInputRefs.current[currentIndex + 1].focus();
+          if (validateBasicQuantity()) {
+            console.log('Moving to discountPercentage field');
+            if (discountPercentageInputRefs.current[currentIndex]) {
+              discountPercentageInputRefs.current[currentIndex].focus();
             }
+          } else {
+            console.log('Basic quantity must be greater than 0');
+            showWarning('يجب إدخال كمية أساسية أكبر من صفر للمتابعة');
+          }
+          break;
+        case 'discountPercentage':
+          if (validateBasicQuantity()) {
+            console.log('Moving to discountAmount field');
+            if (discountAmountInputRefs.current[currentIndex]) {
+              discountAmountInputRefs.current[currentIndex].focus();
+            }
+          } else {
+            console.log('Basic quantity must be greater than 0');
+            showWarning('يجب إدخال كمية أساسية أكبر من صفر للمتابعة');
+          }
+          break;
+        case 'discountAmount':
+          if (validateBasicQuantity()) {
+            console.log('Adding new item and moving to next product');
+            console.log('Current index:', currentIndex, 'Items length:', items.length);
+            if (currentIndex === items.length - 1) {
+              console.log('Adding new item - calling addItemProtected()');
+              
+              // إضافة منتج جديد مع التركيز عليه
+              setTimeout(() => {
+                addItemProtected();
+                
+                // التركيز على المنتج الجديد بعد إضافة
+                setTimeout(() => {
+                  const newItemIndex = items.length; // الفهرس الجديد سيكون length الحالية
+                  const newItemRow = productRowRefs.current[newItemIndex];
+                  
+                  if (newItemRow) {
+                    // التمرير التلقائي إلى المنتج الجديد
+                    newItemRow.scrollIntoView({
+                      behavior: 'smooth',
+                      block: 'nearest'
+                    });
+                    
+                    // التركيز على حقل المنتج باستخدام الـ ref المخصص
+                    setTimeout(() => {
+                      const productInput = productInputRefs.current[newItemIndex];
+                      if (productInput) {
+                        console.log('Focusing on new product input at index:', newItemIndex);
+                        productInput.focus();
+                        setCurrentActiveField({ index: newItemIndex, field: 'product' });
+                        setCurrentActiveRow(newItemIndex);
+                      } else {
+                        console.log('Product input not found for index:', newItemIndex);
+                      }
+                    }, 150);
+                  }
+                }, 250);
+              }, 50);
+            } else {
+              console.log('Moving to next product');
+              if (productInputRefs.current[currentIndex + 1]) {
+                productInputRefs.current[currentIndex + 1].focus();
+              }
+            }
+          } else {
+            console.log('Basic quantity must be greater than 0');
+            showWarning('يجب إدخال كمية أساسية أكبر من صفر للمتابعة');
           }
           break;
         default:
@@ -186,6 +290,23 @@ const NewSalesInvoice = () => {
           break;
       }
     }, 100);
+  };
+
+  // دالة التحقق من الشروط الأساسية للفاتورة
+  const validateInvoiceBasics = () => {
+    // التحقق من اختيار العميل
+    if (!formData.customerId) {
+      showWarning('⚠️ يجب اختيار العميل أولاً قبل بدء إدخال المنتجات');
+      return false;
+    }
+    
+    // التحقق من تحديد نوع البيع
+    if (!formData.saleType) {
+      showWarning('⚠️ يجب تحديد نوع الفاتورة (قطاعي/جملة/كميات كبيرة) قبل بدء إدخال المنتجات');
+      return false;
+    }
+    
+    return true;
   };
 
   // ===== Quick Customer States =====
@@ -213,11 +334,22 @@ const NewSalesInvoice = () => {
     return mainTotal + subTotal;
   };
 
-  // حساب إجمالي العنصر بعد الخصم
+  // حساب إجمالي العنصر بعد الخصم المحسّن
   const calculateItemTotal = (item) => {
     const totalWithoutDiscount = calculateItemTotalWithoutDiscount(item);
-    const itemDiscount = item.discount || 0;
-    return Math.max(0, totalWithoutDiscount - itemDiscount);
+    let totalDiscount = 0;
+    
+    // حساب خصم النسبة المئوية
+    if (item.discountPercentage && item.discountPercentage > 0) {
+      totalDiscount += (totalWithoutDiscount * item.discountPercentage) / 100;
+    }
+    
+    // حساب خصم المبلغ الثابت
+    if (item.discountAmount && item.discountAmount > 0) {
+      totalDiscount += item.discountAmount;
+    }
+    
+    return Math.max(0, totalWithoutDiscount - totalDiscount);
   };
 
   // حساب الفرق وتطبيقه على الشريحة السعرية المحددة
@@ -333,6 +465,90 @@ const NewSalesInvoice = () => {
     customerInputRef.current?.focus();
   }, []);
 
+  // التمرير التلقائي عند إضافة منتجات جديدة
+  useEffect(() => {
+    if (productsTableRef.current) {
+      const timer = setTimeout(() => {
+        const latestRow = productRowRefs.current[items.length - 1];
+        if (latestRow) {
+          // التمرير التلقائي لجميع المنتجات (ليس فقط بعد 3)
+          latestRow.scrollIntoView({
+            behavior: 'smooth',
+            block: 'nearest'
+          });
+          
+          // التركيز على حقل المنتج الجديد باستخدام الـ ref المخصص
+          const productInput = productInputRefs.current[items.length - 1];
+          if (productInput) {
+            console.log('Auto-focusing on new product input at index:', items.length - 1);
+            productInput.focus();
+            setCurrentActiveField({ index: items.length - 1, field: 'product' });
+            setCurrentActiveRow(items.length - 1);
+          }
+        }
+      }, 100);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [items.length]);
+
+  // التمرير التلقائي عند التركيز على الحقول
+  const handleFieldFocus = (index, fieldType) => {
+    setTimeout(() => {
+      const targetRow = productRowRefs.current[index];
+      if (targetRow && productsTableRef.current) {
+        // تحديث الحقل النشط
+        setCurrentActiveField({ index, field: fieldType });
+        setCurrentActiveRow(index);
+        
+        // التمرير الذكي للتأكد من رؤية الحقل
+        targetRow.scrollIntoView({
+          behavior: 'smooth',
+          block: 'nearest'
+        });
+        
+        // تحسين: التأكد من أن العنصر مرئي بالكامل
+        const activeElement = document.activeElement;
+        if (activeElement && activeElement.scrollIntoView) {
+          activeElement.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+            inline: 'nearest'
+          });
+        }
+      }
+    }, 50);
+  };
+
+  // تحديث الحقل النشط عند التغيير
+  const updateActiveField = (index, fieldType) => {
+    setCurrentActiveField({ index, field: fieldType });
+    setCurrentActiveRow(index);
+  };
+
+  // مراقبة الحقل النشط والتأكد من ظهوره
+  useEffect(() => {
+    if (currentActiveField && currentActiveRow !== null) {
+      const timer = setTimeout(() => {
+        const targetRow = productRowRefs.current[currentActiveField.index];
+        if (targetRow && productsTableRef.current) {
+          // تحقق إضافي للتأكد من أن العنصر مرئي
+          const rect = targetRow.getBoundingClientRect();
+          const tableRect = productsTableRef.current.getBoundingClientRect();
+          
+          if (rect.bottom > tableRect.bottom || rect.top < tableRect.top) {
+            targetRow.scrollIntoView({
+              behavior: 'smooth',
+              block: 'nearest'
+            });
+          }
+        }
+      }, 100);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [currentActiveField, currentActiveRow]);
+
   // معالجة اختصارات الكيبورد
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -365,8 +581,41 @@ const NewSalesInvoice = () => {
   // البحث في العملاء
   const handleCustomerSearch = (value) => {
     setCustomerSearch(value);
+    setCustomerSelectedIndex(0); // إعادة تعيين مؤشر الاختيار
     // إظهار القائمة فقط عند وجود نص
     setShowCustomerSuggestions(value.trim().length > 0);
+  };
+
+  // معالجة لوحة المفاتيح للعملاء
+  const handleCustomerKeyDown = (e) => {
+    if (!showCustomerSuggestions || filteredCustomers.length === 0) return;
+
+    const maxIndex = filteredCustomers.length - 1;
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setCustomerSelectedIndex(prev => 
+          prev < maxIndex ? prev + 1 : prev
+        );
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setCustomerSelectedIndex(prev => 
+          prev > 0 ? prev - 1 : prev
+        );
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (customerSelectedIndex >= 0 && customerSelectedIndex < filteredCustomers.length) {
+          selectCustomer(filteredCustomers[customerSelectedIndex]);
+        }
+        break;
+      case 'Escape':
+        e.preventDefault();
+        setShowCustomerSuggestions(false);
+        break;
+    }
   };
 
   const selectCustomer = (customer) => {
@@ -570,10 +819,49 @@ const NewSalesInvoice = () => {
     newSearches[index] = value;
     setProductSearches(newSearches);
 
+    // إعادة تعيين مؤشر الاختيار
+    const newSelectedIndexes = [...productSelectedIndexes];
+    newSelectedIndexes[index] = 0;
+    setProductSelectedIndexes(newSelectedIndexes);
+
     // إظهار القائمة فقط عند وجود نص
     const newShowSuggestions = [...showProductSuggestions];
     newShowSuggestions[index] = value.trim().length > 0;
     setShowProductSuggestions(newShowSuggestions);
+  };
+
+  // معالجة لوحة المفاتيح للمنتجات
+  const handleProductKeyDown = (index, e) => {
+    const filteredProducts = getFilteredProducts(index);
+    if (!showProductSuggestions[index] || filteredProducts.length === 0) return;
+
+    const maxIndex = filteredProducts.length - 1;
+    const newSelectedIndexes = [...productSelectedIndexes];
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        newSelectedIndexes[index] = Math.min(newSelectedIndexes[index] + 1, maxIndex);
+        setProductSelectedIndexes(newSelectedIndexes);
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        newSelectedIndexes[index] = Math.max(newSelectedIndexes[index] - 1, 0);
+        setProductSelectedIndexes(newSelectedIndexes);
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (newSelectedIndexes[index] >= 0 && newSelectedIndexes[index] < filteredProducts.length) {
+          selectProduct(index, filteredProducts[newSelectedIndexes[index]]);
+        }
+        break;
+      case 'Escape':
+        e.preventDefault();
+        const newShowSuggestions = [...showProductSuggestions];
+        newShowSuggestions[index] = false;
+        setShowProductSuggestions(newShowSuggestions);
+        break;
+    }
   };
 
   const selectProduct = (index, product) => {
@@ -590,7 +878,8 @@ const NewSalesInvoice = () => {
       price: priceData.price,
       subPrice: priceData.subPrice,
       saleType: formData.saleType, // حفظ نوع البيع المختار
-      discount: 0
+      discountPercentage: 0,
+      discountAmount: 0
     };
     setItems(newItems);
 
@@ -663,22 +952,33 @@ const NewSalesInvoice = () => {
   };
 
   const handleItemChange = (index, field, value) => {
+    // التحقق من وجود المنتج قبل السماح بالإدخال
+    if (!items[index].productId) {
+      return; // منع الإدخال إذا لم يكن هناك منتج
+    }
+    
     const newItems = [...items];
     
     // التأكد من صحة قيم الخصم
-    if (field === 'discount' && newItems[index].discountType === 'percentage') {
+    if (field === 'discountPercentage') {
       if (value > 100) {
         value = 100;
       } else if (value < 0) {
         value = 0;
       }
-    } else if (field === 'discount' && newItems[index].discountType === 'fixed') {
+      newItems[index][field] = value;
+    } else if (field === 'discountAmount') {
       if (value < 0) {
         value = 0;
       }
+      newItems[index][field] = value;
+    } else if (field === 'discount') {
+      // دعم الحقل القديم للتوافق
+      newItems[index]['discountAmount'] = value;
+    } else {
+      newItems[index][field] = value;
     }
     
-    newItems[index][field] = value;
     setItems(newItems);
     
     // التحقق الفوري من الكميات والأسعار والخصم
@@ -698,7 +998,7 @@ const NewSalesInvoice = () => {
       setPriceErrors(newPriceErrors);
     }
 
-    if (field === 'discount') {
+    if (field === 'discount' || field === 'discountPercentage' || field === 'discountAmount') {
       const newDiscountErrors = [...discountErrors];
       newDiscountErrors[index] = value < 0;
       setDiscountErrors(newDiscountErrors);
@@ -738,6 +1038,43 @@ const NewSalesInvoice = () => {
     }
   };
 
+  // دالة محمية لإضافة منتج جديد
+  const addItemProtected = () => {
+    // التحقق من الشروط الأساسية للفاتورة أولاً
+    if (!validateInvoiceBasics()) {
+      console.log('🚫 addItemProtected: Invoice basics validation failed');
+      return;
+    }
+    
+    console.log('✅ addItemProtected: Invoice basics validation passed');
+    
+    // التحقق من وجود منتجات سابقة وكمياتها
+    const hasValidProducts = items.length === 0 || 
+      items.every(item => !item.productId || item.quantity > 0);
+    
+    if (!hasValidProducts && items.length > 0) {
+      showWarning('يجب إدخال كمية أساسية أكبر من صفر لجميع المنتجات السابقة قبل إضافة منتج جديد');
+      return;
+    }
+
+    // التحقق من العنصر الحالي (آخر عنصر في القائمة)
+    const currentItem = items[items.length - 1];
+    
+    // التحقق من تحديد اسم المنتج في العنصر الحالي
+    if (!currentItem.productId) {
+      showWarning('يجب تحديد اسم المنتج في العنصر الحالي قبل إضافة منتج جديد');
+      return;
+    }
+    
+    // التحقق من إدخال كمية أساسية في العنصر الحالي
+    if (!currentItem.quantity || currentItem.quantity <= 0) {
+      showWarning('يجب إدخال كمية أساسية أكبر من صفر في العنصر الحالي قبل إضافة منتج جديد');
+      return;
+    }
+
+    addItem();
+  };
+
   const addItem = () => {
     setItems([...items, { 
       productId: '', 
@@ -748,8 +1085,8 @@ const NewSalesInvoice = () => {
       price: 0,
       subPrice: 0,
       saleType: formData.saleType,
-      discount: 0,
-      discountType: 'fixed'
+      discountPercentage: 0,
+      discountAmount: 0
     }]);
     setProductSearches([...productSearches, '']);
     setShowProductSuggestions([...showProductSuggestions, false]);
@@ -758,10 +1095,31 @@ const NewSalesInvoice = () => {
     setPriceErrors([...priceErrors, false]);
     setDiscountErrors([...discountErrors, false]);
 
-    // التركيز على حقل المنتج الجديد
+    // التمرير والتركيز المحسن
     setTimeout(() => {
       const lastIndex = items.length;
-      productInputRefs.current[lastIndex]?.focus();
+      const latestRow = productRowRefs.current[lastIndex];
+      
+      if (latestRow) {
+        // التمرير التلقائي إلى المنتج الجديد
+        latestRow.scrollIntoView({
+          behavior: 'smooth',
+          block: 'nearest'
+        });
+        
+        // التركيز على حقل المنتج باستخدام الـ ref المخصص
+        setTimeout(() => {
+          const productInput = productInputRefs.current[lastIndex];
+          if (productInput) {
+            console.log('Focusing on product input after addItem at index:', lastIndex);
+            productInput.focus();
+            setCurrentActiveField({ index: lastIndex, field: 'product' });
+            setCurrentActiveRow(lastIndex);
+          } else {
+            console.log('Product input not found for index:', lastIndex);
+          }
+        }, 100);
+      }
     }, 100);
   };
 
@@ -1035,10 +1393,12 @@ const NewSalesInvoice = () => {
       }
 
       // التحقق من خصم العنصر
-      if (item.discount < 0) {
-        errors[`discount_${index}`] = 'خصم العنصر لا يمكن أن يكون سالباً';
-        newDiscountErrors[index] = true;
-      } else if (item.discount > calculateItemTotalWithoutDiscount(item)) {
+      const totalItemValue = calculateItemTotalWithoutDiscount(item);
+      const percentageDiscount = item.discountPercentage ? (totalItemValue * item.discountPercentage / 100) : 0;
+      const amountDiscount = item.discountAmount || 0;
+      const totalDiscount = percentageDiscount + amountDiscount;
+      
+      if (totalDiscount > totalItemValue) {
         errors[`discount_${index}`] = 'خصم العنصر لا يمكن أن يزيد عن إجماليه';
         newDiscountErrors[index] = true;
       } else {
@@ -1108,18 +1468,27 @@ const NewSalesInvoice = () => {
       console.log('📋 عناصر الفاتورة:', items);
       
       // تحويل البيانات للصيغة المتوافقة مع النظام مع الحفاظ على البيانات الفرعية
-      const convertedItems = items.map(item => ({
-        productId: item.productId,
-        productName: item.productName,
-        barcode: item.barcode || '',
-        quantity: item.quantity || 0,
-        subQuantity: item.subQuantity || 0,
-        mainPrice: item.price || 0,
-        subPrice: item.subPrice || 0,
-        discount: item.discount || 0,
-        saleType: item.saleType || 'retail', // نوع البيع
-        total: calculateItemTotal(item)
-      }));
+      const convertedItems = items.map(item => {
+        const totalWithoutDiscount = calculateItemTotalWithoutDiscount(item);
+        const percentageDiscount = item.discountPercentage ? (totalWithoutDiscount * item.discountPercentage / 100) : 0;
+        const amountDiscount = item.discountAmount || 0;
+        const totalDiscount = percentageDiscount + amountDiscount;
+        
+        return {
+          productId: item.productId,
+          productName: item.productName,
+          barcode: item.barcode || '',
+          quantity: item.quantity || 0,
+          subQuantity: item.subQuantity || 0,
+          mainPrice: item.price || 0,
+          subPrice: item.subPrice || 0,
+          discount: totalDiscount, // إجمالي الخصم للنظام القديم
+          discountPercentage: item.discountPercentage || 0,
+          discountAmount: item.discountAmount || 0,
+          saleType: item.saleType || 'retail', // نوع البيع
+          total: Math.max(0, totalWithoutDiscount - totalDiscount)
+        };
+      });
       
       console.log('📦 البيانات المحولة:', convertedItems);
 
@@ -1195,9 +1564,10 @@ const NewSalesInvoice = () => {
       barcode: '',
       quantity: 0, 
       subQuantity: 0,
-      mainPrice: 0,
+      price: 0,
       subPrice: 0,
-      discount: 0
+      discountPercentage: 0,
+      discountAmount: 0
     }]);
     setCustomerSearch('');
     setProductSearches(['']);
@@ -1228,6 +1598,7 @@ const NewSalesInvoice = () => {
                     type="text"
                     value={customerSearch}
                     onChange={(e) => handleCustomerSearch(e.target.value)}
+                    onKeyDown={handleCustomerKeyDown}
                     onBlur={handleCustomerBlur}
                     className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="ابحث بالاسم أو رقم الهاتف..."
@@ -1245,23 +1616,38 @@ const NewSalesInvoice = () => {
               </div>
               {showCustomerSuggestions && customerSearch.trim().length > 0 && filteredCustomers.length > 0 && (
                 <div className="absolute z-[9999] w-full mt-1 bg-white border-2 border-blue-400 rounded-lg shadow-xl max-h-56 overflow-y-auto">
-                  {filteredCustomers.map((customer) => (
+                  {filteredCustomers.map((customer, index) => (
                     <div
                       key={customer.id}
                       onClick={() => selectCustomer(customer)}
-                      className="px-4 py-2.5 hover:bg-blue-100 cursor-pointer border-b last:border-b-0 transition-colors"
+                      onMouseEnter={() => setCustomerSelectedIndex(index)}
+                      className={`px-4 py-2.5 cursor-pointer border-b last:border-b-0 transition-colors ${
+                        index === customerSelectedIndex 
+                          ? 'bg-blue-500 text-white' 
+                          : 'hover:bg-blue-100'
+                      }`}
                     >
                       <div className="flex justify-between items-center">
-                        <span className="font-semibold text-sm text-gray-800">{customer.name}</span>
+                        <span className={`font-semibold text-sm ${
+                          index === customerSelectedIndex ? 'text-white' : 'text-gray-800'
+                        }`}>{customer.name}</span>
                         <div className="flex items-center gap-2">
-                          <span className="text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded">
+                          <span className={`text-xs px-2 py-1 rounded ${
+                            index === customerSelectedIndex 
+                              ? 'text-blue-200 bg-blue-400' 
+                              : 'text-gray-600 bg-gray-100'
+                          }`}>
                             {customer.phone || customer.phone1}
                           </span>
                           {customer.balance !== undefined && (
                             <span className={`text-xs px-2 py-1 rounded ${
-                              customer.balance > 0 ? 'text-blue-600 bg-blue-100' : 
-                              customer.balance < 0 ? 'text-red-600 bg-red-100' : 
-                              'text-green-600 bg-green-100'
+                              index === customerSelectedIndex
+                                ? customer.balance > 0 ? 'text-blue-200 bg-blue-400' : 
+                                  customer.balance < 0 ? 'text-red-200 bg-red-400' : 
+                                  'text-green-200 bg-green-400'
+                                : customer.balance > 0 ? 'text-blue-600 bg-blue-100' : 
+                                  customer.balance < 0 ? 'text-red-600 bg-red-100' : 
+                                  'text-green-600 bg-green-100'
                             }`}>
                               {customer.balance === 0 ? 'متزن' : 
                                customer.balance > 0 ? `له: ${customer.balance.toFixed(2)}` : 
@@ -1384,24 +1770,36 @@ const NewSalesInvoice = () => {
 
         {/* جدول المنتجات */}
         <div className="mb-4 relative">
-          <div className="overflow-x-auto overflow-y-visible">
+          <div ref={productsTableRef} className="overflow-x-auto overflow-y-visible">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-100 border-b">
+                  <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-12">#</th>
                   <th className="px-2 py-2 text-right text-xs font-semibold text-gray-700">المنتج</th>
                   <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-24">الباركود</th>
                   <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-16">الكمية الأساسية</th>
                   <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-16">الكمية الفرعية</th>
                   <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-20">السعر الأساسي</th>
                   <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-20">السعر الفرعي</th>
-                  <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-20">الخصم</th>
+                  <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-28">الخصم</th>
                   <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-20">الإجمالي</th>
                   <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-12">حذف</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {items.map((item, index) => (
-                  <tr key={index} className="hover:bg-gray-50">
+                  <tr 
+                    key={index} 
+                    ref={(el) => (productRowRefs.current[index] = el)}
+                    className="hover:bg-gray-50"
+                  >
+                    {/* رقم التسلسل */}
+                    <td className="px-2 py-1 text-center">
+                      <span className="inline-flex items-center justify-center w-8 h-8 bg-blue-100 text-blue-800 text-xs font-bold rounded-full">
+                        {index + 1}
+                      </span>
+                    </td>
+                    
                     {/* المنتج */}
                     <td className="px-2 py-1 static">
                       <div className="relative z-[10]">
@@ -1410,7 +1808,12 @@ const NewSalesInvoice = () => {
                           type="text"
                           value={productSearches[index] || ''}
                           onChange={(e) => handleProductSearch(index, e.target.value)}
+                          onKeyDown={(e) => handleProductKeyDown(index, e)}
                           onBlur={() => handleProductBlur(index)}
+                          onFocus={() => {
+                            handleFieldFocus(index, 'product');
+                            updateActiveField(index, 'product');
+                          }}
                           onKeyPress={(e) => {
                             console.log('Product field key pressed:', e.key, 'at index:', index);
                             if (e.key === 'Enter') {
@@ -1426,22 +1829,40 @@ const NewSalesInvoice = () => {
                       </div>
                       {showProductSuggestions[index] && productSearches[index]?.trim().length > 0 && getFilteredProducts(index).length > 0 && (
                         <div className="absolute z-[9999] left-0 w-full mt-1 bg-white border-2 border-blue-400 rounded-lg shadow-2xl max-h-64 overflow-y-auto">
-                          {getFilteredProducts(index).map((product) => {
+                          {getFilteredProducts(index).map((product, productIndex) => {
                             const warehouse = warehouses.find(w => w.id === product.warehouseId);
+                            const selectedIndex = productSelectedIndexes[index] || 0;
                             return (
                               <div
                                 key={product.id}
                                 onClick={() => selectProduct(index, product)}
-                                className="px-4 py-2 hover:bg-blue-100 cursor-pointer border-b last:border-b-0 transition-colors"
+                                onMouseEnter={() => {
+                                  const newSelectedIndexes = [...productSelectedIndexes];
+                                  newSelectedIndexes[index] = productIndex;
+                                  setProductSelectedIndexes(newSelectedIndexes);
+                                }}
+                                className={`px-4 py-2 cursor-pointer border-b last:border-b-0 transition-colors ${
+                                  productIndex === selectedIndex 
+                                    ? 'bg-blue-500 text-white' 
+                                    : 'hover:bg-blue-100'
+                                }`}
                               >
                                 <div className="flex justify-between items-center">
                                   <div className="flex-1">
-                                    <span className="font-semibold text-sm text-gray-800">{product.name}</span>
+                                    <span className={`font-semibold text-sm ${
+                                      productIndex === selectedIndex ? 'text-white' : 'text-gray-800'
+                                    }`}>{product.name}</span>
                                     <div className="flex items-center gap-2 mt-1">
-                                      <span className="text-xs text-gray-600">({warehouse?.name || 'غير محدد'} - {product.category})</span>
+                                      <span className={`text-xs ${
+                                        productIndex === selectedIndex ? 'text-blue-200' : 'text-gray-600'
+                                      }`}>({warehouse?.name || 'غير محدد'} - {product.category})</span>
                                     </div>
                                   </div>
-                                  <span className="text-xs font-bold text-green-700 bg-green-100 px-2 py-1 rounded">
+                                  <span className={`text-xs font-bold px-2 py-1 rounded ${
+                                    productIndex === selectedIndex 
+                                      ? 'text-green-200 bg-green-400' 
+                                      : 'text-green-700 bg-green-100'
+                                  }`}>
                                     أساسي: {product.mainQuantity || 0}, فرعي: {product.subQuantity || 0}
                                   </span>
                                 </div>
@@ -1473,6 +1894,11 @@ const NewSalesInvoice = () => {
                         name={`quantity-${index}`}
                         value={item.quantity > 0 ? item.quantity : ''}
                         onChange={(e) => handleItemChange(index, 'quantity', parseInt(e.target.value) || 0)}
+                        disabled={!item.productId}
+                        onFocus={() => {
+                          handleFieldFocus(index, 'quantity');
+                          updateActiveField(index, 'quantity');
+                        }}
                         onKeyPress={(e) => {
                           console.log('Quantity field key pressed:', e.key, 'at index:', index);
                           if (e.key === 'Enter') {
@@ -1481,12 +1907,12 @@ const NewSalesInvoice = () => {
                             handleEnterPress(index, 'quantity');
                           }
                         }}
-                        className={`w-full px-2 py-1 text-sm text-center border rounded-md focus:ring-2 focus:ring-blue-500 ${
+                        className={`w-full px-2 py-1 text-sm text-center border rounded-md focus:ring-2 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none disabled:bg-gray-100 disabled:text-gray-500 ${
                           quantityErrors[index] ? 'border-red-500 bg-red-50' : 'border-gray-300'
                         }`}
-                        style={{appearance: 'none', '-moz-appearance': 'textfield', '::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 }, '::-webkit-outer-spin-button': { WebkitAppearance: 'none', margin: 0 }}}
                         min="0"
                         placeholder="0"
+                        title={item.productId ? "الكمية الأساسية" : "يجب إدخال المنتج أولاً"}
                       />
                     </td>
 
@@ -1497,16 +1923,17 @@ const NewSalesInvoice = () => {
                         type="number"
                         value={item.subQuantity > 0 ? item.subQuantity : ''}
                         onChange={(e) => handleItemChange(index, 'subQuantity', parseInt(e.target.value) || 0)}
+                        disabled={!item.productId}
                         onKeyPress={(e) => {
                           if (e.key === 'Enter') {
                             e.preventDefault();
                             handleEnterPress(index, 'subQuantity');
                           }
                         }}
-                        className="w-full px-2 py-1 text-sm text-center border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-                        style={{appearance: 'none', '-moz-appearance': 'textfield', '::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 }, '::-webkit-outer-spin-button': { WebkitAppearance: 'none', margin: 0 }}}
+                        className="w-full px-2 py-1 text-sm text-center border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none disabled:bg-gray-100 disabled:text-gray-500"
                         min="0"
                         placeholder="0"
+                        title={item.productId ? "الكمية الفرعية" : "يجب إدخال المنتج أولاً"}
                       />
                     </td>
 
@@ -1518,6 +1945,7 @@ const NewSalesInvoice = () => {
                         step="0.01"
                         value={item.price > 0 ? item.price : ''}
                         onChange={(e) => handleItemChange(index, 'price', parseFloat(e.target.value) || 0)}
+                        disabled={!item.productId}
                         onBlur={(e) => handlePriceBlur(index, 'price', e.target.value)}
                         onKeyPress={(e) => {
                           if (e.key === 'Enter') {
@@ -1525,12 +1953,12 @@ const NewSalesInvoice = () => {
                             handleEnterPress(index, 'price');
                           }
                         }}
-                        className={`w-full px-2 py-1 text-sm text-center border rounded-md focus:ring-2 focus:ring-blue-500 ${
+                        className={`w-full px-2 py-1 text-sm text-center border rounded-md focus:ring-2 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none disabled:bg-gray-100 disabled:text-gray-500 ${
                           priceErrors[index] ? 'border-red-500 bg-red-50' : 'border-gray-300'
                         }`}
-                        style={{appearance: 'none', '-moz-appearance': 'textfield', '::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 }, '::-webkit-outer-spin-button': { WebkitAppearance: 'none', margin: 0 }}}
                         min="0"
                         placeholder="0.00"
+                        title={item.productId ? "السعر الأساسي" : "يجب إدخال المنتج أولاً"}
                       />
                     </td>
 
@@ -1542,6 +1970,7 @@ const NewSalesInvoice = () => {
                         step="0.01"
                         value={item.subPrice > 0 ? item.subPrice : ''}
                         onChange={(e) => handleItemChange(index, 'subPrice', parseFloat(e.target.value) || 0)}
+                        disabled={!item.productId}
                         onBlur={(e) => handlePriceBlur(index, 'subPrice', e.target.value)}
                         onKeyPress={(e) => {
                           if (e.key === 'Enter') {
@@ -1549,44 +1978,62 @@ const NewSalesInvoice = () => {
                             handleEnterPress(index, 'subPrice');
                           }
                         }}
-                        className="w-full px-2 py-1 text-sm text-center border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-                        style={{appearance: 'none', '-moz-appearance': 'textfield', '::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 }, '::-webkit-outer-spin-button': { WebkitAppearance: 'none', margin: 0 }}}
+                        className="w-full px-2 py-1 text-sm text-center border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none disabled:bg-gray-100 disabled:text-gray-500"
                         min="0"
                         placeholder="0.00"
+                        title={item.productId ? "السعر الفرعي" : "يجب إدخال المنتج أولاً"}
                       />
                     </td>
-                    {/* الخصم */}
-                    <td className="px-2 py-1 w-20">
-                      {/* الخصم أفقي - في صف واحد */}
-                      <div className="flex flex-col space-y-1">
-                        <div className="flex items-center gap-1">
+                    {/* الخصم المحسّن - تصميم أفقي */}
+                    <td className="px-1 py-1 w-28">
+                      <div className="flex flex-row gap-1 items-center justify-center">
+                        {/* حقل النسبة المئوية */}
+                        <div className="relative flex-1 max-w-[5rem]">
                           <input
-                            ref={(el) => (discountInputRefs.current[index] = el)}
                             type="number"
-                            step="0.01"
-                            value={item.discount > 0 ? item.discount : ''}
-                            onChange={(e) => handleItemChange(index, 'discount', parseFloat(e.target.value) || 0)}
+                            step="0.1"
+                            min="0"
+                            max="100"
+                            value={item.discountPercentage || ''}
+                            onChange={(e) => handleItemChange(index, 'discountPercentage', parseFloat(e.target.value) || 0)}
+                            disabled={!item.productId}
+                            ref={(el) => (discountPercentageInputRefs.current[index] = el)}
                             onKeyPress={(e) => {
                               if (e.key === 'Enter') {
                                 e.preventDefault();
-                                handleEnterPress(index, 'discount');
+                                handleEnterPress(index, 'discountPercentage');
                               }
                             }}
-                            className={`flex-1 px-2 py-1 text-xs text-center border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                              discountErrors[index] ? 'border-red-500 bg-red-50' : 'border-gray-300'
-                            }`}
-                            style={{appearance: 'none', '-moz-appearance': 'textfield', '::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 }, '::-webkit-outer-spin-button': { WebkitAppearance: 'none', margin: 0 }}}
-                            min="0"
-                            placeholder="0.00"
+                            className="w-full pl-2 pr-2 py-1 text-sm text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none disabled:bg-gray-100 disabled:text-gray-500"
+                            placeholder="0"
+                            title={item.productId ? "نسبة الخصم" : "يجب إدخال المنتج أولاً"}
                           />
-                          <select
-                            value={item.discountType}
-                            onChange={(e) => handleItemChange(index, 'discountType', e.target.value)}
-                            className="w-14 px-1 py-1 text-xs text-center border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50"
-                          >
-                            <option value="fixed">💰</option>
-                            <option value="percentage">%</option>
-                          </select>
+                          <div className="absolute right-0.5 top-1 text-xs text-gray-400">%</div>
+                        </div>
+                        
+                        <span className="text-gray-400 text-xs font-bold flex-shrink-0">+</span>
+                        
+                        {/* حقل المبلغ الثابت */}
+                        <div className="relative flex-1 max-w-[5rem]">
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={item.discountAmount || ''}
+                            onChange={(e) => handleItemChange(index, 'discountAmount', parseFloat(e.target.value) || 0)}
+                            disabled={!item.productId}
+                            ref={(el) => (discountAmountInputRefs.current[index] = el)}
+                            onKeyPress={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleEnterPress(index, 'discountAmount');
+                              }
+                            }}
+                            className="w-full pl-2 pr-2 py-1 text-sm text-center border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none disabled:bg-gray-100 disabled:text-gray-500"
+                            placeholder="0.00"
+                            title={item.productId ? "مبلغ الخصم" : "يجب إدخال المنتج أولاً"}
+                          />
+                          <div className="absolute right-0.5 top-1 text-xs text-gray-400">💰</div>
                         </div>
                       </div>
                     </td>
@@ -1619,7 +2066,7 @@ const NewSalesInvoice = () => {
         {/* زر إضافة منتج */}
         <button
           type="button"
-          onClick={addItem}
+          onClick={addItemProtected}
           className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-500 hover:text-blue-600 transition-colors text-sm font-medium"
         >
           + إضافة منتج جديد (Enter)
@@ -1655,7 +2102,7 @@ const NewSalesInvoice = () => {
                     name="discountPercentage"
                     value={formData.discountPercentage}
                     onChange={handleChange}
-                    className="w-full text-xs text-center border-0 focus:ring-0 p-0"
+                    className="w-full text-xs text-center border-0 focus:ring-0 p-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     min="0"
                     max="100"
                     step="0.1"
@@ -1670,7 +2117,7 @@ const NewSalesInvoice = () => {
                     name="discountFixed"
                     value={formData.discountFixed}
                     onChange={handleChange}
-                    className="w-full text-xs text-center border-0 focus:ring-0 p-0"
+                    className="w-full text-xs text-center border-0 focus:ring-0 p-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     min="0"
                     step="0.01"
                     placeholder="ثابت"

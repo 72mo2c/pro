@@ -7,12 +7,12 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useData } from '../../context/DataContext';
 import { useNotification } from '../../context/NotificationContextWithSound';
 import { useTab } from '../../contexts/TabContext';
-import { FaSave, FaPrint, FaSearch, FaTrash, FaPercent, FaMoneyBillWave, FaExclamationTriangle, FaInfoCircle, FaList } from 'react-icons/fa';
+import { FaSave, FaPrint, FaSearch, FaTrash, FaPercent, FaMoneyBillWave, FaExclamationTriangle, FaInfoCircle, FaList, FaUserPlus, FaTimes } from 'react-icons/fa';
 import { printInvoiceDirectly } from '../../utils/printUtils';
 
 const NewPurchaseInvoice = () => {
-  const { suppliers, products, warehouses, addPurchaseInvoice, getSupplierBalance, updateProduct } = useData();
-  const { showSuccess, showError } = useNotification();
+  const { suppliers, products, warehouses, addPurchaseInvoice, getSupplierBalance, updateProduct, addSupplier } = useData();
+  const { showSuccess, showError, showWarning } = useNotification();
   const { openTab } = useTab();
   
   // دالة لفتح سجل المشتريات في تبويبة جديدة
@@ -45,8 +45,10 @@ const NewPurchaseInvoice = () => {
   // البحث في الموردين والمنتجات
   const [supplierSearch, setSupplierSearch] = useState('');
   const [showSupplierSuggestions, setShowSupplierSuggestions] = useState(false);
+  const [supplierSelectedIndex, setSupplierSelectedIndex] = useState(0);
   const [productSearches, setProductSearches] = useState(['']);
   const [showProductSuggestions, setShowProductSuggestions] = useState([false]);
+  const [productSelectedIndexes, setProductSelectedIndexes] = useState([0]);
   
   // حالات الخطأ
   const [supplierError, setSupplierError] = useState(false);
@@ -66,6 +68,18 @@ const NewPurchaseInvoice = () => {
     productName: ''
   });
 
+  // ===== دوال المورد السريع =====
+  // حالة modal إضافة المورد السريع
+  const [showQuickSupplierModal, setShowQuickSupplierModal] = useState(false);
+  const [quickSupplierForm, setQuickSupplierForm] = useState({
+    name: '',
+    phone1: '',
+    phone2: '',
+    address: ''
+  });
+  const [quickSupplierLoading, setQuickSupplierLoading] = useState(false);
+  const [quickSupplierErrors, setQuickSupplierErrors] = useState({});
+
   // مراجع للتركيز التلقائي
   const supplierInputRef = useRef(null);
   const productInputRefs = useRef([]);
@@ -74,12 +88,36 @@ const NewPurchaseInvoice = () => {
   const priceInputRefs = useRef([]);
   const subPriceInputRefs = useRef([]);
   const discountInputRefs = useRef([]);
+  const discountPercentageInputRefs = useRef([]);
+  const discountAmountInputRefs = useRef([]);
+  
+  // مرجع للجدول والتمرير التلقائي
+  const productsTableRef = useRef(null);
+  const productRowRefs = useRef([]);
+  const [currentActiveField, setCurrentActiveField] = useState(null);
+  const [currentActiveRow, setCurrentActiveRow] = useState(null);
 
   // دالة التنقل التلقائي عند الضغط على Enter
   const handleEnterPress = (currentIndex, field) => {
     console.log('Enter pressed in field:', field, 'index:', currentIndex);
     console.log('Current items length:', items.length);
     console.log('Items array:', items);
+    
+    // التحقق من الشروط الأساسية للفاتورة قبل أي عملية
+    if (!validateInvoiceBasics()) {
+      console.log('🚫 Invoice basics validation failed - aborting action');
+      console.log('Supplier ID:', formData.supplierId);
+      return;
+    }
+    
+    console.log('✅ Invoice basics validation passed - proceeding with action');
+    
+    // دالة للتحقق من صحة الكمية الأساسية
+    const validateBasicQuantity = () => {
+      const currentItem = items[currentIndex];
+      return currentItem && currentItem.quantity > 0;
+    };
+
     setTimeout(() => {
       console.log('Processing navigation for field:', field, 'at index:', currentIndex);
       switch (field) {
@@ -92,42 +130,120 @@ const NewPurchaseInvoice = () => {
         case 'quantity':
           console.log('Moving to subQuantity field - attempting to focus subQuantity input at index:', currentIndex);
           console.log('subQuantityInputRefs current:', subQuantityInputRefs.current);
-          if (subQuantityInputRefs.current[currentIndex]) {
-            console.log('Focusing subQuantity input at index:', currentIndex);
-            subQuantityInputRefs.current[currentIndex].focus();
+          if (validateBasicQuantity()) {
+            if (subQuantityInputRefs.current[currentIndex]) {
+              console.log('Focusing subQuantity input at index:', currentIndex);
+              subQuantityInputRefs.current[currentIndex].focus();
+            } else {
+              console.log('ERROR: subQuantityInputRefs for index', currentIndex, 'is null/undefined');
+            }
           } else {
-            console.log('ERROR: subQuantityInputRefs for index', currentIndex, 'is null/undefined');
+            console.log('Basic quantity must be greater than 0');
+            showWarning('يجب إدخال كمية أساسية أكبر من صفر للمتابعة');
           }
           break;
         case 'subQuantity':
-          console.log('Moving to price field');
-          if (priceInputRefs.current[currentIndex]) {
-            priceInputRefs.current[currentIndex].focus();
+          if (validateBasicQuantity()) {
+            console.log('Moving to price field');
+            if (priceInputRefs.current[currentIndex]) {
+              priceInputRefs.current[currentIndex].focus();
+            }
+          } else {
+            console.log('Basic quantity must be greater than 0');
+            showWarning('يجب إدخال كمية أساسية أكبر من صفر للمتابعة');
           }
           break;
         case 'price':
-          console.log('Moving to subPrice field');
-          if (subPriceInputRefs.current[currentIndex]) {
-            subPriceInputRefs.current[currentIndex].focus();
+          if (validateBasicQuantity()) {
+            console.log('Moving to subPrice field');
+            if (subPriceInputRefs.current[currentIndex]) {
+              subPriceInputRefs.current[currentIndex].focus();
+            }
+          } else {
+            console.log('Basic quantity must be greater than 0');
+            showWarning('يجب إدخال كمية أساسية أكبر من صفر للمتابعة');
           }
           break;
         case 'subPrice':
-          console.log('Moving to discount field');
-          if (discountInputRefs.current[currentIndex]) {
-            discountInputRefs.current[currentIndex].focus();
+          if (validateBasicQuantity()) {
+            console.log('Moving to discountPercentage field');
+            if (discountPercentageInputRefs.current[currentIndex]) {
+              discountPercentageInputRefs.current[currentIndex].focus();
+            }
+          } else {
+            console.log('Basic quantity must be greater than 0');
+            showWarning('يجب إدخال كمية أساسية أكبر من صفر للمتابعة');
           }
           break;
         case 'discount':
-          console.log('Adding new item or moving to next product');
-          console.log('Current index:', currentIndex, 'Items length:', items.length);
-          if (currentIndex === items.length - 1) {
-            console.log('Adding new item - calling addItem()');
-            addItem();
-          } else {
-            console.log('Moving to next product');
-            if (productInputRefs.current[currentIndex + 1]) {
-              productInputRefs.current[currentIndex + 1].focus();
+          if (validateBasicQuantity()) {
+            console.log('Moving to discountPercentage field');
+            if (discountPercentageInputRefs.current[currentIndex]) {
+              discountPercentageInputRefs.current[currentIndex].focus();
             }
+          } else {
+            console.log('Basic quantity must be greater than 0');
+            showWarning('يجب إدخال كمية أساسية أكبر من صفر للمتابعة');
+          }
+          break;
+        case 'discountPercentage':
+          if (validateBasicQuantity()) {
+            console.log('Moving to discountAmount field');
+            if (discountAmountInputRefs.current[currentIndex]) {
+              discountAmountInputRefs.current[currentIndex].focus();
+            }
+          } else {
+            console.log('Basic quantity must be greater than 0');
+            showWarning('يجب إدخال كمية أساسية أكبر من صفر للمتابعة');
+          }
+          break;
+        case 'discountAmount':
+          if (validateBasicQuantity()) {
+            console.log('Adding new item and moving to next product');
+            console.log('Current index:', currentIndex, 'Items length:', items.length);
+            if (currentIndex === items.length - 1) {
+              console.log('Adding new item - calling addItemProtected()');
+              
+              // إضافة منتج جديد مع التركيز عليه
+              setTimeout(() => {
+                addItemProtected();
+                
+                // التركيز على المنتج الجديد بعد إضافة
+                setTimeout(() => {
+                  const newItemIndex = items.length; // الفهرس الجديد سيكون length الحالية
+                  const newItemRow = productRowRefs.current[newItemIndex];
+                  
+                  if (newItemRow) {
+                    // التمرير التلقائي إلى المنتج الجديد
+                    newItemRow.scrollIntoView({
+                      behavior: 'smooth',
+                      block: 'nearest'
+                    });
+                    
+                    // التركيز على حقل المنتج باستخدام الـ ref المخصص
+                    setTimeout(() => {
+                      const productInput = productInputRefs.current[newItemIndex];
+                      if (productInput) {
+                        console.log('Focusing on new product input at index:', newItemIndex);
+                        productInput.focus();
+                        setCurrentActiveField({ index: newItemIndex, field: 'product' });
+                        setCurrentActiveRow(newItemIndex);
+                      } else {
+                        console.log('Product input not found for index:', newItemIndex);
+                      }
+                    }, 150);
+                  }
+                }, 250);
+              }, 50);
+            } else {
+              console.log('Moving to next product');
+              if (productInputRefs.current[currentIndex + 1]) {
+                productInputRefs.current[currentIndex + 1].focus();
+              }
+            }
+          } else {
+            console.log('Basic quantity must be greater than 0');
+            showWarning('يجب إدخال كمية أساسية أكبر من صفر للمتابعة');
           }
           break;
         default:
@@ -137,10 +253,244 @@ const NewPurchaseInvoice = () => {
     }, 100);
   };
 
+  // دالة التحقق من الشروط الأساسية للفاتورة
+  const validateInvoiceBasics = () => {
+    // التحقق من اختيار المورد
+    if (!formData.supplierId) {
+      showWarning('⚠️ يجب اختيار المورد أولاً قبل بدء إدخال المنتجات');
+      return false;
+    }
+    
+    return true;
+  };
+
+  // ===== دوال المورد السريع =====
+  
+  // فتح modal إضافة المورد السريع
+  const openQuickSupplierModal = () => {
+    setQuickSupplierForm({
+      name: '',
+      phone1: '',
+      phone2: '',
+      address: ''
+    });
+    setShowQuickSupplierModal(true);
+  };
+
+  // إغلاق modal المورد السريع
+  const closeQuickSupplierModal = () => {
+    setShowQuickSupplierModal(false);
+    setQuickSupplierLoading(false);
+  };
+
+  // معالجة تغيير بيانات المورد السريع
+  const handleQuickSupplierChange = (e) => {
+    const { name, value } = e.target;
+    setQuickSupplierForm(prev => ({
+      ...prev,
+      [name]: value
+    }));
+    
+    // إزالة رسالة الخطأ عند بدء الكتابة
+    if (quickSupplierErrors[name]) {
+      setQuickSupplierErrors(prev => ({
+        ...prev,
+        [name]: ''
+      }));
+    }
+  };
+
+  // التحقق من رقم الهاتف
+  const validatePhoneNumber = (phone) => {
+    if (!phone) {
+      return { isValid: true };
+    }
+    
+    const cleanPhone = phone.replace(/\D/g, ''); // إزالة جميع الرموز غير الرقمية
+    const phoneRegex = /^01[0-9]{9}$/;
+    
+    if (!phoneRegex.test(cleanPhone)) {
+      return { isValid: false, error: 'رقم هاتف غير صحيح' };
+    }
+    
+    return { isValid: true };
+  };
+
+  // التحقق من وجود رقم هاتف واحد على الأقل
+  const validateAtLeastOnePhone = (phone1, phone2) => {
+    if (!phone1 && !phone2) {
+      return { isValid: false, error: 'يجب إدخال رقم هاتف واحد على الأقل' };
+    }
+    return { isValid: true };
+  };
+
+  // إضافة مورد سريع جديد
+  const handleAddQuickSupplier = async () => {
+    // التحقق من صحة البيانات
+    const newErrors = {};
+    
+    // التحقق من إدخال اسم المورد
+    if (!quickSupplierForm.name.trim()) {
+      newErrors.name = 'يجب إدخال اسم المورد';
+    }
+    
+    // التحقق من إدخال رقم هاتف واحد على الأقل
+    const phoneValidation = validateAtLeastOnePhone(quickSupplierForm.phone1, quickSupplierForm.phone2);
+    if (!phoneValidation.isValid) {
+      newErrors.phone1 = phoneValidation.error;
+    }
+    
+    // التحقق من رقم الهاتف الأساسي
+    if (quickSupplierForm.phone1) {
+      const phone1Validation = validatePhoneNumber(quickSupplierForm.phone1);
+      if (!phone1Validation.isValid) {
+        newErrors.phone1 = phone1Validation.error;
+      }
+    }
+    
+    // التحقق من رقم الهاتف الثانوي (إذا تم إدخاله)
+    if (quickSupplierForm.phone2) {
+      const phone2Validation = validatePhoneNumber(quickSupplierForm.phone2);
+      if (!phone2Validation.isValid) {
+        newErrors.phone2 = phone2Validation.error;
+      }
+    }
+    
+    // إذا كان هناك أخطاء، عرضها وإيقاف الإرسال
+    if (Object.keys(newErrors).length > 0) {
+      setQuickSupplierErrors(newErrors);
+      showError('يرجى تصحيح أرقام الهواتف قبل الإرسال');
+      return;
+    }
+
+    setQuickSupplierLoading(true);
+
+    try {
+      // إضافة المورد الجديد
+      const newSupplier = {
+        name: quickSupplierForm.name.trim(),
+        phone: quickSupplierForm.phone1, // حفظ رقم الهاتف الأساسي
+        phone1: quickSupplierForm.phone1,
+        phone2: quickSupplierForm.phone2,
+        address: quickSupplierForm.address.trim(),
+        balance: 0,
+        createdAt: new Date().toISOString(),
+        status: 'active'
+      };
+
+      // إضافة المورد لقاعدة البيانات
+      addSupplier(newSupplier);
+
+      showSuccess(`تم إضافة المورد "${newSupplier.name}" بنجاح`);
+      
+      // اختيار المورد الجديد فوراً في الفاتورة
+      setFormData({ 
+        ...formData, 
+        supplierId: newSupplier.id,
+        supplierBalance: 0
+      });
+      
+      // تحديث نص البحث ليعكس اسم المورد الجديد
+      setSupplierSearch(newSupplier.name);
+      
+      // إغلاق المودال
+      closeQuickSupplierModal();
+
+    } catch (error) {
+      showError('حدث خطأ في إضافة المورد');
+    } finally {
+      setQuickSupplierLoading(false);
+    }
+  };
+
   // التركيز التلقائي عند التحميل
   useEffect(() => {
     supplierInputRef.current?.focus();
   }, []);
+
+  // التمرير التلقائي عند إضافة منتجات جديدة
+  useEffect(() => {
+    if (productsTableRef.current) {
+      const timer = setTimeout(() => {
+        const latestRow = productRowRefs.current[items.length - 1];
+        if (latestRow) {
+          // التمرير التلقائي لجميع المنتجات (ليس فقط بعد 3)
+          latestRow.scrollIntoView({
+            behavior: 'smooth',
+            block: 'nearest'
+          });
+          
+          // التركيز على حقل المنتج الجديد باستخدام الـ ref المخصص
+          const productInput = productInputRefs.current[items.length - 1];
+          if (productInput) {
+            console.log('Auto-focusing on new product input at index:', items.length - 1);
+            productInput.focus();
+            setCurrentActiveField({ index: items.length - 1, field: 'product' });
+            setCurrentActiveRow(items.length - 1);
+          }
+        }
+      }, 100);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [items.length]);
+
+  // التمرير التلقائي عند التركيز على الحقول
+  const handleFieldFocus = (index, fieldType) => {
+    setTimeout(() => {
+      const targetRow = productRowRefs.current[index];
+      if (targetRow && productsTableRef.current) {
+        // تحديث الحقل النشط
+        setCurrentActiveField({ index, field: fieldType });
+        setCurrentActiveRow(index);
+        
+        // التمرير الذكي للتأكد من رؤية الحقل
+        targetRow.scrollIntoView({
+          behavior: 'smooth',
+          block: 'nearest'
+        });
+        
+        // تحسين: التأكد من أن العنصر مرئي بالكامل
+        const activeElement = document.activeElement;
+        if (activeElement && activeElement.scrollIntoView) {
+          activeElement.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+            inline: 'nearest'
+          });
+        }
+      }
+    }, 50);
+  };
+
+  // تحديث الحقل النشط عند التغيير
+  const updateActiveField = (index, fieldType) => {
+    setCurrentActiveField({ index, field: fieldType });
+    setCurrentActiveRow(index);
+  };
+
+  // مراقبة الحقل النشط والتأكد من ظهوره
+  useEffect(() => {
+    if (currentActiveField && currentActiveRow !== null) {
+      const timer = setTimeout(() => {
+        const targetRow = productRowRefs.current[currentActiveField.index];
+        if (targetRow && productsTableRef.current) {
+          // تحقق إضافي للتأكد من أن العنصر مرئي
+          const rect = targetRow.getBoundingClientRect();
+          const tableRect = productsTableRef.current.getBoundingClientRect();
+          
+          if (rect.bottom > tableRect.bottom || rect.top < tableRect.top) {
+            targetRow.scrollIntoView({
+              behavior: 'smooth',
+              block: 'nearest'
+            });
+          }
+        }
+      }, 100);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [currentActiveField, currentActiveRow]);
 
   // عرض رصيد المورد المحدد
   const getSelectedSupplierBalance = () => {
@@ -155,20 +505,22 @@ const NewPurchaseInvoice = () => {
     return mainTotal + subTotal;
   };
 
-  // حساب إجمالي العنصر بعد الخصم
+  // حساب إجمالي العنصر بعد الخصم المحسّن
   const calculateItemTotal = (item) => {
     const totalWithoutDiscount = calculateItemTotalWithoutDiscount(item);
-    let itemDiscount = 0;
+    let totalDiscount = 0;
     
-    if (item.discountType === 'percentage') {
-      // خصم نسبة مئوية
-      itemDiscount = (totalWithoutDiscount * (item.discount || 0)) / 100;
-    } else {
-      // خصم مبلغ ثابت
-      itemDiscount = item.discount || 0;
+    // حساب خصم النسبة المئوية
+    if (item.discountPercentage && item.discountPercentage > 0) {
+      totalDiscount += (totalWithoutDiscount * item.discountPercentage) / 100;
     }
     
-    return Math.max(0, totalWithoutDiscount - itemDiscount);
+    // حساب خصم المبلغ الثابت
+    if (item.discountAmount && item.discountAmount > 0) {
+      totalDiscount += item.discountAmount;
+    }
+    
+    return Math.max(0, totalWithoutDiscount - totalDiscount);
   };
 
   const calculateSubTotal = () => {
@@ -298,8 +650,41 @@ const NewPurchaseInvoice = () => {
   // البحث في الموردين
   const handleSupplierSearch = (value) => {
     setSupplierSearch(value);
+    setSupplierSelectedIndex(0); // إعادة تعيين مؤشر الاختيار
     // إظهار القائمة فقط عند وجود نص
     setShowSupplierSuggestions(value.trim().length > 0);
+  };
+
+  // معالجة لوحة المفاتيح للموردين
+  const handleSupplierKeyDown = (e) => {
+    if (!showSupplierSuggestions || filteredSuppliers.length === 0) return;
+
+    const maxIndex = filteredSuppliers.length - 1;
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setSupplierSelectedIndex(prev => 
+          prev < maxIndex ? prev + 1 : prev
+        );
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setSupplierSelectedIndex(prev => 
+          prev > 0 ? prev - 1 : prev
+        );
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (supplierSelectedIndex >= 0 && supplierSelectedIndex < filteredSuppliers.length) {
+          selectSupplier(filteredSuppliers[supplierSelectedIndex]);
+        }
+        break;
+      case 'Escape':
+        e.preventDefault();
+        setShowSupplierSuggestions(false);
+        break;
+    }
   };
 
   const selectSupplier = (supplier) => {
@@ -336,10 +721,49 @@ const NewPurchaseInvoice = () => {
     newSearches[index] = value;
     setProductSearches(newSearches);
 
+    // إعادة تعيين مؤشر الاختيار
+    const newSelectedIndexes = [...productSelectedIndexes];
+    newSelectedIndexes[index] = 0;
+    setProductSelectedIndexes(newSelectedIndexes);
+
     // إظهار القائمة فقط عند وجود نص
     const newShowSuggestions = [...showProductSuggestions];
     newShowSuggestions[index] = value.trim().length > 0;
     setShowProductSuggestions(newShowSuggestions);
+  };
+
+  // معالجة لوحة المفاتيح للمنتجات
+  const handleProductKeyDown = (index, e) => {
+    const filteredProducts = getFilteredProducts(index);
+    if (!showProductSuggestions[index] || filteredProducts.length === 0) return;
+
+    const maxIndex = filteredProducts.length - 1;
+    const newSelectedIndexes = [...productSelectedIndexes];
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        newSelectedIndexes[index] = Math.min(newSelectedIndexes[index] + 1, maxIndex);
+        setProductSelectedIndexes(newSelectedIndexes);
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        newSelectedIndexes[index] = Math.max(newSelectedIndexes[index] - 1, 0);
+        setProductSelectedIndexes(newSelectedIndexes);
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (newSelectedIndexes[index] >= 0 && newSelectedIndexes[index] < filteredProducts.length) {
+          selectProduct(index, filteredProducts[newSelectedIndexes[index]]);
+        }
+        break;
+      case 'Escape':
+        e.preventDefault();
+        const newShowSuggestions = [...showProductSuggestions];
+        newShowSuggestions[index] = false;
+        setShowProductSuggestions(newShowSuggestions);
+        break;
+    }
   };
 
   const selectProduct = (index, product) => {
@@ -391,22 +815,33 @@ const NewPurchaseInvoice = () => {
 
   // تحديث فوري للعنصر (يستخدم مع onChange)
   const handleImmediateUpdate = (index, field, value) => {
+    // التحقق من وجود المنتج قبل السماح بالإدخال
+    if (!items[index].productId) {
+      return; // منع الإدخال إذا لم يكن هناك منتج
+    }
+    
     const newItems = [...items];
     
     // التأكد من صحة قيم الخصم
-    if (field === 'discount' && newItems[index].discountType === 'percentage') {
+    if (field === 'discountPercentage') {
       if (value > 100) {
         value = 100;
       } else if (value < 0) {
         value = 0;
       }
-    } else if (field === 'discount' && newItems[index].discountType === 'fixed') {
+      newItems[index][field] = value;
+    } else if (field === 'discountAmount') {
       if (value < 0) {
         value = 0;
       }
+      newItems[index][field] = value;
+    } else if (field === 'discount') {
+      // دعم الحقل القديم للتوافق
+      newItems[index]['discountAmount'] = value;
+    } else {
+      newItems[index][field] = value;
     }
     
-    newItems[index][field] = value;
     setItems(newItems);
     
     // التحقق الفوري من الكميات والأسعار والخصم
@@ -426,7 +861,7 @@ const NewPurchaseInvoice = () => {
       setPriceErrors(newPriceErrors);
     }
 
-    if (field === 'discount') {
+    if (field === 'discount' || field === 'discountPercentage' || field === 'discountAmount') {
       const newDiscountErrors = [...discountErrors];
       newDiscountErrors[index] = value < 0;
       setDiscountErrors(newDiscountErrors);
@@ -462,7 +897,48 @@ const NewPurchaseInvoice = () => {
 
   // دالة للتعامل مع تغيير العنصر (تستخدم للحقول غير السعر)
   const handleItemChange = (index, field, value) => {
+    // التحقق من وجود المنتج قبل السماح بالإدخال
+    if (!items[index].productId) {
+      return; // منع الإدخال إذا لم يكن هناك منتج
+    }
     handleImmediateUpdate(index, field, value);
+  };
+
+  // دالة محمية لإضافة منتج جديد
+  const addItemProtected = () => {
+    // التحقق من الشروط الأساسية للفاتورة أولاً
+    if (!validateInvoiceBasics()) {
+      console.log('🚫 addItemProtected: Invoice basics validation failed');
+      return;
+    }
+    
+    console.log('✅ addItemProtected: Invoice basics validation passed');
+    
+    // التحقق من وجود منتجات سابقة وكمياتها
+    const hasValidProducts = items.length === 0 || 
+      items.every(item => !item.productId || item.quantity > 0);
+    
+    if (!hasValidProducts && items.length > 0) {
+      showWarning('يجب إدخال كمية أساسية أكبر من صفر لجميع المنتجات السابقة قبل إضافة منتج جديد');
+      return;
+    }
+
+    // التحقق من العنصر الحالي (آخر عنصر في القائمة)
+    const currentItem = items[items.length - 1];
+    
+    // التحقق من تحديد اسم المنتج في العنصر الحالي
+    if (!currentItem.productId) {
+      showWarning('يجب تحديد اسم المنتج في العنصر الحالي قبل إضافة منتج جديد');
+      return;
+    }
+    
+    // التحقق من إدخال كمية أساسية في العنصر الحالي
+    if (!currentItem.quantity || currentItem.quantity <= 0) {
+      showWarning('يجب إدخال كمية أساسية أكبر من صفر في العنصر الحالي قبل إضافة منتج جديد');
+      return;
+    }
+
+    addItem();
   };
 
   const addItem = () => {
@@ -474,8 +950,8 @@ const NewPurchaseInvoice = () => {
       subQuantity: 0,
       price: 0,
       subPrice: 0,
-      discount: 0,
-      discountType: 'fixed'
+      discountPercentage: 0,
+      discountAmount: 0
     }]);
     setProductSearches([...productSearches, '']);
     setShowProductSuggestions([...showProductSuggestions, false]);
@@ -484,10 +960,31 @@ const NewPurchaseInvoice = () => {
     setPriceErrors([...priceErrors, false]);
     setDiscountErrors([...discountErrors, false]);
 
-    // التركيز على حقل المنتج الجديد
+    // التمرير والتركيز المحسن
     setTimeout(() => {
       const lastIndex = items.length;
-      productInputRefs.current[lastIndex]?.focus();
+      const latestRow = productRowRefs.current[lastIndex];
+      
+      if (latestRow) {
+        // التمرير التلقائي إلى المنتج الجديد
+        latestRow.scrollIntoView({
+          behavior: 'smooth',
+          block: 'nearest'
+        });
+        
+        // التركيز على حقل المنتج باستخدام الـ ref المخصص
+        setTimeout(() => {
+          const productInput = productInputRefs.current[lastIndex];
+          if (productInput) {
+            console.log('Focusing on product input after addItem at index:', lastIndex);
+            productInput.focus();
+            setCurrentActiveField({ index: lastIndex, field: 'product' });
+            setCurrentActiveRow(lastIndex);
+          } else {
+            console.log('Product input not found for index:', lastIndex);
+          }
+        }, 100);
+      }
     }, 100);
   };
 
@@ -572,10 +1069,12 @@ const NewPurchaseInvoice = () => {
       }
 
       // التحقق من خصم العنصر
-      if (item.discount < 0) {
-        errors[`discount_${index}`] = 'خصم العنصر لا يمكن أن يكون سالباً';
-        newDiscountErrors[index] = true;
-      } else if (item.discount > calculateItemTotalWithoutDiscount(item)) {
+      const totalItemValue = calculateItemTotalWithoutDiscount(item);
+      const percentageDiscount = item.discountPercentage ? (totalItemValue * item.discountPercentage / 100) : 0;
+      const amountDiscount = item.discountAmount || 0;
+      const totalDiscount = percentageDiscount + amountDiscount;
+      
+      if (totalDiscount > totalItemValue) {
         errors[`discount_${index}`] = 'خصم العنصر لا يمكن أن يزيد عن إجماليه';
         newDiscountErrors[index] = true;
       } else {
@@ -707,38 +1206,63 @@ const NewPurchaseInvoice = () => {
       {/* البطاقة الرئيسية */}
       <div className="bg-white rounded-lg shadow-md p-4">
         {/* الصف العلوي: معلومات الفاتورة */}
-        <div className="grid grid-cols-12 gap-3 mb-4 pb-4 border-b">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 mb-4 pb-4 border-b">
           {/* المورد */}
-          <div className="col-span-5 relative">
-            <div className="relative">
+          <div className="lg:col-span-3 flex items-center gap-2">
+            <div className="relative flex-1">
               <input
                 ref={supplierInputRef}
                 type="text"
                 value={supplierSearch}
                 onChange={(e) => handleSupplierSearch(e.target.value)}
+                onKeyDown={handleSupplierKeyDown}
                 onBlur={handleSupplierBlur}
                 className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="ابحث عن المورد..."
               />
               <FaSearch className="absolute left-2 top-2.5 text-gray-400 text-xs" />
             </div>
+            <button
+              type="button"
+              onClick={openQuickSupplierModal}
+              className="px-2 py-1.5 text-xs bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors flex items-center gap-1 whitespace-nowrap"
+              title="إضافة مورد جديد سريع"
+            >
+              <FaUserPlus className="text-xs" />
+              <span className="hidden xs:inline">مورد جديد</span>
+            </button>
             {showSupplierSuggestions && supplierSearch.trim().length > 0 && filteredSuppliers.length > 0 && (
               <div className="absolute z-[9999] w-full mt-1 bg-white border-2 border-blue-400 rounded-lg shadow-xl max-h-56 overflow-y-auto">
-                {filteredSuppliers.map((supplier) => (
+                {filteredSuppliers.map((supplier, index) => (
                   <div
                     key={supplier.id}
                     onClick={() => selectSupplier(supplier)}
-                    className="px-4 py-2.5 hover:bg-blue-100 cursor-pointer border-b last:border-b-0 transition-colors"
+                    onMouseEnter={() => setSupplierSelectedIndex(index)}
+                    className={`px-4 py-2.5 cursor-pointer border-b last:border-b-0 transition-colors ${
+                      index === supplierSelectedIndex 
+                        ? 'bg-blue-500 text-white' 
+                        : 'hover:bg-blue-100'
+                    }`}
                   >
                     <div className="flex justify-between items-center">
-                      <span className="font-semibold text-sm text-gray-800">{supplier.name}</span>
+                      <span className={`font-semibold text-sm ${
+                        index === supplierSelectedIndex ? 'text-white' : 'text-gray-800'
+                      }`}>{supplier.name}</span>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded">{supplier.phone}</span>
+                        <span className={`text-xs px-2 py-1 rounded ${
+                          index === supplierSelectedIndex 
+                            ? 'text-blue-200 bg-blue-400' 
+                            : 'text-gray-600 bg-gray-100'
+                        }`}>{supplier.phone}</span>
                         {supplier.balance !== undefined && (
                           <span className={`text-xs px-2 py-1 rounded ${
-                            supplier.balance > 0 ? 'text-blue-600 bg-blue-100' : 
-                            supplier.balance < 0 ? 'text-red-600 bg-red-100' : 
-                            'text-green-600 bg-green-100'
+                            index === supplierSelectedIndex
+                              ? supplier.balance > 0 ? 'text-blue-200 bg-blue-400' : 
+                                supplier.balance < 0 ? 'text-red-200 bg-red-400' : 
+                                'text-green-200 bg-green-400'
+                              : supplier.balance > 0 ? 'text-blue-600 bg-blue-100' : 
+                                supplier.balance < 0 ? 'text-red-600 bg-red-100' : 
+                                'text-green-600 bg-green-100'
                           }`}>
                             {supplier.balance === 0 ? 'متزن' : 
                              supplier.balance > 0 ? `له: ${supplier.balance.toFixed(2)}` : 
@@ -754,7 +1278,7 @@ const NewPurchaseInvoice = () => {
           </div>
 
           {/* نوع الفاتورة */}
-          <div className="col-span-4">
+          <div className="lg:col-span-2">
             <select
               name="paymentType"
               value={formData.paymentType}
@@ -768,7 +1292,7 @@ const NewPurchaseInvoice = () => {
           </div>
 
           {/* التاريخ */}
-          <div className="col-span-2">
+          <div className="lg:col-span-2">
             <input
               type="date"
               name="date"
@@ -779,7 +1303,7 @@ const NewPurchaseInvoice = () => {
           </div>
 
           {/* الوقت */}
-          <div className="col-span-1">
+          <div className="lg:col-span-1">
             <input
               type="time"
               name="time"
@@ -792,24 +1316,36 @@ const NewPurchaseInvoice = () => {
 
         {/* جدول المنتجات */}
         <div className="mb-4 relative">
-          <div className="overflow-x-auto overflow-y-visible">
+          <div ref={productsTableRef} className="overflow-x-auto overflow-y-visible">
             <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-100 border-b">
+                <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-12">#</th>
                 <th className="px-2 py-2 text-right text-xs font-semibold text-gray-700">المنتج</th>
                 <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-24">الباركود</th>
                 <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-16">الكمية الأساسية</th>
                 <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-16">الكمية الفرعية</th>
                 <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-20">السعر الأساسي</th>
                 <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-20">السعر الفرعي</th>
-                <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-20">الخصم</th>
+                <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-28">الخصم</th>
                 <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-20">الإجمالي</th>
                 <th className="px-2 py-2 text-center text-xs font-semibold text-gray-700 w-12">حذف</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {items.map((item, index) => (
-                <tr key={index} className="hover:bg-gray-50">
+                <tr 
+                  key={index} 
+                  ref={(el) => (productRowRefs.current[index] = el)}
+                  className="hover:bg-gray-50"
+                >
+                  {/* رقم التسلسل */}
+                  <td className="px-2 py-1 text-center">
+                    <span className="inline-flex items-center justify-center w-8 h-8 bg-blue-100 text-blue-800 text-xs font-bold rounded-full">
+                      {index + 1}
+                    </span>
+                  </td>
+                  
                   {/* المنتج */}
                   <td className="px-2 py-1 static">
                     <div className="relative z-[10]">
@@ -818,6 +1354,7 @@ const NewPurchaseInvoice = () => {
                         type="text"
                         value={productSearches[index] || ''}
                         onChange={(e) => handleProductSearch(index, e.target.value)}
+                        onKeyDown={(e) => handleProductKeyDown(index, e)}
                         onBlur={() => handleProductBlur(index)}
                         onKeyPress={(e) => {
                           console.log('Product field key pressed:', e.key, 'at index:', index);
@@ -829,27 +1366,49 @@ const NewPurchaseInvoice = () => {
                         }}
                         className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
                         placeholder="ابحث عن المنتج..."
+                        onFocus={() => {
+                          handleFieldFocus(index, 'product');
+                          updateActiveField(index, 'product');
+                        }}
                       />
                       <FaSearch className="absolute left-2 top-2 text-gray-400 text-xs" />
                     </div>
                     {showProductSuggestions[index] && productSearches[index]?.trim().length > 0 && getFilteredProducts(index).length > 0 && (
                       <div className="absolute z-[9999] left-0 w-full mt-1 bg-white border-2 border-blue-400 rounded-lg shadow-2xl max-h-64 overflow-y-auto">
-                        {getFilteredProducts(index).map((product) => {
+                        {getFilteredProducts(index).map((product, productIndex) => {
                           const warehouse = warehouses.find(w => w.id === product.warehouseId);
+                          const selectedIndex = productSelectedIndexes[index] || 0;
                           return (
                             <div
                               key={product.id}
                               onClick={() => selectProduct(index, product)}
-                              className="px-4 py-2 hover:bg-blue-100 cursor-pointer border-b last:border-b-0 transition-colors"
+                              onMouseEnter={() => {
+                                const newSelectedIndexes = [...productSelectedIndexes];
+                                newSelectedIndexes[index] = productIndex;
+                                setProductSelectedIndexes(newSelectedIndexes);
+                              }}
+                              className={`px-4 py-2 cursor-pointer border-b last:border-b-0 transition-colors ${
+                                productIndex === selectedIndex 
+                                  ? 'bg-blue-500 text-white' 
+                                  : 'hover:bg-blue-100'
+                              }`}
                             >
                               <div className="flex justify-between items-center">
                                 <div className="flex-1">
-                                  <span className="font-semibold text-sm text-gray-800">{product.name}</span>
+                                  <span className={`font-semibold text-sm ${
+                                    productIndex === selectedIndex ? 'text-white' : 'text-gray-800'
+                                  }`}>{product.name}</span>
                                   <div className="flex items-center gap-2 mt-1">
-                                    <span className="text-xs text-gray-600">({warehouse?.name || 'غير محدد'} - {product.category})</span>
+                                    <span className={`text-xs ${
+                                      productIndex === selectedIndex ? 'text-blue-200' : 'text-gray-600'
+                                    }`}>({warehouse?.name || 'غير محدد'} - {product.category})</span>
                                   </div>
                                 </div>
-                                <span className="text-xs font-bold text-green-700 bg-green-100 px-2 py-1 rounded">أساسي: {product.mainQuantity || 0}, فرعي: {product.subQuantity || 0}</span>
+                                <span className={`text-xs font-bold px-2 py-1 rounded ${
+                                  productIndex === selectedIndex 
+                                    ? 'text-green-200 bg-green-400' 
+                                    : 'text-green-700 bg-green-100'
+                                }`}>أساسي: {product.mainQuantity || 0}, فرعي: {product.subQuantity || 0}</span>
                               </div>
                             </div>
                           );
@@ -877,6 +1436,11 @@ const NewPurchaseInvoice = () => {
                       name={`quantity-${index}`}
                       value={item.quantity > 0 ? item.quantity : ''}
                       onChange={(e) => handleItemChange(index, 'quantity', parseInt(e.target.value) || 0)}
+                      disabled={!item.productId}
+                      onFocus={() => {
+                        handleFieldFocus(index, 'quantity');
+                        updateActiveField(index, 'quantity');
+                      }}
                       onKeyPress={(e) => {
                         console.log('Quantity field key pressed:', e.key, 'at index:', index);
                         if (e.key === 'Enter') {
@@ -885,12 +1449,12 @@ const NewPurchaseInvoice = () => {
                           handleEnterPress(index, 'quantity');
                         }
                       }}
-                      className={`w-full px-2 py-1 text-sm text-center border rounded-md focus:ring-2 focus:ring-blue-500 ${
+                      className={`w-full px-2 py-1 text-sm text-center border rounded-md focus:ring-2 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none disabled:bg-gray-100 disabled:text-gray-500 ${
                         quantityErrors[index] ? 'border-red-500 bg-red-50' : 'border-gray-300'
                       }`}
-                      style={{appearance: 'none', '-moz-appearance': 'textfield', '::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 }, '::-webkit-outer-spin-button': { WebkitAppearance: 'none', margin: 0 }}}
                       min="0"
                       placeholder="0"
+                      title={item.productId ? "الكمية الأساسية" : "يجب إدخال المنتج أولاً"}
                     />
                   </td>
 
@@ -901,16 +1465,17 @@ const NewPurchaseInvoice = () => {
                       type="number"
                       value={item.subQuantity > 0 ? item.subQuantity : ''}
                       onChange={(e) => handleItemChange(index, 'subQuantity', parseInt(e.target.value) || 0)}
+                      disabled={!item.productId}
                       onKeyPress={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault();
                           handleEnterPress(index, 'subQuantity');
                         }
                       }}
-                      className="w-full px-2 py-1 text-sm text-center border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-                      style={{appearance: 'none', '-moz-appearance': 'textfield', '::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 }, '::-webkit-outer-spin-button': { WebkitAppearance: 'none', margin: 0 }}}
+                      className="w-full px-2 py-1 text-sm text-center border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none disabled:bg-gray-100 disabled:text-gray-500"
                       min="0"
                       placeholder="0"
+                      title={item.productId ? "الكمية الفرعية" : "يجب إدخال المنتج أولاً"}
                     />
                   </td>
 
@@ -922,6 +1487,7 @@ const NewPurchaseInvoice = () => {
                       step="0.01"
                       value={item.price > 0 ? item.price : ''}
                       onChange={(e) => handleImmediateUpdate(index, 'price', parseFloat(e.target.value) || 0)}
+                      disabled={!item.productId}
                       onBlur={(e) => handlePriceBlur(index, 'price', e.target.value)}
                       onKeyPress={(e) => {
                         if (e.key === 'Enter') {
@@ -929,12 +1495,12 @@ const NewPurchaseInvoice = () => {
                           handleEnterPress(index, 'price');
                         }
                       }}
-                      className={`w-full px-2 py-1 text-sm text-center border rounded-md focus:ring-2 focus:ring-blue-500 ${
+                      className={`w-full px-2 py-1 text-sm text-center border rounded-md focus:ring-2 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none disabled:bg-gray-100 disabled:text-gray-500 ${
                         priceErrors[index] ? 'border-red-500 bg-red-50' : 'border-gray-300'
                       }`}
-                      style={{appearance: 'none', '-moz-appearance': 'textfield', '::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 }, '::-webkit-outer-spin-button': { WebkitAppearance: 'none', margin: 0 }}}
                       min="0"
                       placeholder="0.00"
+                      title={item.productId ? "السعر الأساسي" : "يجب إدخال المنتج أولاً"}
                     />
                   </td>
 
@@ -946,6 +1512,7 @@ const NewPurchaseInvoice = () => {
                       step="0.01"
                       value={item.subPrice > 0 ? item.subPrice : ''}
                       onChange={(e) => handleImmediateUpdate(index, 'subPrice', parseFloat(e.target.value) || 0)}
+                      disabled={!item.productId}
                       onBlur={(e) => handlePriceBlur(index, 'subPrice', e.target.value)}
                       onKeyPress={(e) => {
                         if (e.key === 'Enter') {
@@ -953,44 +1520,62 @@ const NewPurchaseInvoice = () => {
                           handleEnterPress(index, 'subPrice');
                         }
                       }}
-                      className="w-full px-2 py-1 text-sm text-center border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-                      style={{appearance: 'none', '-moz-appearance': 'textfield', '::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 }, '::-webkit-outer-spin-button': { WebkitAppearance: 'none', margin: 0 }}}
+                      className="w-full px-2 py-1 text-sm text-center border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none disabled:bg-gray-100 disabled:text-gray-500"
                       min="0"
                       placeholder="0.00"
+                      title={item.productId ? "السعر الفرعي" : "يجب إدخال المنتج أولاً"}
                     />
                   </td>
-                  {/* الخصم */}
-                  <td className="px-2 py-1 w-20">
-                    {/* الخصم أفقي - في صف واحد */}
-                    <div className="flex flex-col space-y-1">
-                      <div className="flex items-center gap-1">
+                  {/* الخصم المحسّن - تصميم أفقي */}
+                  <td className="px-1 py-1 w-28">
+                    <div className="flex flex-row gap-1 items-center justify-center">
+                      {/* حقل النسبة المئوية */}
+                      <div className="relative flex-1 max-w-[5rem]">
                         <input
-                          ref={(el) => (discountInputRefs.current[index] = el)}
                           type="number"
-                          step="0.01"
-                          value={item.discount > 0 ? item.discount : ''}
-                          onChange={(e) => handleItemChange(index, 'discount', parseFloat(e.target.value) || 0)}
+                          step="0.1"
+                          min="0"
+                          max="100"
+                          value={item.discountPercentage || ''}
+                          onChange={(e) => handleItemChange(index, 'discountPercentage', parseFloat(e.target.value) || 0)}
+                          disabled={!item.productId}
+                          ref={(el) => (discountPercentageInputRefs.current[index] = el)}
                           onKeyPress={(e) => {
                             if (e.key === 'Enter') {
                               e.preventDefault();
-                              handleEnterPress(index, 'discount');
+                              handleEnterPress(index, 'discountPercentage');
                             }
                           }}
-                          className={`flex-1 px-2 py-1 text-xs text-center border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                            discountErrors[index] ? 'border-red-500 bg-red-50' : 'border-gray-300'
-                          }`}
-                          style={{appearance: 'none', '-moz-appearance': 'textfield', '::-webkit-inner-spin-button': { WebkitAppearance: 'none', margin: 0 }, '::-webkit-outer-spin-button': { WebkitAppearance: 'none', margin: 0 }}}
-                          min="0"
-                          placeholder="0.00"
+                          className="w-full pl-2 pr-2 py-1 text-sm text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none disabled:bg-gray-100 disabled:text-gray-500"
+                          placeholder="0"
+                          title={item.productId ? "نسبة الخصم" : "يجب إدخال المنتج أولاً"}
                         />
-                        <select
-                          value={item.discountType}
-                          onChange={(e) => handleItemChange(index, 'discountType', e.target.value)}
-                          className="w-14 px-1 py-1 text-xs text-center border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50"
-                        >
-                          <option value="fixed">💰</option>
-                          <option value="percentage">%</option>
-                        </select>
+                        <div className="absolute right-0.5 top-1 text-xs text-gray-400">%</div>
+                      </div>
+                      
+                      <span className="text-gray-400 text-xs font-bold flex-shrink-0">+</span>
+                      
+                      {/* حقل المبلغ الثابت */}
+                      <div className="relative flex-1 max-w-[5rem]">
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={item.discountAmount || ''}
+                          onChange={(e) => handleItemChange(index, 'discountAmount', parseFloat(e.target.value) || 0)}
+                          disabled={!item.productId}
+                          ref={(el) => (discountAmountInputRefs.current[index] = el)}
+                          onKeyPress={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleEnterPress(index, 'discountAmount');
+                            }
+                          }}
+                          className="w-full pl-2 pr-2 py-1 text-sm text-center border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none disabled:bg-gray-100 disabled:text-gray-500"
+                          placeholder="0.00"
+                          title={item.productId ? "مبلغ الخصم" : "يجب إدخال المنتج أولاً"}
+                        />
+                        <div className="absolute right-0.5 top-1 text-xs text-gray-400">💰</div>
                       </div>
                     </div>
                   </td>
@@ -1023,7 +1608,7 @@ const NewPurchaseInvoice = () => {
         {/* زر إضافة منتج */}
         <button
           type="button"
-          onClick={addItem}
+          onClick={addItemProtected}
           className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-500 hover:text-blue-600 transition-colors text-sm font-medium"
         >
           + إضافة منتج جديد (Enter)
@@ -1059,7 +1644,7 @@ const NewPurchaseInvoice = () => {
                     name="discountPercentage"
                     value={formData.discountPercentage}
                     onChange={handleChange}
-                    className="w-full text-xs text-center border-0 focus:ring-0 p-0"
+                    className="w-full text-xs text-center border-0 focus:ring-0 p-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     min="0"
                     max="100"
                     step="0.1"
@@ -1074,7 +1659,7 @@ const NewPurchaseInvoice = () => {
                     name="discountFixed"
                     value={formData.discountFixed}
                     onChange={handleChange}
-                    className="w-full text-xs text-center border-0 focus:ring-0 p-0"
+                    className="w-full text-xs text-center border-0 focus:ring-0 p-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     min="0"
                     step="0.01"
                     placeholder="ثابت"
@@ -1250,6 +1835,131 @@ const NewPurchaseInvoice = () => {
           Ctrl+S: حفظ | Enter: صف جديد | Tab: تنقل
         </div>
       </div>
+
+      {/* Modal إضافة المورد السريع */}
+      {showQuickSupplierModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
+          <div className="bg-white rounded-lg shadow-xl max-w-sm w-full mx-4">
+            {/* رأس المودال المبسط */}
+            <div className="flex items-center justify-between p-4 border-b bg-green-50">
+              <div className="flex items-center gap-2">
+                <FaUserPlus className="text-green-600 text-sm" />
+                <h2 className="text-lg font-semibold text-gray-800">مورد جديد</h2>
+              </div>
+              <button
+                onClick={closeQuickSupplierModal}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+                type="button"
+              >
+                <FaTimes className="text-sm" />
+              </button>
+            </div>
+
+            {/* محتوى المودال المبسط */}
+            <div className="p-4">
+              <form onSubmit={(e) => { e.preventDefault(); handleAddQuickSupplier(); }} className="space-y-3">
+                {/* اسم المورد */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    اسم المورد <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="name"
+                    value={quickSupplierForm.name}
+                    onChange={handleQuickSupplierChange}
+                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    placeholder="الاسم"
+                    required
+                    autoFocus
+                  />
+                  {quickSupplierErrors.name && (
+                    <p className="text-red-500 text-xs mt-1">{quickSupplierErrors.name}</p>
+                  )}
+                </div>
+
+                {/* رقم الهاتف الأول */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    رقم الهاتف الأول <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="tel"
+                    name="phone1"
+                    value={quickSupplierForm.phone1}
+                    onChange={handleQuickSupplierChange}
+                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    placeholder="01xxxxxxxxx"
+                    required
+                  />
+                  {quickSupplierErrors.phone1 && (
+                    <p className="text-red-500 text-xs mt-1">{quickSupplierErrors.phone1}</p>
+                  )}
+                </div>
+
+                {/* رقم الهاتف الثانوي */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    رقم الهاتف الثانوي
+                  </label>
+                  <input
+                    type="tel"
+                    name="phone2"
+                    value={quickSupplierForm.phone2}
+                    onChange={handleQuickSupplierChange}
+                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    placeholder="01xxxxxxxxx (اختياري)"
+                  />
+                  {quickSupplierErrors.phone2 && (
+                    <p className="text-red-500 text-xs mt-1">{quickSupplierErrors.phone2}</p>
+                  )}
+                </div>
+
+                {/* العنوان */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    العنوان
+                  </label>
+                  <input
+                    type="text"
+                    name="address"
+                    value={quickSupplierForm.address}
+                    onChange={handleQuickSupplierChange}
+                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    placeholder="العنوان (اختياري)"
+                  />
+                </div>
+
+                {/* أزرار المودال */}
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={closeQuickSupplierModal}
+                    className="flex-1 px-4 py-2 text-sm border border-gray-300 text-gray-700 rounded hover:bg-gray-50 transition-colors"
+                    disabled={quickSupplierLoading}
+                  >
+                    إلغاء
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={quickSupplierLoading || !quickSupplierForm.name.trim() || !quickSupplierForm.phone1.trim()}
+                    className="flex-1 px-4 py-2 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {quickSupplierLoading ? (
+                      <div className="flex items-center justify-center gap-1">
+                        <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        جاري الحفظ...
+                      </div>
+                    ) : (
+                      'حفظ المورد'
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
