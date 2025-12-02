@@ -16,7 +16,7 @@ import Notifications from '../../pages/Notifications';
 import AddProduct from '../../pages/Warehouses/AddProduct';
 import ManageProducts from '../../pages/Warehouses/ManageProducts';
 import AddWarehouse from '../../pages/Warehouses/AddWarehouse';
-import ManageCategories from '../../pages/Warehouses/ManageCategories';
+import ManageGroups from '../../pages/Warehouses/ManageGroups'; // المكون الجديد
 import Transfer from '../../pages/Warehouses/Transfer';
 import Inventory from '../../pages/Warehouses/Inventory';
 import ManageWarehouses from '../../pages/Warehouses/ManageWarehouses';
@@ -132,7 +132,7 @@ const getComponentForPath = (path) => {
     '/warehouses/add-product': AddProduct,
     '/warehouses/manage-products': ManageProducts,
     '/warehouses/add-warehouse': AddWarehouse,
-    '/warehouses/manage-categories': ManageCategories,
+    '/warehouses/manage-categories': ManageGroups, // تحديث ليستخدم المكون الجديد
     '/warehouses/transfer': Transfer,
     '/warehouses/inventory': Inventory,
     '/warehouses/manage': ManageWarehouses,

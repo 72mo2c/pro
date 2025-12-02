@@ -46,6 +46,7 @@ export const DataProvider = ({ children }) => {
   const [warehouses, setWarehouses] = useState([]);
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [groups, setGroups] = useState([]); // المجموعات الجديدة الهرمية
   
   // بيانات المشتريات
   const [purchases, setPurchases] = useState([]);
@@ -181,6 +182,7 @@ export const DataProvider = ({ children }) => {
     loadData('bero_warehouses', setWarehouses);
     loadData('bero_products', setProducts);
     loadData('bero_categories', setCategories);
+    loadData('bero_groups', setGroups); // تحميل المجموعات الجديدة
     loadData('bero_purchases', setPurchases);
     loadData('bero_purchase_invoices', setPurchaseInvoices);
     loadData('bero_purchase_returns', setPurchaseReturns);
@@ -517,6 +519,123 @@ export const DataProvider = ({ children }) => {
     const updated = categories.filter(c => c.id !== id);
     setCategories(updated);
     saveData('bero_categories', updated);
+  };
+
+  // ==================== دوال المجموعات الجديدة (الهرمية) ====================
+  
+  const addGroup = (group) => {
+    const newGroup = { 
+      id: Date.now(), 
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      ...group
+    };
+    const updated = [...groups, newGroup];
+    setGroups(updated);
+    saveData('bero_groups', updated);
+    logActivity('group_add', `إضافة مجموعة جديدة: ${newGroup.name}`, { groupId: newGroup.id, groupName: newGroup.name });
+    return newGroup;
+  };
+
+  // دالة البحث عن مجموعة في الهيكل الهرمي
+  const findGroupInHierarchy = (groups, targetId) => {
+    for (const group of groups) {
+      if (group.id === targetId) {
+        return group;
+      }
+      if (group.children && group.children.length > 0) {
+        const found = findGroupInHierarchy(group.children, targetId);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
+  // دالة تحديث مجموعة في الهيكل الهرمي
+  const updateGroupInHierarchy = (groups, targetId, updatedData) => {
+    return groups.map(group => {
+      if (group.id === targetId) {
+        return {
+          ...group,
+          ...updatedData,
+          updatedAt: new Date().toISOString()
+        };
+      } else if (group.children && group.children.length > 0) {
+        return {
+          ...group,
+          children: updateGroupInHierarchy(group.children, targetId, updatedData)
+        };
+      }
+      return group;
+    });
+  };
+
+  const updateGroup = (id, updatedData) => {
+    const existingGroup = findGroupInHierarchy(groups, id);
+    if (!existingGroup) {
+      console.warn(`المجموعة بالمعرف ${id} غير موجودة`);
+      return;
+    }
+    
+    const updated = updateGroupInHierarchy(groups, id, updatedData);
+    setGroups(updated);
+    saveData('bero_groups', updated);
+    
+    logActivity('group_edit', `تعديل مجموعة: ${existingGroup.name}`, { 
+      groupId: id, 
+      groupName: existingGroup.name,
+      changes: updatedData 
+    });
+  };
+
+  // دالة حذف مجموعة من الهيكل الهرمي
+  const deleteGroupFromHierarchy = (groups, targetId) => {
+    return groups.filter(group => {
+      if (group.id === targetId) {
+        // حذف كامل للمجموعة وجميع مجلداتها الفرعية
+        return false;
+      }
+      return true;
+    }).map(group => {
+      if (group.children && group.children.length > 0) {
+        return {
+          ...group,
+          children: deleteGroupFromHierarchy(group.children, targetId)
+        };
+      }
+      return group;
+    });
+  };
+
+  const deleteGroup = (id) => {
+    const group = findGroupInHierarchy(groups, id);
+    
+    if (!group) {
+      console.warn(`المجموعة بالمعرف ${id} غير موجودة`);
+      return;
+    }
+    
+    // حفظ المجموعة في سلة المهملات
+    const deletedItem = {
+      id: Date.now(),
+      type: 'group',
+      data: { ...group },
+      deletedAt: new Date().toISOString(),
+      deletedBy: 'system'
+    };
+    const updatedDeleted = [...deletedItems, deletedItem];
+    setDeletedItems(updatedDeleted);
+    saveData('bero_deleted_items', updatedDeleted);
+    
+    const updated = deleteGroupFromHierarchy(groups, id);
+    setGroups(updated);
+    saveData('bero_groups', updated);
+    
+    logActivity('group_delete', `حذف مجموعة: ${group.name}`, { 
+      groupId: id, 
+      groupName: group.name,
+      deletedWithChildren: group.children && group.children.length > 0 
+    });
   };
 
   // ==================== دوال المنتجات ====================
@@ -2730,6 +2849,7 @@ export const DataProvider = ({ children }) => {
     warehouses,
     products,
     categories,
+    groups,
     purchases,
     purchaseInvoices,
     purchaseReturns,
@@ -2748,6 +2868,9 @@ export const DataProvider = ({ children }) => {
     addCategory,
     updateCategory,
     deleteCategory,
+    addGroup,
+    updateGroup,
+    deleteGroup,
     addProduct,
     updateProduct,
     deleteProduct,

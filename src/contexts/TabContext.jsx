@@ -1,5 +1,5 @@
 // ======================================
-// TabContext - نظام تبويبات حقيقي ومنطقي
+// TabContext - نظام تبويبات 
 // ======================================
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
@@ -59,7 +59,7 @@ export const TabProvider = ({ children }) => {
       '/warehouses/add-product': 'إضافة بضاعة',
       '/warehouses/manage-products': 'إدارة البضائع',
       '/warehouses/add-warehouse': 'إضافة مخزن',
-      '/warehouses/manage-categories': 'إدارة الفئات',
+      '/warehouses/manage-categories': 'المجموعات',
       '/warehouses/transfer': 'تحويل بضاعة',
       '/warehouses/inventory': 'الجرد',
       '/warehouses/manage': 'إدارة المخازن',
