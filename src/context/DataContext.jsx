@@ -47,6 +47,9 @@ export const DataProvider = ({ children }) => {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   
+  // بيانات الوحدات
+  const [units, setUnits] = useState([]);
+  
   // بيانات المشتريات
   const [purchases, setPurchases] = useState([]);
   const [purchaseInvoices, setPurchaseInvoices] = useState([]);
@@ -134,6 +137,46 @@ export const DataProvider = ({ children }) => {
     loadAllData();
   }, []);
 
+  // إضافة الوحدات الافتراضية إذا لم تكن موجودة
+  useEffect(() => {
+    if (units.length === 0) {
+      const defaultUnits = [
+        {
+          id: 'default-main-1',
+          name: 'كرتونة',
+          type: 'main',
+          description: 'الوحدة الأساسية للتغليف',
+          createdAt: new Date().toISOString()
+        },
+        {
+          id: 'default-main-2',
+          name: 'بلتة',
+          type: 'main',
+          description: 'الوحدة الأساسية للصناديق الكبيرة',
+          createdAt: new Date().toISOString()
+        },
+        {
+          id: 'default-sub-1',
+          name: 'قطعة',
+          type: 'sub',
+          description: 'الوحدة الفرعية للمنتجات الفردية',
+          createdAt: new Date().toISOString()
+        },
+        {
+          id: 'default-sub-2',
+          name: 'عبوة',
+          type: 'sub',
+          description: 'الوحدة الفرعية للمنتجات المعبأة',
+          createdAt: new Date().toISOString()
+        }
+      ];
+      
+      const updated = [...units, ...defaultUnits];
+      setUnits(updated);
+      saveData('bero_units', updated);
+    }
+  }, [units.length]);
+
   // دالة أرشفة الأنشطة السابقة (عند بداية يوم جديد)
   const archivePreviousActivities = () => {
     const storedActivities = localStorage.getItem('bero_daily_activities');
@@ -181,6 +224,7 @@ export const DataProvider = ({ children }) => {
     loadData('bero_warehouses', setWarehouses);
     loadData('bero_products', setProducts);
     loadData('bero_categories', setCategories);
+    loadData('bero_units', setUnits);
     loadData('bero_purchases', setPurchases);
     loadData('bero_purchase_invoices', setPurchaseInvoices);
     loadData('bero_purchase_returns', setPurchaseReturns);
@@ -477,11 +521,20 @@ export const DataProvider = ({ children }) => {
   // ==================== دوال الفئات ====================
   
   const addCategory = (category) => {
-    const newCategory = { id: Date.now(), createdAt: new Date().toISOString(), ...category };
+    const newCategory = { 
+      id: Date.now(), 
+      createdAt: new Date().toISOString(),
+      parentId: category.parentId || null, // دعم الفئات المتداخلة
+      ...category 
+    };
     const updated = [...categories, newCategory];
     setCategories(updated);
     saveData('bero_categories', updated);
-    logActivity('category_add', `إضافة فئة جديدة: ${newCategory.name}`, { categoryId: newCategory.id, categoryName: newCategory.name });
+    logActivity('category_add', `إضافة فئة جديدة: ${newCategory.name}`, { 
+      categoryId: newCategory.id, 
+      categoryName: newCategory.name,
+      parentId: newCategory.parentId 
+    });
     return newCategory;
   };
 
@@ -491,12 +544,22 @@ export const DataProvider = ({ children }) => {
     setCategories(updated);
     saveData('bero_categories', updated);
     if (category) {
-      logActivity('category_edit', `تعديل فئة: ${category.name}`, { categoryId: id, categoryName: category.name });
+      logActivity('category_edit', `تعديل فئة: ${category.name}`, { 
+        categoryId: id, 
+        categoryName: category.name,
+        parentId: updatedData.parentId 
+      });
     }
   };
 
   const deleteCategory = (id) => {
     const category = categories.find(c => c.id === id);
+    
+    // التحقق من وجود مجموعات فرعية
+    const hasSubcategories = categories.some(c => c.parentId === id);
+    if (hasSubcategories) {
+      throw new Error('لا يمكن حذف فئة تحتوي على مجموعات فرعية. يرجى حذف المجموعات الفرعية أولاً.');
+    }
     
     // حفظ الفئة في سلة المهملات
     if (category) {
@@ -519,13 +582,138 @@ export const DataProvider = ({ children }) => {
     saveData('bero_categories', updated);
   };
 
+  // ==================== دوال إدارة المجموعات الفرعية ====================
+  
+  // الحصول على الفئات الرئيسية (بدون فئة أب)
+  const getMainCategories = () => {
+    return categories.filter(cat => !cat.parentId);
+  };
+
+  // الحصول على المجموعات الفرعية لفئة معينة
+  const getSubcategories = (parentId) => {
+    return categories.filter(cat => cat.parentId === parentId);
+  };
+
+  // الحصول على هيكل شجري كامل للفئات
+  const getCategoryTree = () => {
+    const mainCategories = getMainCategories();
+    return mainCategories.map(mainCat => ({
+      ...mainCat,
+      subcategories: getSubcategories(mainCat.id)
+    }));
+  };
+
+  // إضافة مجموعة فرعية جديدة
+  const addSubcategory = (parentId, subcategoryData) => {
+    const parentCategory = categories.find(c => c.id === parentId);
+    if (!parentCategory) {
+      throw new Error('الفئة الأب غير موجودة');
+    }
+
+    const newSubcategory = {
+      ...subcategoryData,
+      parentId: parentId,
+      id: Date.now(),
+      createdAt: new Date().toISOString()
+    };
+
+    const updated = [...categories, newSubcategory];
+    setCategories(updated);
+    saveData('bero_categories', updated);
+    
+    logActivity('subcategory_add', `إضافة مجموعة فرعية جديدة: ${newSubcategory.name}`, { 
+      parentId: parentId,
+      subcategoryId: newSubcategory.id, 
+      subcategoryName: newSubcategory.name 
+    });
+    
+    return newSubcategory;
+  };
+
+  // نقل فئة من مجموعة لأخرى
+  const moveCategory = (categoryId, newParentId = null) => {
+    const category = categories.find(c => c.id === categoryId);
+    if (!category) {
+      throw new Error('الفئة غير موجودة');
+    }
+
+    // التحقق من عدم نقل الفئة لنفسها
+    if (newParentId === categoryId) {
+      throw new Error('لا يمكن نقل الفئة لنفسها');
+    }
+
+    const updated = categories.map(c => 
+      c.id === categoryId ? { ...c, parentId: newParentId } : c
+    );
+    setCategories(updated);
+    saveData('bero_categories', updated);
+
+    logActivity('category_move', `نقل فئة: ${category.name}`, { 
+      categoryId: categoryId, 
+      newParentId: newParentId 
+    });
+  };
+
+  // إضافة فئة رئيسية مع مجموعاتها الفرعية
+  const addCategoryWithSubcategories = (mainCategoryData, subcategoriesData = []) => {
+    // إنشاء الـ IDs بشكل مطلق لضمان عدم التضارب
+    const timestamp = Date.now();
+    
+    // إنشاء الفئة الرئيسية
+    const mainCategory = {
+      ...mainCategoryData,
+      id: timestamp,
+      parentId: null, // فئة رئيسية
+      createdAt: new Date().toISOString()
+    };
+
+    // إنشاء المجموعات الفرعية مع IDs مضمونة التفرد
+    const subcategories = subcategoriesData.map((subData, index) => ({
+      ...subData,
+      id: timestamp + 1000000 + index + 1, // IDs فريدة في نطاق بعيد عن timestamp
+      parentId: mainCategory.id,
+      createdAt: new Date().toISOString()
+    }));
+
+    // دمج الفئة الرئيسية والمجموعات الفرعية
+    const allNewCategories = [mainCategory, ...subcategories];
+    const updated = [...categories, ...allNewCategories];
+    
+    setCategories(updated);
+    saveData('bero_categories', updated);
+
+    // تسجيل النشاط
+    const subcategoriesNames = subcategories.map(s => s.name).join('، ');
+    logActivity('category_with_subcategories_add', 
+      `إضافة فئة رئيسية "${mainCategory.name}" مع ${subcategories.length} مجموعات فرعية: ${subcategoriesNames}`, 
+      { 
+        mainCategoryId: mainCategory.id,
+        mainCategoryName: mainCategory.name,
+        subcategoriesCount: subcategories.length,
+        subcategoriesIds: subcategories.map(s => s.id)
+      }
+    );
+
+    return {
+      mainCategory,
+      subcategories
+    };
+  };
+
   // ==================== دوال المنتجات ====================
   
   const addProduct = (product) => {
-    const newProduct = { id: Date.now(), ...product };
-    const updated = [...products, newProduct];
-    setProducts(updated);
-    saveData('bero_products', updated);
+    // استخدام معرف فريد مضمون حتى مع الحفظ المتعدد السريع
+    const uniqueId = Date.now() + Math.random().toString(36).substr(2, 9);
+    const newProduct = { id: uniqueId, ...product };
+    
+    // إضافة المنتج إلى القائمة الموجودة بدلاً من استبدالها
+    setProducts(prevProducts => {
+      const updated = [...prevProducts, newProduct];
+      saveData('bero_products', updated);
+      console.log(`تم حفظ المنتج: ${newProduct.name} (ID: ${newProduct.id}) - إجمالي المنتجات: ${updated.length}`);
+      return updated;
+    });
     
     // تسجيل النشاط
     logActivity('product_add', `إضافة منتج جديد: ${newProduct.name}`, { productId: newProduct.id, productName: newProduct.name });
@@ -572,6 +760,51 @@ export const DataProvider = ({ children }) => {
     const updated = products.filter(p => p.id !== id);
     setProducts(updated);
     saveData('bero_products', updated);
+  };
+
+  // ==================== دوال إدارة الوحدات ====================
+  const addUnit = (unit) => {
+    const newUnit = { id: Date.now() + Math.random().toString(36).substr(2, 9), ...unit };
+    const updated = [...units, newUnit];
+    setUnits(updated);
+    saveData('bero_units', updated);
+    
+    // تسجيل النشاط
+    logActivity('unit_add', `إضافة وحدة جديدة: ${newUnit.name}`, { unitId: newUnit.id, unitName: newUnit.name });
+    
+    return newUnit;
+  };
+
+  const updateUnit = (id, updatedData) => {
+    const unit = units.find(u => u.id === id);
+    const updated = units.map(u => u.id === id ? { ...u, ...updatedData } : u);
+    setUnits(updated);
+    saveData('bero_units', updated);
+    
+    // تسجيل النشاط
+    if (unit) {
+      logActivity('unit_edit', `تعديل وحدة: ${unit.name}`, { unitId: id, unitName: unit.name });
+    }
+  };
+
+  const deleteUnit = (id) => {
+    const unit = units.find(u => u.id === id);
+    const updated = units.filter(u => u.id !== id);
+    setUnits(updated);
+    saveData('bero_units', updated);
+    
+    // تسجيل النشاط
+    if (unit) {
+      logActivity('unit_delete', `حذف وحدة: ${unit.name}`, { unitId: id, unitName: unit.name });
+    }
+  };
+
+  const getMainUnits = () => {
+    return units.filter(unit => unit.type === 'main');
+  };
+
+  const getSubUnits = () => {
+    return units.filter(unit => unit.type === 'sub');
   };
 
   // ==================== دوال الموردين ====================
@@ -2746,11 +2979,23 @@ export const DataProvider = ({ children }) => {
     updateWarehouse,
     deleteWarehouse,
     addCategory,
+    addCategoryWithSubcategories,
     updateCategory,
     deleteCategory,
+    getMainCategories,
+    getSubcategories,
+    getCategoryTree,
+    addSubcategory,
+    moveCategory,
     addProduct,
     updateProduct,
     deleteProduct,
+    units,
+    addUnit,
+    updateUnit,
+    deleteUnit,
+    getMainUnits,
+    getSubUnits,
     addSupplier,
     updateSupplier,
     deleteSupplier,

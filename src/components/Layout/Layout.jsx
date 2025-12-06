@@ -20,17 +20,17 @@ const Layout = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-orange-50/30 to-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-orange-50/30 to-gray-50 flex flex-col">
       <Header toggleSidebar={toggleSidebar} />
       <Sidebar isOpen={sidebarOpen} closeSidebar={closeSidebar} />
       
       {/* Main Content - محتوى التبويبات */}
-      <main className="pt-[84px] pr-14 lg:pr-14 transition-all duration-300">
-        <div className="container mx-auto px-3 py-4">
+      <main className="flex-1 pt-[40px] pr-14 lg:pr-14 transition-all duration-300">
+        <div className="w-full px-3 pb-2">
           <TabContent />
         </div>
-        <Footer />
       </main>
+      <Footer />
     </div>
   );
 };

@@ -8,13 +8,13 @@ const Footer = () => {
   const currentYear = new Date().getFullYear();
 
   return (
-    <footer className="bg-white border-t border-gray-200 py-4 mt-8">
-      <div className="container mx-auto px-4">
-        <div className="text-center text-gray-600 text-sm">
-          <p>
+    <footer className="bg-white border-t border-gray-200 py-1">
+      <div className="w-full px-4">
+        <div className="text-center text-gray-600 text-xs">
+          <p className="inline">
             تم التطوير بواسطة <span className="font-semibold text-blue-600">Biruni Soft</span>
           </p>
-          <p className="mt-1">
+          <p className="inline ml-2">
             &copy; {currentYear} Biruni Soft. جميع الحقوق محفوظة.
           </p>
         </div>

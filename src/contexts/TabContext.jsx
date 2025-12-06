@@ -56,12 +56,12 @@ export const TabProvider = ({ children }) => {
   const getPageTitle = (path) => {
     const titles = {
       '/dashboard': 'لوحة التحكم',
-      '/warehouses/add-product': 'إضافة بضاعة',
-      '/warehouses/manage-products': 'إدارة البضائع',
+      '/warehouses/add-product': 'توصيف منتجات ',
+      '/warehouses/manage-products': 'إدارة المنتجات',
       '/warehouses/add-warehouse': 'إضافة مخزن',
       '/warehouses/manage-categories': 'إدارة الفئات',
-      '/warehouses/transfer': 'تحويل بضاعة',
-      '/warehouses/inventory': 'الجرد',
+      '/warehouses/transfer': 'تحويل بين المخازن',
+      '/warehouses/inventory': 'جرد المخازن',
       '/warehouses/manage': 'إدارة المخازن',
       '/warehouses/shipping': 'إدارة الشحن',
       '/purchases/new-invoice': 'فاتورة مشتريات جديدة',
