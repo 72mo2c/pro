@@ -22,7 +22,9 @@ import {
   FaWarehouse,
   FaBarcode,
   FaExclamationTriangle,
-  FaDollarSign
+  FaDollarSign,
+  FaTags,
+  FaInfoCircle
 } from 'react-icons/fa';
 
 const ManageProducts = () => {
@@ -52,6 +54,74 @@ const ManageProducts = () => {
   const [categorySelectionStep, setCategorySelectionStep] = useState('main');
   const [selectedMainCategory, setSelectedMainCategory] = useState(null);
   const [categorySearchTerm, setCategorySearchTerm] = useState('');
+  const [categoryPath, setCategoryPath] = useState([]); // مسار الفئة الحالي
+  const [currentRowId, setCurrentRowId] = useState(null); // معرف الصف الحالي
+
+  // جلب جميع الفئات
+  const mainCategories = getMainCategories?.() || [];
+  const allCategories = [...mainCategories, 
+    ...mainCategories.flatMap(mainCat => 
+      (getSubcategories?.(mainCat.id) || []).map(sub => ({ ...sub, parentId: mainCat.id }))
+    )
+  ];
+
+  // دالة الحصول على الفئات الفرعية للمستوى الحالي
+  const getCurrentSubcategories = () => {
+    if (categorySelectionStep === 'main') {
+      return mainCategories;
+    }
+    
+    const currentParentId = categoryPath.length > 0 
+      ? categoryPath[categoryPath.length - 1].id 
+      : selectedMainCategory;
+      
+    return getSubcategories?.(currentParentId) || [];
+  };
+
+  // دالة للتحقق من وجود فئات فرعية
+  const hasSubcategories = (categoryId) => {
+    return (getSubcategories?.(categoryId) || []).length > 0;
+  };
+
+  // دالة الحصول على مسار الفئة الكامل
+  const getCategoryFullPath = (categoryId) => {
+    // البحث في الفئات الرئيسية
+    const mainCategory = mainCategories.find(c => c.id === categoryId);
+    if (mainCategory) {
+      return [mainCategory];
+    }
+    
+    // البحث في الفئات الفرعية
+    const findInSubcategories = (parentId, targetId, currentPath = []) => {
+      const subcategories = getSubcategories?.(parentId) || [];
+      
+      for (const subcategory of subcategories) {
+        const newPath = [...currentPath, subcategory];
+        
+        if (subcategory.id === targetId) {
+          return newPath;
+        }
+        
+        // البحث في المستويات الأعمق
+        const deeperPath = findInSubcategories(subcategory.id, targetId, newPath);
+        if (deeperPath) {
+          return deeperPath;
+        }
+      }
+      
+      return null;
+    };
+    
+    // البحث في جميع الفئات الرئيسية
+    for (const mainCategory of mainCategories) {
+      const path = findInSubcategories(mainCategory.id, categoryId, [mainCategory]);
+      if (path) {
+        return path;
+      }
+    }
+    
+    return [];
+  };
 
   // دالة تنسيق العملة باستخدام إعدادات النظام
   const formatCurrency = (amount) => {
@@ -80,42 +150,79 @@ const ManageProducts = () => {
   const canEdit = hasPermission('edit_product');
   const canDelete = hasPermission('delete_product');
 
-  // دالة للحصول على اسم الفئة (رئيسية أو فرعية)
+  // دالة للحصول على اسم الفئة (رئيسية أو فرعية) - محدثة لدعم المستويات العميقة
   const getCategoryDisplayName = (product) => {
-    const mainCategories = getMainCategories();
-    const allSubcategories = mainCategories.flatMap(mainCat => 
-      getSubcategories(mainCat.id).map(sub => ({ ...sub, parentId: mainCat.id }))
-    );
-    
-    // إذا كان المنتج يستخدم النظام الجديد
-    if (product.mainCategoryId) {
-      const mainCategory = mainCategories.find(c => c.id === product.mainCategoryId);
-      if (product.subcategoryId) {
-        const subcategory = allSubcategories.find(c => c.id === product.subcategoryId);
-        return subcategory ? `${mainCategory.name} → ${subcategory.name}` : mainCategory.name;
+    try {
+      // استخدام الفئات المعرفة مسبقاً
+      const allSubcategories = mainCategories.flatMap(mainCat => 
+        (getSubcategories?.(mainCat.id) || []).map(sub => ({ ...sub, parentId: mainCat.id }))
+      );
+      
+      // دعم الفئات العميقة - البحث أولاً عن الفئة العميقة
+      const categoryId = product.selectedCategory || product.categoryId;
+      if (categoryId) {
+        const categoryPath = getCategoryFullPath(parseInt(categoryId));
+        if (categoryPath.length > 0) {
+          // عرض المسار الكامل للفئة العميقة
+          return categoryPath.map(pathItem => pathItem.name).join(' → ');
+        }
       }
-      return mainCategory ? mainCategory.name : 'غير محدد';
+      
+      // إذا كان المنتج يستخدم النظام الجديد (مستوى واحد أو مستويين)
+      if (product.mainCategoryId) {
+        const mainCategory = mainCategories.find(c => c.id === product.mainCategoryId);
+        if (product.subcategoryId) {
+          const subcategory = allSubcategories.find(c => c.id === product.subcategoryId);
+          return subcategory && mainCategory 
+            ? `${mainCategory.name} → ${subcategory.name}` 
+            : mainCategory?.name || 'غير محدد';
+        }
+        return mainCategory?.name || 'غير محدد';
+      }
+      
+      // النظام القديم (التوافق)
+      if (product.category) {
+        return product.category;
+      }
+      
+      // إذا لم توجد بيانات فئة
+      return 'غير محدد';
+    } catch (error) {
+      console.error('خطأ في getCategoryDisplayName:', error);
+      return 'خطأ في عرض الفئة';
     }
-    
-    // النظام القديم (التوافق)
-    return product.category || 'غير محدد';
   };
 
-  // دالة للحصول على لون الفئة
+  // دالة للحصول على لون الفئة (محدثة لدعم المستويات العميقة)
   const getCategoryColor = (product) => {
-    const mainCategories = getMainCategories();
-    const allSubcategories = mainCategories.flatMap(mainCat => 
-      getSubcategories(mainCat.id).map(sub => ({ ...sub, parentId: mainCat.id }))
-    );
-    
-    if (product.subcategoryId) {
-      const subcategory = allSubcategories.find(c => c.id === product.subcategoryId);
-      return subcategory?.color || '#fb923c';
-    } else if (product.mainCategoryId) {
-      const mainCategory = mainCategories.find(c => c.id === product.mainCategoryId);
-      return mainCategory?.color || '#fb923c';
+    try {
+      // استخدام الفئات المعرفة مسبقاً
+      const allSubcategories = mainCategories.flatMap(mainCat => 
+        (getSubcategories?.(mainCat.id) || []).map(sub => ({ ...sub, parentId: mainCat.id }))
+      );
+      
+      // البحث في المستويات العميقة
+      const categoryId = product.selectedCategory || product.categoryId;
+      if (categoryId) {
+        const categoryPath = getCategoryFullPath(categoryId);
+        if (categoryPath.length > 0) {
+          // استخدام لون الفئة الأخيرة في المسار
+          return categoryPath[categoryPath.length - 1].color || '#fb923c';
+        }
+      }
+      
+      if (product.subcategoryId) {
+        const subcategory = allSubcategories.find(c => c.id === product.subcategoryId);
+        return subcategory?.color || '#fb923c';
+      } else if (product.mainCategoryId) {
+        const mainCategory = mainCategories.find(c => c.id === product.mainCategoryId);
+        return mainCategory?.color || '#fb923c';
+      }
+      return '#fb923c';
+    } catch (error) {
+      console.error('خطأ في getCategoryColor:', error);
+      return '#fb923c'; // لون افتراضي
     }
-    return '#fb923c';
   };
 
   // فلترة المنتجات
@@ -130,6 +237,8 @@ const ManageProducts = () => {
       const matchCategory = !filterCategory || 
         (product.mainCategoryId === parseInt(filterCategory)) ||
         (product.subcategoryId === parseInt(filterCategory)) ||
+        (product.selectedCategory === filterCategory) ||
+        (product.categoryId === filterCategory) ||
         (product.category === filterCategory); // للتوافق مع النظام القديم
       
       const matchWarehouse = !filterWarehouse || product.warehouseId === parseInt(filterWarehouse);
@@ -229,20 +338,42 @@ const ManageProducts = () => {
         });
       }
 
-      // معالجة الفئة المختارة
+      // معالجة الفئة المختارة (محدثة لدعم المستويات العميقة)
       let categoryData = {};
       if (editFormData.selectedCategory) {
-        const allSubcategories = mainCategories.flatMap(mainCat => 
-          getSubcategories(mainCat.id).map(sub => ({ ...sub, parentId: mainCat.id }))
-        );
-        const isSubcategory = allSubcategories.some(sub => sub.id === parseInt(editFormData.selectedCategory));
-        
-        categoryData = {
-          mainCategoryId: isSubcategory 
-            ? allSubcategories.find(sub => sub.id === parseInt(editFormData.selectedCategory)).parentId
-            : parseInt(editFormData.selectedCategory),
-          subcategoryId: isSubcategory ? parseInt(editFormData.selectedCategory) : null,
-        };
+        try {
+          // استخدام دالة المسار الكامل لفهم هيكل الفئة
+          const categoryPath = getCategoryFullPath(editFormData.selectedCategory);
+          
+          if (categoryPath.length > 0) {
+            // النظام الجديد - حفظ الفئة الأخيرة في المسار
+            categoryData = {
+              mainCategoryId: categoryPath[0].id, // الفئة الرئيسية
+              subcategoryId: categoryPath.length > 1 ? categoryPath[1].id : null, // الفئة الفرعية (إن وجدت)
+              selectedCategory: editFormData.selectedCategory, // الفئة النهائية (يمكن أن تكون عميقة)
+            };
+          } else {
+            // في حالة عدم العثور على المسار، استخدام الطريقة القديمة للتوافق
+            const mainCats = getMainCategories?.() || [];
+            const allSubcategories = mainCats.flatMap(mainCat => 
+              (getSubcategories?.(mainCat.id) || []).map(sub => ({ ...sub, parentId: mainCat.id }))
+            );
+            const isSubcategory = allSubcategories.some(sub => sub.id === parseInt(editFormData.selectedCategory));
+            
+            categoryData = {
+              mainCategoryId: isSubcategory 
+                ? allSubcategories.find(sub => sub.id === parseInt(editFormData.selectedCategory)).parentId
+                : parseInt(editFormData.selectedCategory),
+              subcategoryId: isSubcategory ? parseInt(editFormData.selectedCategory) : null,
+              selectedCategory: editFormData.selectedCategory,
+            };
+          }
+        } catch (error) {
+          console.error('خطأ في معالجة الفئة:', error);
+          categoryData = {
+            selectedCategory: editFormData.selectedCategory,
+          };
+        }
       }
       
       const updatedData = {
@@ -310,9 +441,9 @@ const ManageProducts = () => {
   };
 
   // خيارات الفلترة
-  const mainCategories = getMainCategories();
+  // استخدام الفئات المعرفة مسبقاً في السطر 61
   const allSubcategories = mainCategories.flatMap(mainCat => 
-    getSubcategories(mainCat.id).map(sub => ({ ...sub, parentId: mainCat.id }))
+    (getSubcategories?.(mainCat.id) || []).map(sub => ({ ...sub, parentId: mainCat.id }))
   );
 
   const categoryOptions = [
@@ -348,21 +479,39 @@ const ManageProducts = () => {
     ...warehouses.map(w => ({ value: w.id.toString(), label: w.name }))
   ];
 
-  // دوال اختيار الفئة في نافذة التعديل
+  // دوال اختيار الفئة المحدثة (مطابقة لواجهة إضافة المنتج)
   const openCategoryModal = () => {
     setShowCategoryModal(true);
     setCategorySelectionStep('main');
     setSelectedMainCategory(null);
+    setCategoryPath([]); // إعادة تعيين مسار الفئة
     setCategorySearchTerm('');
   };
 
+  // اختيار فئة رئيسية
   const selectMainCategory = (categoryId) => {
-    setSelectedMainCategory(parseInt(categoryId));
-    const subcategories = getSubcategories(categoryId);
+    const categoryIdNum = parseInt(categoryId);
+    setSelectedMainCategory(categoryIdNum);
+    
+    // تحديث مسار الفئة
+    const newPath = [...categoryPath];
+    const selectedCategory = allCategories.find(c => c.id === categoryIdNum);
+    if (selectedCategory) {
+      newPath.push({
+        id: selectedCategory.id,
+        name: selectedCategory.name,
+        color: selectedCategory.color
+      });
+      setCategoryPath(newPath);
+    }
+    
+    const subcategories = getSubcategories?.(categoryIdNum) || [];
     
     if (subcategories.length > 0) {
+      // الانتقال إلى اختيار الفئة الفرعية
       setCategorySelectionStep('sub');
     } else {
+      // لا توجد فئات فرعية، اختيار الفئة الرئيسية مباشرة
       setEditFormData({
         ...editFormData,
         selectedCategory: categoryId.toString()
@@ -371,24 +520,98 @@ const ManageProducts = () => {
     }
   };
 
+  // اختيار فئة فرعية
   const selectSubcategory = (subcategoryId) => {
+    const subcategoryIdNum = parseInt(subcategoryId);
+    
+    // تحديث مسار الفئة
+    const newPath = [...categoryPath];
+    const selectedSubcategory = allCategories.find(c => c.id === subcategoryIdNum);
+    if (selectedSubcategory) {
+      newPath.push({
+        id: selectedSubcategory.id,
+        name: selectedSubcategory.name,
+        color: selectedSubcategory.color
+      });
+      setCategoryPath(newPath);
+    }
+    
+    // البحث عن فئات فرعية إضافية
+    const deeperSubcategories = getSubcategories?.(subcategoryIdNum) || [];
+    
+    if (deeperSubcategories.length > 0) {
+      // توجد فئات أعمق، الانتقال إليها (البقاء في step الفرعية)
+      setSelectedMainCategory(subcategoryIdNum);
+      // البقاء في المودال لعرض الفئات الفرعية الجديدة
+      return;
+    } else {
+      // لا توجد فئات أعمق، اختيار هذه الفئة
+      setEditFormData({
+        ...editFormData,
+        selectedCategory: subcategoryId.toString()
+      });
+      setShowCategoryModal(false);
+    }
+  };
+
+  // التنقل في الفئات الفرعية (تصفح عميق)
+  const handleCategoryNavigation = (categoryId) => {
+    const categoryIdNum = parseInt(categoryId);
+    
+    // تحديث مسار الفئة
+    const newPath = [...categoryPath];
+    const selectedCategory = allCategories.find(c => c.id === categoryIdNum);
+    if (selectedCategory) {
+      newPath.push({
+        id: selectedCategory.id,
+        name: selectedCategory.name,
+        color: selectedCategory.color
+      });
+      setCategoryPath(newPath);
+    }
+    
+    // البقاء في المودال لعرض الفئات الفرعية (لا اختيار نهائي)
+    return;
+  };
+
+  // اختيار فئة مباشرة باستخدام Radio Button
+  const handleSelectCategory = (categoryId) => {
     setEditFormData({
       ...editFormData,
-      selectedCategory: subcategoryId.toString()
+      selectedCategory: categoryId.toString()
     });
     setShowCategoryModal(false);
+  };
+
+  // النقر على body الفئة
+  const handleCategoryBodyClick = (categoryId, hasSubcategories) => {
+    if (hasSubcategories) {
+      handleCategoryNavigation(categoryId);
+    } else {
+      handleSelectCategory(categoryId);
+    }
   };
 
   const cancelCategorySelection = () => {
     setShowCategoryModal(false);
     setCategorySelectionStep('main');
     setSelectedMainCategory(null);
+    setCategoryPath([]);
     setCategorySearchTerm('');
   };
 
   const backToMainCategories = () => {
-    setCategorySelectionStep('main');
-    setSelectedMainCategory(null);
+    if (categoryPath.length > 1) {
+      // العودة إلى المستوى السابق
+      const newPath = categoryPath.slice(0, -1);
+      setCategoryPath(newPath);
+      setSelectedMainCategory(newPath[newPath.length - 1]?.id);
+    } else {
+      // العودة إلى الفئات الرئيسية
+      setCategorySelectionStep('main');
+      setSelectedMainCategory(null);
+      setCategoryPath([]);
+    }
   };
 
   // البحث في الفئات
@@ -559,34 +782,47 @@ const ManageProducts = () => {
                                     <FaBox className="text-blue-500" />
                                     <span>
                                       {(() => {
-                                        const allCategories = mainCategories.concat(allSubcategories);
-                                        const selectedCat = allCategories.find(c => c.id === parseInt(editFormData.selectedCategory));
-                                        if (selectedCat && selectedCat.parentId) {
-                                          const parentCat = mainCategories.find(c => c.id === selectedCat.parentId);
-                                          return (
+                                        try {
+                                          // استخدام دالة المسار الكامل لعرض الفئات العميقة
+                                          const categoryPath = getCategoryFullPath(editFormData.selectedCategory);
+                                          if (categoryPath.length > 0) {
+                                            return (
+                                              <>
+                                                {categoryPath.map((pathItem, index) => (
+                                                  <span key={pathItem.id} className="inline-flex items-center">
+                                                    {index > 0 && <span className="mx-1 text-gray-400">→</span>}
+                                                    <span 
+                                                      className="inline-block w-3 h-3 rounded-full mr-1" 
+                                                      style={{ backgroundColor: pathItem.color }}
+                                                    ></span>
+                                                    {pathItem.name}
+                                                  </span>
+                                                ))}
+                                              </>
+                                            );
+                                          }
+                                          // في حالة عدم وجود مسار، البحث بطريقة قديمة للتوافق
+                                          const mainCats = getMainCategories?.() || [];
+                                          const allSubs = mainCats.flatMap(mainCat => 
+                                            (getSubcategories?.(mainCat.id) || []).map(sub => ({ ...sub, parentId: mainCat.id }))
+                                          );
+                                          const allCategories = mainCats.concat(allSubs);
+                                          const selectedCat = allCategories.find(c => c.id === parseInt(editFormData.selectedCategory));
+                                          return selectedCat ? (
                                             <>
                                               <span 
                                                 className="inline-block w-3 h-3 rounded-full mr-2" 
-                                                style={{ backgroundColor: parentCat?.color }}
-                                              ></span>
-                                              {parentCat?.name} → 
-                                              <span 
-                                                className="inline-block w-3 h-3 rounded-full mr-2 ml-1" 
                                                 style={{ backgroundColor: selectedCat.color }}
                                               ></span>
                                               {selectedCat.name}
                                             </>
+                                          ) : (
+                                            <span className="text-gray-500">فئة غير معروفة</span>
                                           );
+                                        } catch (error) {
+                                          console.error('خطأ في عرض الفئة:', error);
+                                          return <span className="text-red-500">خطأ في تحميل الفئة</span>;
                                         }
-                                        return (
-                                          <>
-                                            <span 
-                                              className="inline-block w-3 h-3 rounded-full mr-2" 
-                                              style={{ backgroundColor: selectedCat.color }}
-                                            ></span>
-                                            {selectedCat.name}
-                                          </>
-                                        );
                                       })()}
                                     </span>
                                   </div>
@@ -960,7 +1196,7 @@ const ManageProducts = () => {
         )}
       </div>
 
-      {/* Modal اختيار الفئة في نافذة التعديل */}
+      {/* Modal اختيار الفئة المحدث */}
       {showCategoryModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full transform transition-all">
@@ -973,7 +1209,9 @@ const ManageProducts = () => {
                 <FaTimes />
               </button>
               <h3 className="text-lg font-semibold text-center">
-                {categorySelectionStep === 'main' ? 'اختر الفئة الرئيسية' : `فئات فرعية في "${mainCategories.find(c => c.id === selectedMainCategory)?.name}"`}
+                {categorySelectionStep === 'main' ? 'اختر الفئة' : 
+                 categoryPath.length > 0 ? `فئات فرعية في "${categoryPath[categoryPath.length - 1].name}"` :
+                 `فئات فرعية في "${mainCategories.find(c => c.id === selectedMainCategory)?.name}"`}
               </h3>
             </div>
 
@@ -989,7 +1227,7 @@ const ManageProducts = () => {
                     onChange={(e) => setCategorySearchTerm(e.target.value)}
                     className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-right"
                   />
-                  <FaBox className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                  <FaTags className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
                 </div>
               </div>
 
@@ -1011,9 +1249,9 @@ const ManageProducts = () => {
                           <span className="font-medium text-gray-800">{category.name}</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          {getSubcategories(category.id).length > 0 && (
+                          {(getSubcategories?.(category.id) || []).length > 0 && (
                             <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
-                              {getSubcategories(category.id).length} فرعية
+                              {(getSubcategories?.(category.id) || []).length} فرعية
                             </span>
                           )}
                           <FaBox className="text-gray-400 group-hover:text-blue-500" />
@@ -1023,47 +1261,149 @@ const ManageProducts = () => {
                   ))}
                 </div>
               ) : (
-                // عرض الفئات الفرعية
+                // عرض الفئات الفرعية (مع دعم المستويات العميقة)
                 (() => {
-                  const subcategories = selectedMainCategory ? getSubcategories(selectedMainCategory) : [];
+                  const currentSubcategories = getCurrentSubcategories();
+                  const currentParentId = categoryPath.length > 0 ? categoryPath[categoryPath.length - 1].id : selectedMainCategory;
+                  
                   return (
                     <div className="space-y-2 max-h-96 overflow-y-auto">
-                      <button
-                        onClick={() => selectSubcategory(selectedMainCategory)}
-                        className="w-full p-3 text-right border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-blue-300 transition-all group"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <span 
-                              className="w-4 h-4 rounded-full flex-shrink-0" 
-                              style={{ backgroundColor: mainCategories.find(c => c.id === selectedMainCategory)?.color }}
-                            ></span>
-                            <span className="font-medium text-gray-800">
-                              {mainCategories.find(c => c.id === selectedMainCategory)?.name}
-                            </span>
+                      {/* عرض مسار الفئة الحالي */}
+                      {categoryPath.length > 0 && (
+                        <div className="bg-gray-50 p-2 rounded-lg mb-3">
+                          <div className="text-xs text-gray-600 mb-1">المسار:</div>
+                          <div className="flex items-center gap-1 text-xs">
+                            {categoryPath.map((pathItem, index) => (
+                              <React.Fragment key={pathItem.id}>
+                                <span 
+                                  className="w-2 h-2 rounded-full flex-shrink-0" 
+                                  style={{ backgroundColor: pathItem.color }}
+                                ></span>
+                                <span className="font-medium text-gray-800">{pathItem.name}</span>
+                                {index < categoryPath.length - 1 && (
+                                  <span className="text-gray-400 mx-1">→</span>
+                                )}
+                              </React.Fragment>
+                            ))}
                           </div>
-                          <FaBox className="text-gray-400 group-hover:text-blue-500" />
                         </div>
-                      </button>
+                      )}
                       
-                      {searchCategories(subcategories, categorySearchTerm).map(subcategory => (
-                        <button
-                          key={subcategory.id}
-                          onClick={() => selectSubcategory(subcategory.id)}
-                          className="w-full p-3 text-right border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-blue-300 transition-all group"
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <span 
-                                className="w-4 h-4 rounded-full flex-shrink-0" 
-                                style={{ backgroundColor: subcategory.color }}
-                              ></span>
-                              <span className="font-medium text-gray-800">{subcategory.name}</span>
+                      {/* زر اختيار الفئة الحالية (إذا لم تكن فئة رئيسية) */}
+                      {currentParentId && categoryPath.length > 1 && (
+                        <div className="border-2 border-blue-200 rounded-lg p-3 bg-blue-50">
+                          <div className="flex items-center gap-3">
+                            {/* Radio Button للتحديد */}
+                            <input
+                              type="radio"
+                              name="categorySelection"
+                              value={currentParentId}
+                              onChange={() => selectSubcategory(currentParentId)}
+                              className="w-4 h-4 text-blue-600 bg-white border-gray-300 focus:ring-blue-500 focus:ring-2"
+                            />
+                            
+                            {/* معلومات الفئة */}
+                            <div className="flex-1">
+                              <div className="flex items-center gap-3">
+                                <span 
+                                  className="w-4 h-4 rounded-full flex-shrink-0" 
+                                  style={{ backgroundColor: allCategories.find(c => c.id === currentParentId)?.color }}
+                                ></span>
+                                <span className="font-medium text-blue-800">
+                                  {allCategories.find(c => c.id === currentParentId)?.name} (الفئة الحالية)
+                                </span>
+                                <span className="text-xs text-blue-600 bg-blue-200 px-2 py-1 rounded-full">
+                                  اختر هذه الفئة
+                                </span>
+                              </div>
                             </div>
-                            <FaBox className="text-gray-400 group-hover:text-blue-500" />
                           </div>
-                        </button>
-                      ))}
+                        </div>
+                      )}
+                      
+                      {/* عرض الفئات الفرعية */}
+                      {currentSubcategories.length > 0 ? (
+                        searchCategories(currentSubcategories, categorySearchTerm).map(subcategory => {
+                          const subcategoryHasSubcategories = hasSubcategories(subcategory.id);
+                          return (
+                            <div key={subcategory.id} className="border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-all">
+                              <div className="flex items-center gap-3">
+                                {/* Radio Button للتحديد */}
+                                <input
+                                  type="radio"
+                                  name="categorySelection"
+                                  value={subcategory.id}
+                                  onChange={() => handleSelectCategory(subcategory.id)}
+                                  className="w-4 h-4 text-green-600 bg-gray-100 border-gray-300 focus:ring-green-500 focus:ring-2"
+                                />
+                                
+                                {/* معلومات الفئة */}
+                                <div 
+                                  className="flex-1 cursor-pointer"
+                                  onClick={() => handleCategoryBodyClick(subcategory.id, subcategoryHasSubcategories)}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                      <span 
+                                        className="w-4 h-4 rounded-full flex-shrink-0" 
+                                        style={{ backgroundColor: subcategory.color }}
+                                      ></span>
+                                      <span className="font-medium text-gray-800">{subcategory.name}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      {subcategoryHasSubcategories ? (
+                                        <>
+                                          <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
+                                            {(getSubcategories?.(subcategory.id) || []).length} فرعية
+                                          </span>
+                                          <FaBox className="text-gray-400" />
+                                        </>
+                                      ) : (
+                                        <span className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded-full">
+                                          فئة نهائية
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              {/* تلميح للمستخدم */}
+                              <div className="mt-2 text-xs text-gray-500">
+                                {subcategoryHasSubcategories ? (
+                                  <span>انقر على اسم الفئة لعرض الفئات الفرعية • أو استخدم الزر للتحديد المباشر</span>
+                                ) : (
+                                  <span>انقر على اسم الفئة للتحديد المباشر • أو استخدم الزر</span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="text-center text-gray-500 py-8">
+                          <FaBox className="mx-auto mb-2 text-gray-400" size={24} />
+                          <p>لا توجد فئات فرعية في هذا المستوى</p>
+                          {currentParentId && categoryPath.length > 1 && (
+                            <p className="text-sm mt-2">يمكنك اختيار الفئة الحالية أعلاه</p>
+                          )}
+                        </div>
+                      )}
+                      
+                      {/* شرح الاستخدام */}
+                      <div className="mt-4 p-3 bg-green-50 rounded-lg border border-green-200">
+                        <div className="flex items-start gap-2">
+                          <FaInfoCircle className="text-green-500 mt-0.5 flex-shrink-0" />
+                          <div className="text-sm text-green-800">
+                            <p className="font-medium mb-1">طريقة الاستخدام الجديدة:</p>
+                            <ul className="space-y-1 text-xs">
+                              <li>• <strong>Radio Button:</strong> اختر الفئة مباشرة</li>
+                              <li>• <strong>النقر على اسم الفئة:</strong></li>
+                              <li className="mr-4">- إذا كان بها فئات فرعية → عرض الفئات الفرعية</li>
+                              <li className="mr-4">- إذا كانت فئة نهائية → اختيارها مباشرة</li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   );
                 })()
@@ -1077,7 +1417,7 @@ const ManageProducts = () => {
                   onClick={backToMainCategories}
                   className="w-full bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors text-sm font-semibold"
                 >
-                  العودة إلى الفئات الرئيسية
+                  {categoryPath.length > 1 ? 'العودة إلى المستوى السابق' : 'العودة إلى الفئات الرئيسية'}
                 </button>
               </div>
             )}
