@@ -204,7 +204,7 @@ const ManageProducts = () => {
       // البحث في المستويات العميقة
       const categoryId = product.selectedCategory || product.categoryId;
       if (categoryId) {
-        const categoryPath = getCategoryFullPath(categoryId);
+        const categoryPath = getCategoryFullPath(parseInt(categoryId));
         if (categoryPath.length > 0) {
           // استخدام لون الفئة الأخيرة في المسار
           return categoryPath[categoryPath.length - 1].color || '#fb923c';
@@ -343,7 +343,7 @@ const ManageProducts = () => {
       if (editFormData.selectedCategory) {
         try {
           // استخدام دالة المسار الكامل لفهم هيكل الفئة
-          const categoryPath = getCategoryFullPath(editFormData.selectedCategory);
+          const categoryPath = getCategoryFullPath(parseInt(editFormData.selectedCategory));
           
           if (categoryPath.length > 0) {
             // النظام الجديد - حفظ الفئة الأخيرة في المسار
@@ -784,7 +784,7 @@ const ManageProducts = () => {
                                       {(() => {
                                         try {
                                           // استخدام دالة المسار الكامل لعرض الفئات العميقة
-                                          const categoryPath = getCategoryFullPath(editFormData.selectedCategory);
+                                          const categoryPath = getCategoryFullPath(parseInt(editFormData.selectedCategory));
                                           if (categoryPath.length > 0) {
                                             return (
                                               <>
