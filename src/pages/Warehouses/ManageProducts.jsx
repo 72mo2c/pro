@@ -57,6 +57,18 @@ const ManageProducts = () => {
   const [categoryPath, setCategoryPath] = useState([]); // مسار الفئة الحالي
   const [currentRowId, setCurrentRowId] = useState(null); // معرف الصف الحالي
 
+  // مراقبة تغييرات المنتجات للتشخيص
+  React.useEffect(() => {
+    console.log('🔍 [DEBUG] إدارة المنتجات - المنتجات تغيرت');
+    console.log('📊 عدد المنتجات:', products.length);
+    if (products.length > 0) {
+      console.log('📋 أول 3 منتجات في إدارة المنتجات:');
+      products.slice(0, 3).forEach((p, index) => {
+        console.log(`  ${index + 1}. ${p.name} (ID: ${p.id}): أساسي ${p.mainQuantity}, فرعي ${p.subQuantity}`);
+      });
+    }
+  }, [products]);
+
   // جلب جميع الفئات
   const mainCategories = getMainCategories?.() || [];
   const allCategories = [...mainCategories, 

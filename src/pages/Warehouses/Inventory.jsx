@@ -642,11 +642,6 @@ const Inventory = () => {
                           <div>
                             <div className="flex items-center gap-2">
                               <p className="font-semibold text-gray-900 text-sm">{product.name}</p>
-                              {product.tierPrices && (
-                                <span className="px-2 py-0.5 bg-blue-100 text-blue-600 rounded text-xs font-medium">
-                                  نظام متقدم
-                                </span>
-                              )}
                             </div>
                           </div>
                         </div>

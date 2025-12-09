@@ -12,6 +12,18 @@ import { printInvoiceDirectly } from '../../utils/printUtils';
 
 const NewPurchaseInvoice = () => {
   const { suppliers, products, warehouses, addPurchaseInvoice, getSupplierBalance, updateProduct, addSupplier } = useData();
+  
+  // مراقبة تغييرات المنتجات للتشخيص
+  useEffect(() => {
+    console.log('🔍 [DEBUG] المنتجات تغيرت في واجهة المشتريات');
+    console.log('📊 عدد المنتجات:', products.length);
+    if (products.length > 0) {
+      console.log('📋 أول 3 منتجات:');
+      products.slice(0, 3).forEach((p, index) => {
+        console.log(`  ${index + 1}. ${p.name} (ID: ${p.id}): أساسي ${p.mainQuantity}, فرعي ${p.subQuantity}`);
+      });
+    }
+  }, [products]);
   const { showSuccess, showError, showWarning } = useNotification();
   const { openTab } = useTab();
   
@@ -1114,17 +1126,54 @@ const NewPurchaseInvoice = () => {
     try {
       const discountAmount = calculateDiscountAmount();
       
+      console.log('\n🖥️ واجهة المشتريات - بدء حفظ الفاتورة');
+      console.log('📋 البيانات الأساسية:', formData);
+      console.log('🛒 عدد الأصناف في items:', items.length);
+      
+      // عرض تفاصيل كل صنف
+      items.forEach((item, index) => {
+        console.log(`📦 الصنف ${index + 1}:`, {
+          productId: item.productId,
+          productName: item.productName,
+          quantity: item.quantity,
+          subQuantity: item.subQuantity,
+          price: item.price,
+          subPrice: item.subPrice
+        });
+      });
+      
+      console.log('💰 المجموع الفرعي:', calculateSubTotal());
+      console.log('💸 مبلغ الخصم:', discountAmount);
+      console.log('💵 الإجمالي:', calculateTotal());
+      
+      // التحقق من صحة البيانات
+      const validItems = items.filter(item => 
+        item.productId && 
+        (parseInt(item.quantity) > 0 || parseInt(item.subQuantity) > 0)
+      );
+      
+      console.log('✅ عدد الأصناف الصحيحة:', validItems.length);
+      
+      if (validItems.length === 0) {
+        showError('يرجى إضافة أصناف صحيحة للفاتورة');
+        return;
+      }
+      
       const invoiceData = {
         ...formData,
         date: `${formData.date}T${formData.time}:00`,
-        items,
+        items: validItems, // استخدام الأصناف الصحيحة فقط
         subtotal: calculateSubTotal(),
         discountAmount: discountAmount,
         total: calculateTotal(),
         status: 'completed'
       };
 
+      console.log('📤 البيانات المرسلة إلى addPurchaseInvoice:', invoiceData);
+      console.log('🔄 استدعاء addPurchaseInvoice...');
+
       const newInvoice = addPurchaseInvoice(invoiceData);
+      console.log('✅ تم استلام الفاتورة من DataContext:', newInvoice.id);
       showSuccess('تم حفظ فاتورة المشتريات بنجاح');
 
       if (shouldPrint) {

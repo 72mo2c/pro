@@ -1036,6 +1036,33 @@ export const DataProvider = ({ children }) => {
   // ==================== دوال فواتير المشتريات ====================
   
   const addPurchaseInvoice = (invoice) => {
+    console.log('\n🛒 تم استدعاء addPurchaseInvoice');
+    console.log('📋 بيانات الفاتورة:', invoice);
+    console.log('📦 المنتجات الحالية في النظام:', products.length);
+    
+    // عرض عينة من المنتجات للتأكد من البيانات
+    if (products.length > 0) {
+      console.log('📋 عينة من المنتجات في النظام:');
+      products.slice(0, 5).forEach(p => {
+        console.log(`  - ID: ${p.id} (${typeof p.id}), الاسم: ${p.name}, أساسي: ${p.mainQuantity}, فرعي: ${p.subQuantity}`);
+      });
+    } else {
+      console.log('⚠️ تحذير: لا توجد منتجات في النظام!');
+    }
+    
+    // التحقق من items
+    if (!invoice.items) {
+      console.error('❌ خطأ: لا توجد items في الفاتورة!');
+      throw new Error('لا توجد أصناف في الفاتورة');
+    }
+    
+    if (!Array.isArray(invoice.items)) {
+      console.error('❌ خطأ: items ليس array!', typeof invoice.items);
+      throw new Error('بيانات الأصناف غير صحيحة');
+    }
+    
+    console.log('✅ البيانات صحيحة، بدء المعالجة...');
+    
     // إثراء بيانات items بأسماء المنتجات
     const enrichedItems = invoice.items.map(item => {
       const product = products.find(p => p.id === parseInt(item.productId));
@@ -1086,13 +1113,34 @@ export const DataProvider = ({ children }) => {
     saveData('bero_purchase_invoices', updated);
     
     // تحديث كميات المنتجات مع المنطق الذكي للمشتريات
+    console.log('🔍 بدء تحديث المنتجات للمشتريات...');
+    console.log('📦 عدد المنتجات الحالية:', products.length);
+    console.log('🛒 عدد الأصناف في الفاتورة:', invoice.items?.length);
+    
+    // عرض عينة من المنتجات الحالية للتشخيص
+    if (products.length > 0) {
+      console.log('📋 عينة من المنتجات الحالية:');
+      products.slice(0, 3).forEach(p => {
+        console.log(`  - ${p.name} (ID: ${p.id}): أساسي ${p.mainQuantity}, فرعي ${p.subQuantity}`);
+      });
+    }
+    
     if (invoice.items && Array.isArray(invoice.items)) {
       let updatedProducts = [...products];
       
-      invoice.items.forEach(item => {
+      console.log('\n🔄 بدء معالجة كل صنف...');
+      
+      invoice.items.forEach((item, index) => {
+        console.log(`\n📋 معالجة الصنف ${index + 1}:`);
+        console.log('  - معرف المنتج (string):', item.productId);
+        console.log('  - الكمية الأساسية:', item.quantity);
+        console.log('  - الكمية الفرعية:', item.subQuantity);
+        
         // فصل الكميات
         const mainQty = parseInt(item.quantity) || 0;
         const subQty = parseInt(item.subQuantity) || 0;
+        
+        console.log('  - الكميات المحولة إلى رقم:', { mainQty, subQty });
         
         // التحقق من الكميات السالبة
         if (mainQty < 0 || subQty < 0) {
@@ -1100,19 +1148,165 @@ export const DataProvider = ({ children }) => {
           throw new Error(`الكمية لا يمكن أن تكون سالبة للمنتج: ${productName}`);
         }
         
-        // استخدام المنطق الذكي للمشتريات
-        updatedProducts = updateStockWithSmartPurchase(
-          updatedProducts, 
-          parseInt(item.productId), 
-          { 
-            mainPurchase: mainQty, 
-            subPurchase: subQty 
+        // البحث عن المنتج مع تشخيص مفصل
+        const productIdNum = parseInt(item.productId);
+        console.log('  - التحقق من التحويل:');
+        console.log(`    productId الأصلي: "${item.productId}" (${typeof item.productId})`);
+        console.log(`    productId محول: ${productIdNum} (${typeof productIdNum})`);
+        
+        // === البحث المتقدم عن المنتج ===
+        let productBefore = null;
+        let foundByMethod = '';
+        
+        // الطريقة 1: البحث بالرقم المحول
+        productBefore = updatedProducts.find(p => p.id === productIdNum);
+        if (productBefore) {
+          foundByMethod = 'رقم محول';
+        }
+        
+        // الطريقة 2: البحث كـ string
+        if (!productBefore) {
+          productBefore = updatedProducts.find(p => p.id.toString() === item.productId);
+          if (productBefore) {
+            foundByMethod = 'string';
           }
-        );
+        }
+        
+        // الطريقة 3: البحث بـ Number()
+        if (!productBefore) {
+          const productIdAsNumber = Number(item.productId);
+          if (!isNaN(productIdAsNumber)) {
+            productBefore = updatedProducts.find(p => p.id === productIdAsNumber);
+            if (productBefore) {
+              foundByMethod = 'Number()';
+            }
+          }
+        }
+        
+        // الطريقة 4: البحث بـ loose equality (للطوارئ)
+        if (!productBefore) {
+          productBefore = updatedProducts.find(p => p.id == item.productId);
+          if (productBefore) {
+            foundByMethod = 'loose equality';
+          }
+        }
+        
+        // الطريقة 5: فحص جميع المنتجات (للتشخيص)
+        if (!productBefore) {
+          console.log('  - جاري فحص جميع المنتجات...');
+          updatedProducts.forEach((p, idx) => {
+            const matches1 = p.id === productIdNum;
+            const matches2 = p.id.toString() === item.productId;
+            const matches3 = p.id == item.productId;
+            console.log(`    ${idx + 1}. ID: ${p.id} (${typeof p.id}), matches: [exact: ${matches1}, string: ${matches2}, loose: ${matches3}], الاسم: ${p.name}`);
+          });
+        }
+        
+        console.log('  - البحث عن المنتج بمعرف:', productIdNum);
+        console.log('  - النتيجة:', productBefore ? `تم العثور عليه (${foundByMethod}): ${productBefore.name}` : 'لم يتم العثور عليه!');
+        
+        if (!productBefore) {
+          console.error('❌ خطأ: لم يتم العثور على المنتج!');
+          console.log('📋 جميع المنتجات المتاحة:');
+          updatedProducts.forEach(p => console.log(`  - ID: ${p.id} (${typeof p.id}), الاسم: ${p.name}`));
+          return; // تخطي هذا الصنف
+        }
+        
+        console.log('  - المنتج قبل التحديث:', {
+          id: productBefore.id,
+          name: productBefore.name,
+          mainQuantity: productBefore.mainQuantity,
+          subQuantity: productBefore.subQuantity,
+          unitsInMain: productBefore.unitsInMain
+        });
+        
+        // === التحديث مع التحقق ===
+        try {
+          console.log('  - استخدام ID الفعلي للمنتج للتحديث:', productBefore.id);
+          updatedProducts = updateStockWithSmartPurchase(
+            updatedProducts, 
+            productBefore.id, // استخدام ID الفعلي للمنتج
+            { 
+              mainPurchase: mainQty, 
+              subPurchase: subQty 
+            }
+          );
+          
+          // التحقق من نجاح التحديث
+          const productAfter = updatedProducts.find(p => p.id === productBefore.id);
+          if (productAfter) {
+            console.log('  - المنتج بعد التحديث:', {
+              id: productAfter.id,
+              name: productAfter.name,
+              mainQuantity: productAfter.mainQuantity,
+              subQuantity: productAfter.subQuantity,
+              unitsInMain: productAfter.unitsInMain
+            });
+            
+            // التحقق من التغيير
+            const mainChanged = productAfter.mainQuantity !== productBefore.mainQuantity;
+            const subChanged = productAfter.subQuantity !== productBefore.subQuantity;
+            console.log('  - التغيير: ', {
+              mainChanged: mainChanged ? `أساسي ${productBefore.mainQuantity} → ${productAfter.mainQuantity}` : 'لم يتغير',
+              subChanged: subChanged ? `فرعي ${productBefore.subQuantity} → ${productAfter.subQuantity}` : 'لم يتغير'
+            });
+            
+            if (!mainChanged && !subChanged) {
+              console.warn('⚠️ تحذير: لم يتم تحديث الكمية!');
+            }
+          } else {
+            console.error('❌ خطأ: لم يتم العثور على المنتج بعد التحديث!');
+          }
+          
+        } catch (error) {
+          console.error('❌ خطأ في updateStockWithSmartPurchase:', error);
+        }
       });
       
+      console.log('\n💾 حفظ المنتجات المحدثة...');
+      console.log('📊 إجمالي المنتجات بعد التحديث:', updatedProducts.length);
+      
+      // عرض عينة من المنتجات المحدثة
+      if (updatedProducts.length > 0) {
+        console.log('📋 عينة من المنتجات المحدثة:');
+        updatedProducts.slice(0, 3).forEach(p => {
+          console.log(`  - ${p.name} (ID: ${p.id}): أساسي ${p.mainQuantity}, فرعي ${p.subQuantity}`);
+        });
+      }
+      
+      // تحديث State
+      console.log('🔄 تحديث state المنتجات...');
       setProducts(updatedProducts);
+      
+      // حفظ في localStorage
+      console.log('💾 حفظ في localStorage...');
       saveData('bero_products', updatedProducts);
+      
+      // التحقق من الحفظ
+      try {
+        const savedData = localStorage.getItem('bero_products');
+        if (savedData) {
+          const parsedData = JSON.parse(savedData);
+          console.log('✅ تم الحفظ في localStorage بنجاح');
+          console.log('📊 عدد المنتجات المحفوظة:', parsedData.length);
+          
+          // عرض عينة من البيانات المحفوظة
+          if (parsedData.length > 0) {
+            console.log('📋 عينة من البيانات المحفوظة:');
+            parsedData.slice(0, 3).forEach(p => {
+              console.log(`  - ${p.name} (ID: ${p.id}): أساسي ${p.mainQuantity}, فرعي ${p.subQuantity}`);
+            });
+          }
+        } else {
+          console.error('❌ فشل الحفظ في localStorage - البيانات فارغة!');
+        }
+      } catch (error) {
+        console.error('❌ خطأ في التحقق من الحفظ:', error);
+      }
+      
+      console.log('✅ تم إكمال عملية التحديث والحفظ!');
+    } else {
+      console.log('⚠️ لا توجد أصناف في الفاتورة!');
     }
     
     // ✅ تم إزالة التحديث اليدوي للرصيد - سيتم حسابه تلقائياً من getSupplierBalance()
@@ -1124,6 +1318,9 @@ export const DataProvider = ({ children }) => {
       supplierId: invoice.supplierId, 
       total: newInvoice.total 
     });
+    
+    console.log('🎉 تم إكمال إضافة فاتورة المشتريات بنجاح!');
+    console.log('🆔 معرف الفاتورة الجديدة:', newInvoice.id);
     
     return newInvoice;
   };
@@ -1563,8 +1760,59 @@ export const DataProvider = ({ children }) => {
     // التحقق من توفر الكميات قبل البيع (القواعد الذكية)
     if (invoice.items && Array.isArray(invoice.items)) {
       for (const item of invoice.items) {
-        const product = products.find(p => p.id === parseInt(item.productId));
+        // البحث المتقدم عن المنتج مع تشخيص مفصل
+        console.log('🔍 البحث عن المنتج في التحقق من الكميات:');
+        console.log('  - معرف المنتج (string):', item.productId);
+        console.log('  - نوع البيانات:', typeof item.productId);
+        
+        const productIdNum = parseInt(item.productId);
+        console.log('  - معرف المنتج (number):', productIdNum);
+        console.log('  - عدد المنتجات المتاحة:', products.length);
+        
+        // استراتيجيات البحث المتعددة
+        let product = null;
+        let foundByMethod = '';
+        
+        // 1. البحث بالرقم المباشر
+        product = products.find(p => p.id === productIdNum);
+        if (product) {
+          foundByMethod = 'البحث بالرقم المباشر';
+          console.log('  - ✅ تم العثور عليه بالبحث بالرقم المباشر:', product.name);
+        } else {
+          // 2. البحث كـ string
+          product = products.find(p => p.id.toString() === item.productId);
+          if (product) {
+            foundByMethod = 'البحث كـ string';
+            console.log('  - ✅ تم العثور عليه بالبحث كـ string:', product.name);
+          } else {
+            // 3. البحث بالمقارنة loose equality
+            product = products.find(p => p.id == item.productId);
+            if (product) {
+              foundByMethod = 'البحث loose equality';
+              console.log('  - ✅ تم العثور عليه بـ loose equality:', product.name);
+            } else {
+              // 4. البحث باستخدام Number()
+              const numericId = Number(item.productId);
+              if (!isNaN(numericId)) {
+                product = products.find(p => p.id === numericId);
+                if (product) {
+                  foundByMethod = 'البحث بـ Number()';
+                  console.log('  - ✅ تم العثور عليه بـ Number():', product.name);
+                }
+              }
+            }
+          }
+        }
+        
         if (!product) {
+          console.error('❌ خطأ: لم يتم العثور على المنتج!');
+          console.log('📋 جميع المنتجات المتاحة:');
+          products.slice(0, 10).forEach((p, idx) => {
+            const matches1 = p.id === productIdNum;
+            const matches2 = p.id.toString() === item.productId;
+            const matches3 = p.id == item.productId;
+            console.log(`    ${idx + 1}. ID: ${p.id} (${typeof p.id}), matches: [exact: ${matches1}, string: ${matches2}, loose: ${matches3}], الاسم: ${p.name}`);
+          });
           throw new Error(`المنتج غير موجود`);
         }
         
@@ -1608,7 +1856,23 @@ export const DataProvider = ({ children }) => {
     
     // إثراء بيانات items بأسماء المنتجات
     const enrichedItems = invoice.items.map(item => {
-      const product = products.find(p => p.id === parseInt(item.productId));
+      // البحث المتقدم عن المنتج
+      const productIdNum = parseInt(item.productId);
+      let product = products.find(p => p.id === productIdNum);
+      
+      // إذا لم يجد، جرب كـ string
+      if (!product) {
+        product = products.find(p => p.id.toString() === item.productId);
+      }
+      
+      // إذا لم يجد، جرب بـ Number()
+      if (!product) {
+        const numericId = Number(item.productId);
+        if (!isNaN(numericId)) {
+          product = products.find(p => p.id === numericId);
+        }
+      }
+      
       return {
         ...item,
         productName: product?.name || item.productName || 'غير محدد'
@@ -1712,10 +1976,47 @@ export const DataProvider = ({ children }) => {
     if (invoice.items && Array.isArray(invoice.items)) {
       const updatedProducts = [...products];
       
-      invoice.items.forEach(item => {
-        const productIndex = updatedProducts.findIndex(p => p.id === parseInt(item.productId));
+      invoice.items.forEach((item, index) => {
+        console.log(`\n📋 معالجة الصنف ${index + 1} في عملية البيع:`);
+        console.log('  - معرف المنتج (string):', item.productId);
+        
+        // البحث المتقدم عن المنتج
+        const productIdNum = parseInt(item.productId);
+        console.log('  - معرف المنتج (number):', productIdNum);
+        
+        let productIndex = -1;
+        let product = null;
+        let foundByMethod = '';
+        
+        // استراتيجيات البحث المتعددة
+        // 1. البحث بالرقم المباشر
+        productIndex = updatedProducts.findIndex(p => p.id === productIdNum);
         if (productIndex !== -1) {
-          const product = updatedProducts[productIndex];
+          product = updatedProducts[productIndex];
+          foundByMethod = 'البحث بالرقم المباشر';
+          console.log('  - ✅ تم العثور عليه بالبحث بالرقم المباشر:', product.name);
+        } else {
+          // 2. البحث كـ string
+          productIndex = updatedProducts.findIndex(p => p.id.toString() === item.productId);
+          if (productIndex !== -1) {
+            product = updatedProducts[productIndex];
+            foundByMethod = 'البحث كـ string';
+            console.log('  - ✅ تم العثور عليه بالبحث كـ string:', product.name);
+          } else {
+            // 3. البحث باستخدام Number()
+            const numericId = Number(item.productId);
+            if (!isNaN(numericId)) {
+              productIndex = updatedProducts.findIndex(p => p.id === numericId);
+              if (productIndex !== -1) {
+                product = updatedProducts[productIndex];
+                foundByMethod = 'البحث بـ Number()';
+                console.log('  - ✅ تم العثور عليه بـ Number():', product.name);
+              }
+            }
+          }
+        }
+        
+        if (productIndex !== -1) {
           const { mainQuantity = 0, subQuantity = 0, unitsInMain = 0 } = product;
           const mainSale = parseInt(item.mainQuantity || item.quantity) || 0; // الكمية الأساسية المباعة
           const subSale = parseInt(item.subQuantity) || 0; // الكمية الفرعية المباعة
