@@ -119,6 +119,7 @@ export const TabProvider = ({ children }) => {
       '/production/materials': 'تتبع المواد الخام',
       '/production/quality': 'مراقبة الجودة',
       '/production/dashboard': 'لوحة الإنتاجية',
+      '/warehouses/units': 'ادارة الوحدات'
     };
     return titles[path] || 'صفحة';
   };

@@ -594,13 +594,59 @@ export const DataProvider = ({ children }) => {
     return categories.filter(cat => cat.parentId === parentId);
   };
 
-  // الحصول على هيكل شجري كامل للفئات
+  // دالة مساعدة لإنشاء هيكل شجري متعدد المستويات
+  const buildCategoryTree = (categoryId) => {
+    const subcategories = getSubcategories(categoryId);
+    return subcategories.map(subcategory => ({
+      ...subcategory,
+      children: buildCategoryTree(subcategory.id) // استدعاء متكرر
+    }));
+  };
+
+  // الحصول على هيكل شجري كامل للفئات (مستوى واحد)
   const getCategoryTree = () => {
     const mainCategories = getMainCategories();
     return mainCategories.map(mainCat => ({
       ...mainCat,
       subcategories: getSubcategories(mainCat.id)
     }));
+  };
+
+  // الحصول على هيكل شجري متعدد المستويات كامل
+  const getCategoryTreeRecursive = () => {
+    const mainCategories = getMainCategories();
+    return mainCategories.map(mainCat => ({
+      ...mainCat,
+      children: buildCategoryTree(mainCat.id) // استخدام الدالة المتكررة
+    }));
+  };
+
+  // دالة مساعدة للحصول على الفئات الفرعية العميقة (جميع المستويات)
+  const getDeepSubcategories = (parentId) => {
+    const directSubcategories = getSubcategories(parentId);
+    const deepSubcategories = [...directSubcategories];
+    
+    // إضافة الفئات الفرعية العميقة بشكل متكرر
+    directSubcategories.forEach(subcategory => {
+      deepSubcategories.push(...getDeepSubcategories(subcategory.id));
+    });
+    
+    return deepSubcategories;
+  };
+
+  // دالة مساعدة لبناء مسار الفئة (path) من الجذر إلى الفئة المحددة
+  const getCategoryPath = (categoryId) => {
+    const path = [];
+    let currentCategory = categories.find(c => c.id === categoryId);
+    
+    while (currentCategory) {
+      path.unshift(currentCategory);
+      currentCategory = currentCategory.parentId 
+        ? categories.find(c => c.id === currentCategory.parentId) 
+        : null;
+    }
+    
+    return path;
   };
 
   // إضافة مجموعة فرعية جديدة
@@ -630,6 +676,33 @@ export const DataProvider = ({ children }) => {
     return newSubcategory;
   };
 
+  // التحقق من التكرار الدوراني في النقل
+  const hasCircularDependency = (categoryId, potentialParentId) => {
+    if (potentialParentId === null) return false;
+    
+    let currentParentId = potentialParentId;
+    const visited = new Set();
+    
+    while (currentParentId !== null) {
+      if (currentParentId === categoryId) {
+        return true; // تم العثور على دورة
+      }
+      
+      if (visited.has(currentParentId)) {
+        return false; // تجنب التكرار اللانهائي
+      }
+      
+      visited.add(currentParentId);
+      
+      const parent = categories.find(c => c.id === currentParentId);
+      if (!parent) break;
+      
+      currentParentId = parent.parentId;
+    }
+    
+    return false;
+  };
+
   // نقل فئة من مجموعة لأخرى
   const moveCategory = (categoryId, newParentId = null) => {
     const category = categories.find(c => c.id === categoryId);
@@ -640,6 +713,11 @@ export const DataProvider = ({ children }) => {
     // التحقق من عدم نقل الفئة لنفسها
     if (newParentId === categoryId) {
       throw new Error('لا يمكن نقل الفئة لنفسها');
+    }
+
+    // التحقق من التكرار الدوراني
+    if (hasCircularDependency(categoryId, newParentId)) {
+      throw new Error('لا يمكن نقل فئة إلى إحدى فئاتها الفرعية');
     }
 
     const updated = categories.map(c => 
@@ -667,36 +745,67 @@ export const DataProvider = ({ children }) => {
       createdAt: new Date().toISOString()
     };
 
-    // إنشاء المجموعات الفرعية مع IDs مضمونة التفرد
-    const subcategories = subcategoriesData.map((subData, index) => ({
-      ...subData,
-      id: timestamp + 1000000 + index + 1, // IDs فريدة في نطاق بعيد عن timestamp
-      parentId: mainCategory.id,
-      createdAt: new Date().toISOString()
-    }));
+    // دالة مساعدة لإنشاء الفئات الفرعية بشكل هرمي
+    const createSubcategoriesRecursive = (subDataArray, parentId, baseTimestamp, idCounter = { current: 0 }) => {
+      const createdCategories = [];
+      
+      subDataArray.forEach((subData) => {
+        const categoryId = baseTimestamp + 1000000 + idCounter.current + 1;
+        idCounter.current += 1;
+        
+        const newCategory = {
+          name: subData.name,
+          description: subData.description || '',
+          color: subData.color || '#fb923c',
+          id: categoryId,
+          parentId: parentId,
+          createdAt: new Date().toISOString()
+        };
+        
+        createdCategories.push(newCategory);
+        
+        // إنشاء الفئات الفرعية المتداخلة بشكل هرمي
+        if (subData.children && subData.children.length > 0) {
+          const childCategories = createSubcategoriesRecursive(subData.children, categoryId, baseTimestamp, idCounter);
+          createdCategories.push(...childCategories);
+        }
+        
+        // دعم مصفوفة subcategories أيضاً
+        if (subData.subcategories && subData.subcategories.length > 0) {
+          const subCategoryChildren = createSubcategoriesRecursive(subData.subcategories, categoryId, baseTimestamp, idCounter);
+          createdCategories.push(...subCategoryChildren);
+        }
+      });
+      
+      return createdCategories;
+    };
 
-    // دمج الفئة الرئيسية والمجموعات الفرعية
-    const allNewCategories = [mainCategory, ...subcategories];
+    // إنشاء جميع الفئات الفرعية مع الحفاظ على الهيكل الهرمي
+    const allSubcategories = createSubcategoriesRecursive(subcategoriesData, mainCategory.id, timestamp);
+
+    // دمج الفئة الرئيسية وجميع الفئات الفرعية
+    const allNewCategories = [mainCategory, ...allSubcategories];
     const updated = [...categories, ...allNewCategories];
     
     setCategories(updated);
     saveData('bero_categories', updated);
 
     // تسجيل النشاط
-    const subcategoriesNames = subcategories.map(s => s.name).join('، ');
+    const topLevelSubcategories = subcategoriesData.map(s => s.name).join('، ');
     logActivity('category_with_subcategories_add', 
-      `إضافة فئة رئيسية "${mainCategory.name}" مع ${subcategories.length} مجموعات فرعية: ${subcategoriesNames}`, 
+      `إضافة فئة رئيسية "${mainCategory.name}" مع ${allSubcategories.length} مجموعات فرعية (إجمالي ${allSubcategories.length} فئة هرمية): ${topLevelSubcategories}`, 
       { 
         mainCategoryId: mainCategory.id,
         mainCategoryName: mainCategory.name,
-        subcategoriesCount: subcategories.length,
-        subcategoriesIds: subcategories.map(s => s.id)
+        subcategoriesCount: subcategoriesData.length,
+        totalSubcategoriesCount: allSubcategories.length,
+        allSubcategoriesIds: allSubcategories.map(s => s.id)
       }
     );
 
     return {
       mainCategory,
-      subcategories
+      subcategories: allSubcategories
     };
   };
 
@@ -2985,6 +3094,9 @@ export const DataProvider = ({ children }) => {
     getMainCategories,
     getSubcategories,
     getCategoryTree,
+    getCategoryTreeRecursive,
+    getDeepSubcategories,
+    getCategoryPath,
     addSubcategory,
     moveCategory,
     addProduct,

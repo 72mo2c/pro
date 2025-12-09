@@ -751,7 +751,7 @@ const ManageProducts = () => {
                             </div>
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                            <div>
+                            <div style={{ display: "none" }}>
                               <label className="block text-xs font-medium text-gray-700 mb-1">الكمية الأساسية (كرتونة) *</label>
                               <input
                                 type="number"
@@ -764,7 +764,7 @@ const ManageProducts = () => {
                               />
                             </div>
                             <div>
-                              <label className="block text-xs font-medium text-gray-700 mb-1">العدد في الوحدة الأساسية *</label>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">المعامل*</label>
                               <input
                                 type="number"
                                 name="unitsInMain"
@@ -776,7 +776,7 @@ const ManageProducts = () => {
                                 required
                               />
                             </div>
-                            <div>
+                            <div style={{ display: "none" }}>
                               <label className="block text-xs font-medium text-gray-700 mb-1">الكمية الفرعية (قطع إضافية)</label>
                               <input
                                 type="number"

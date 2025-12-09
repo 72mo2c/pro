@@ -6,7 +6,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useData } from '../../context/DataContext';
 import { useNotification } from '../../context/NotificationContextWithSound';
 import { useNavigate } from 'react-router-dom';
-import { FaBox, FaSave, FaCheckCircle, FaTimes, FaWarehouse, FaTags, FaDollarSign, FaCubes, FaBarcode, FaUndo, FaMoneyBillWave, FaPlus, FaTrash } from 'react-icons/fa';
+import { FaBox, FaSave, FaCheckCircle, FaTimes, FaWarehouse, FaTags, FaDollarSign, FaCubes, FaBarcode, FaUndo, FaMoneyBillWave, FaPlus, FaTrash, FaInfoCircle } from 'react-icons/fa';
 
 const AddProduct = () => {
   const navigate = useNavigate();
@@ -16,9 +16,12 @@ const AddProduct = () => {
     addProduct, 
     getMainCategories,
     getSubcategories,
+    getDeepSubcategories,
+    getCategoryPath,
     units,
     getMainUnits,
-    getSubUnits
+    getSubUnits,
+    addUnit
   } = useData();
   const { showSuccess, showError } = useNotification();
   
@@ -56,11 +59,19 @@ const AddProduct = () => {
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [categorySelectionStep, setCategorySelectionStep] = useState('main'); // 'main' أو 'sub'
   const [selectedMainCategory, setSelectedMainCategory] = useState(null);
+  const [categoryPath, setCategoryPath] = useState([]); // مسار الفئة الحالي
   const [categorySearchTerm, setCategorySearchTerm] = useState('');
   // Modal التأكيد المخصص
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [confirmModalData, setConfirmModalData] = useState({ title: '', message: '', onConfirm: () => {} });
   const [currentRowId, setCurrentRowId] = useState(null);
+
+  // Modal إضافة وحدة سريعة
+  const [showQuickUnitModal, setShowQuickUnitModal] = useState(false);
+  const [quickUnitType, setQuickUnitType] = useState('main'); // 'main' أو 'sub'
+  const [quickUnitName, setQuickUnitName] = useState('');
+  const [targetRowId, setTargetRowId] = useState(null);
+  const [targetField, setTargetField] = useState(''); // 'mainUnitId' أو 'subUnitId'
 
   // نافذة الشرائح السعرية
   const [showPricesModal, setShowPricesModal] = useState(false);
@@ -78,6 +89,66 @@ const AddProduct = () => {
     }
     
     setProductRows([...productRows, createNewRow()]);
+  };
+
+  // فتح نافذة إضافة وحدة سريعة
+  const openQuickUnitModal = (rowId, unitType, field) => {
+    setTargetRowId(rowId);
+    setQuickUnitType(unitType);
+    setTargetField(field);
+    setQuickUnitName('');
+    setShowQuickUnitModal(true);
+  };
+
+  // حفظ وحدة سريعة
+  const saveQuickUnit = () => {
+    if (!quickUnitName.trim()) {
+      showError('يرجى إدخال اسم الوحدة');
+      return;
+    }
+
+    try {
+      // التحقق من عدم وجود وحدة بنفس الاسم والنوع
+      const existingUnit = units.find(unit => 
+        unit.name.toLowerCase().trim() === quickUnitName.toLowerCase().trim() && 
+        unit.type === quickUnitType
+      );
+
+      if (existingUnit) {
+        showError('يوجد وحدة بنفس الاسم مسبقاً');
+        return;
+      }
+
+      // إضافة الوحدة الجديدة
+      const newUnit = addUnit({
+        name: quickUnitName.trim(),
+        type: quickUnitType
+      });
+
+      // تحديث الصف ليشمل الوحدة الجديدة
+      setProductRows(productRows.map(row => {
+        if (row.id === targetRowId) {
+          return { ...row, [targetField]: newUnit.id };
+        }
+        return row;
+      }));
+
+      showSuccess(`تم إضافة وحدة "${quickUnitName}" وتحديدها تلقائياً`);
+      setShowQuickUnitModal(false);
+      
+    } catch (error) {
+      console.error('خطأ في إضافة الوحدة:', error);
+      showError('حدث خطأ أثناء إضافة الوحدة');
+    }
+  };
+
+  // إلغاء إضافة وحدة سريعة
+  const cancelQuickUnit = () => {
+    setShowQuickUnitModal(false);
+    setQuickUnitName('');
+    setTargetRowId(null);
+    setQuickUnitType('main');
+    setTargetField('');
   };
 
   // عرض Modal التأكيد المخصص
@@ -136,13 +207,28 @@ const AddProduct = () => {
     setShowCategoryModal(true);
     setCategorySelectionStep('main');
     setSelectedMainCategory(null);
+    setCategoryPath([]); // إعادة تعيين مسار الفئة
     setCategorySearchTerm('');
   };
 
   // اختيار فئة رئيسية
   const selectMainCategory = (categoryId) => {
-    setSelectedMainCategory(parseInt(categoryId));
-    const subcategories = getSubcategories(categoryId);
+    const categoryIdNum = parseInt(categoryId);
+    setSelectedMainCategory(categoryIdNum);
+    
+    // تحديث مسار الفئة
+    const newPath = [...categoryPath];
+    const selectedCategory = categories.find(c => c.id === categoryIdNum);
+    if (selectedCategory) {
+      newPath.push({
+        id: selectedCategory.id,
+        name: selectedCategory.name,
+        color: selectedCategory.color
+      });
+      setCategoryPath(newPath);
+    }
+    
+    const subcategories = getSubcategories(categoryIdNum);
     
     if (subcategories.length > 0) {
       // الانتقال إلى اختيار الفئة الفرعية
@@ -156,14 +242,98 @@ const AddProduct = () => {
 
   // اختيار فئة فرعية
   const selectSubcategory = (subcategoryId) => {
-    updateRow(currentRowId, 'selectedCategory', subcategoryId.toString());
+    const subcategoryIdNum = parseInt(subcategoryId);
+    
+    // تحديث مسار الفئة
+    const newPath = [...categoryPath];
+    const selectedSubcategory = categories.find(c => c.id === subcategoryIdNum);
+    if (selectedSubcategory) {
+      newPath.push({
+        id: selectedSubcategory.id,
+        name: selectedSubcategory.name,
+        color: selectedSubcategory.color
+      });
+      setCategoryPath(newPath);
+    }
+    
+    // البحث عن فئات فرعية إضافية
+    const deeperSubcategories = getSubcategories(subcategoryIdNum);
+    
+    if (deeperSubcategories.length > 0) {
+      // توجد فئات أعمق، البقاء في نفس الخطوة
+      return; // لا إغلاق المودال
+    } else {
+      // لا توجد فئات أعمق، اختيار هذه الفئة
+      updateRow(currentRowId, 'selectedCategory', subcategoryId.toString());
+      setShowCategoryModal(false);
+    }
+  };
+
+  // التنقل في الفئات الفرعية (تصفح عميق)
+  const handleCategoryNavigation = (categoryId) => {
+    const categoryIdNum = parseInt(categoryId);
+    
+    // تحديث مسار الفئة
+    const newPath = [...categoryPath];
+    const selectedCategory = categories.find(c => c.id === categoryIdNum);
+    if (selectedCategory) {
+      newPath.push({
+        id: selectedCategory.id,
+        name: selectedCategory.name,
+        color: selectedCategory.color
+      });
+      setCategoryPath(newPath);
+    }
+    
+    // البقاء في المودال لعرض الفئات الفرعية (لا اختيار نهائي)
+    return;
+  };
+
+  // اختيار أي فئة مباشرة من أي مستوى
+  const handleSelectCategory = (categoryId) => {
+    const categoryIdNum = parseInt(categoryId);
+    
+    // تحديث مسار الفئة
+    const newPath = [...categoryPath];
+    const selectedCategory = categories.find(c => c.id === categoryIdNum);
+    if (selectedCategory) {
+      newPath.push({
+        id: selectedCategory.id,
+        name: selectedCategory.name,
+        color: selectedCategory.color
+      });
+      setCategoryPath(newPath);
+    }
+    
+    // اختيار هذه الفئة مباشرة (لا يهم إذا كان لها فئات فرعية أم لا)
+    updateRow(currentRowId, 'selectedCategory', categoryId.toString());
     setShowCategoryModal(false);
+  };
+
+  // التعامل مع النقر على جسم الفئة (سلوك ذكي)
+  const handleCategoryBodyClick = (categoryId, hasSubcategories) => {
+    if (hasSubcategories) {
+      // إذا كان هناك فئات فرعية، انتقل إليها
+      handleCategoryNavigation(categoryId);
+    } else {
+      // إذا لم تكن هناك فئات فرعية، اخترها مباشرة
+      handleSelectCategory(categoryId);
+    }
   };
 
   // العودة إلى اختيار الفئة الرئيسية
   const backToMainCategories = () => {
-    setCategorySelectionStep('main');
-    setSelectedMainCategory(null);
+    if (categoryPath.length > 1) {
+      // العودة خطوة واحدة للخلف في المسار
+      const newPath = categoryPath.slice(0, -1);
+      setCategoryPath(newPath);
+      setSelectedMainCategory(newPath[newPath.length - 1].id);
+    } else {
+      // العودة إلى المستوى الرئيسي
+      setCategorySelectionStep('main');
+      setSelectedMainCategory(null);
+      setCategoryPath([]);
+    }
   };
 
   // إلغاء اختيار الفئة
@@ -171,6 +341,7 @@ const AddProduct = () => {
     setShowCategoryModal(false);
     setCategorySelectionStep('main');
     setSelectedMainCategory(null);
+    setCategoryPath([]);
     setCategorySearchTerm('');
     setCurrentRowId(null);
   };
@@ -672,7 +843,7 @@ const AddProduct = () => {
               type="button"
               onClick={addNewRow}
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg transition-colors text-sm font-semibold"
-              title="إضافة منتج جديد جديد"
+              title="إضافة منتج جديد "
             >
               <FaPlus /> منتج جديد
             </button>
@@ -723,36 +894,40 @@ const AddProduct = () => {
                             <FaTags className="text-blue-500" />
                             <span>
                               {(() => {
-                                const allCategories = mainCategories.concat(
-                                  mainCategories.flatMap(mainCat => 
-                                    getSubcategories(mainCat.id).map(sub => ({ ...sub, parentId: mainCat.id }))
-                                  )
-                                );
-                                const selectedCat = allCategories.find(c => c.id === parseInt(row.selectedCategory));
-                                if (selectedCat && selectedCat.parentId) {
-                                  const parentCat = mainCategories.find(c => c.id === selectedCat.parentId);
+                                const selectedCategoryId = parseInt(row.selectedCategory);
+                                const selectedCategory = categories.find(c => c.id === selectedCategoryId);
+                                
+                                if (!selectedCategory) return 'فئة غير معروفة';
+                                
+                                // الحصول على مسار الفئة الكامل
+                                const categoryPath = getCategoryPath(selectedCategoryId);
+                                
+                                if (categoryPath.length > 1) {
                                   return (
-                                    <>
-                                      <span 
-                                        className="inline-block w-2 h-2 rounded-full mr-1" 
-                                        style={{ backgroundColor: parentCat?.color }}
-                                      ></span>
-                                      {parentCat?.name} → 
-                                      <span 
-                                        className="inline-block w-2 h-2 rounded-full mr-1 ml-1" 
-                                        style={{ backgroundColor: selectedCat.color }}
-                                      ></span>
-                                      {selectedCat.name}
-                                    </>
+                                    <div className="flex items-center gap-1">
+                                      {categoryPath.map((pathItem, index) => (
+                                        <React.Fragment key={pathItem.id}>
+                                          <span 
+                                            className="w-2 h-2 rounded-full flex-shrink-0" 
+                                            style={{ backgroundColor: pathItem.color }}
+                                          ></span>
+                                          <span className="text-xs">{pathItem.name}</span>
+                                          {index < categoryPath.length - 1 && (
+                                            <span className="text-gray-400 mx-1 text-xs">→</span>
+                                          )}
+                                        </React.Fragment>
+                                      ))}
+                                    </div>
                                   );
                                 }
+                                
                                 return (
                                   <>
                                     <span 
                                       className="inline-block w-2 h-2 rounded-full mr-1" 
-                                      style={{ backgroundColor: selectedCat.color }}
+                                      style={{ backgroundColor: selectedCategory.color }}
                                     ></span>
-                                    {selectedCat.name}
+                                    {selectedCategory.name}
                                   </>
                                 );
                               })()}
@@ -822,32 +997,56 @@ const AddProduct = () => {
 
                     {/* الوحدة الأساسية */}
                     <td className="px-2 py-1">
-                      <select
-                        value={row.mainUnitId}
-                        onChange={(e) => updateRow(row.id, 'mainUnitId', e.target.value)}
-                        className="w-full px-1 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-center"
-                        required
-                      >
-                        <option value="">اختر الوحدة</option>
-                        {getMainUnits().map(unit => (
-                          <option key={unit.id} value={unit.id}>{unit.name}</option>
-                        ))}
-                      </select>
+                      <div className="relative">
+                        <select
+                          value={row.mainUnitId}
+                          onChange={(e) => {
+                            if (e.target.value === 'new-unit') {
+                              openQuickUnitModal(row.id, 'main', 'mainUnitId');
+                            } else {
+                              updateRow(row.id, 'mainUnitId', e.target.value);
+                            }
+                          }}
+                          className="w-full px-1 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-center"
+                          required
+                        >
+                          <option value="">اختر الوحدة</option>
+                          {getMainUnits().map(unit => (
+                            <option key={unit.id} value={unit.id}>{unit.name}</option>
+                          ))}
+                          <option value="new-unit" className="bg-green-50 text-green-700 font-medium">
+                            + وحدة جديدة
+                          </option>
+                        </select>
+                        
+                      </div>
                     </td>
 
                     {/* الوحدة الفرعية */}
                     <td className="px-2 py-1">
-                      <select
-                        value={row.subUnitId}
-                        onChange={(e) => updateRow(row.id, 'subUnitId', e.target.value)}
-                        className="w-full px-1 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-center"
-                        required
-                      >
-                        <option value="">اختر الوحدة</option>
-                        {getSubUnits().map(unit => (
-                          <option key={unit.id} value={unit.id}>{unit.name}</option>
-                        ))}
-                      </select>
+                      <div className="relative">
+                        <select
+                          value={row.subUnitId}
+                          onChange={(e) => {
+                            if (e.target.value === 'new-unit') {
+                              openQuickUnitModal(row.id, 'sub', 'subUnitId');
+                            } else {
+                              updateRow(row.id, 'subUnitId', e.target.value);
+                            }
+                          }}
+                          className="w-full px-1 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-center"
+                          required
+                        >
+                          <option value="">اختر الوحدة</option>
+                          {getSubUnits().map(unit => (
+                            <option key={unit.id} value={unit.id}>{unit.name}</option>
+                          ))}
+                          <option value="new-unit" className="bg-green-50 text-green-700 font-medium">
+                            + وحدة جديدة
+                          </option>
+                        </select>
+                       
+                      </div>
                     </td>
 
                     {/* زر الأسعار */}
@@ -939,7 +1138,9 @@ const AddProduct = () => {
                 <FaTimes />
               </button>
               <h3 className="text-lg font-semibold text-center">
-                {categorySelectionStep === 'main' ? 'اختر الفئة الرئيسية' : `فئات فرعية في "${mainCategories.find(c => c.id === selectedMainCategory)?.name}"`}
+                {categorySelectionStep === 'main' ? 'اختر الفئة' : 
+                 categoryPath.length > 0 ? `فئات فرعية في "${categoryPath[categoryPath.length - 1].name}"` :
+                 `فئات فرعية في "${mainCategories.find(c => c.id === selectedMainCategory)?.name}"`}
               </h3>
             </div>
 
@@ -989,47 +1190,149 @@ const AddProduct = () => {
                   ))}
                 </div>
               ) : (
-                // عرض الفئات الفرعية
+                // عرض الفئات الفرعية (مع دعم المستويات العميقة)
                 (() => {
-                  const subcategories = selectedMainCategory ? getSubcategories(selectedMainCategory) : [];
+                  const currentParentId = categoryPath.length > 0 ? categoryPath[categoryPath.length - 1].id : selectedMainCategory;
+                  const subcategories = getSubcategories(currentParentId);
+                  
                   return (
                     <div className="space-y-2 max-h-96 overflow-y-auto">
-                      <button
-                        onClick={() => selectSubcategory(selectedMainCategory)}
-                        className="w-full p-3 text-right border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-blue-300 transition-all group"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <span 
-                              className="w-4 h-4 rounded-full flex-shrink-0" 
-                              style={{ backgroundColor: mainCategories.find(c => c.id === selectedMainCategory)?.color }}
-                            ></span>
-                            <span className="font-medium text-gray-800">
-                              {mainCategories.find(c => c.id === selectedMainCategory)?.name}
-                            </span>
+                      {/* عرض مسار الفئة الحالي */}
+                      {categoryPath.length > 0 && (
+                        <div className="bg-gray-50 p-2 rounded-lg mb-3">
+                          <div className="text-xs text-gray-600 mb-1">المسار:</div>
+                          <div className="flex items-center gap-1 text-xs">
+                            {categoryPath.map((pathItem, index) => (
+                              <React.Fragment key={pathItem.id}>
+                                <span 
+                                  className="w-2 h-2 rounded-full flex-shrink-0" 
+                                  style={{ backgroundColor: pathItem.color }}
+                                ></span>
+                                <span className="font-medium text-gray-800">{pathItem.name}</span>
+                                {index < categoryPath.length - 1 && (
+                                  <span className="text-gray-400 mx-1">→</span>
+                                )}
+                              </React.Fragment>
+                            ))}
                           </div>
-                          <FaBox className="text-gray-400 group-hover:text-blue-500" />
                         </div>
-                      </button>
+                      )}
                       
-                      {searchCategories(subcategories, categorySearchTerm).map(subcategory => (
-                        <button
-                          key={subcategory.id}
-                          onClick={() => selectSubcategory(subcategory.id)}
-                          className="w-full p-3 text-right border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-blue-300 transition-all group"
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <span 
-                                className="w-4 h-4 rounded-full flex-shrink-0" 
-                                style={{ backgroundColor: subcategory.color }}
-                              ></span>
-                              <span className="font-medium text-gray-800">{subcategory.name}</span>
+                      {/* زر اختيار الفئة الحالية (إذا لم تكن فئة رئيسية) */}
+                      {currentParentId && categoryPath.length > 1 && (
+                        <div className="border-2 border-blue-200 rounded-lg p-3 bg-blue-50">
+                          <div className="flex items-center gap-3">
+                            {/* Radio Button للتحديد */}
+                            <input
+                              type="radio"
+                              name="categorySelection"
+                              value={currentParentId}
+                              onChange={() => selectSubcategory(currentParentId)}
+                              className="w-4 h-4 text-blue-600 bg-white border-gray-300 focus:ring-blue-500 focus:ring-2"
+                            />
+                            
+                            {/* معلومات الفئة */}
+                            <div className="flex-1">
+                              <div className="flex items-center gap-3">
+                                <span 
+                                  className="w-4 h-4 rounded-full flex-shrink-0" 
+                                  style={{ backgroundColor: categories.find(c => c.id === currentParentId)?.color }}
+                                ></span>
+                                <span className="font-medium text-blue-800">
+                                  {categories.find(c => c.id === currentParentId)?.name} (الفئة الحالية)
+                                </span>
+                                <span className="text-xs text-blue-600 bg-blue-200 px-2 py-1 rounded-full">
+                                  اختر هذه الفئة
+                                </span>
+                              </div>
                             </div>
-                            <FaBox className="text-gray-400 group-hover:text-blue-500" />
                           </div>
-                        </button>
-                      ))}
+                        </div>
+                      )}
+                      
+                      {/* عرض الفئات الفرعية */}
+                      {subcategories.length > 0 ? (
+                        searchCategories(subcategories, categorySearchTerm).map(subcategory => {
+                          const hasSubcategories = getSubcategories(subcategory.id).length > 0;
+                          return (
+                            <div key={subcategory.id} className="border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-all">
+                              <div className="flex items-center gap-3">
+                                {/* Radio Button للتحديد */}
+                                <input
+                                  type="radio"
+                                  name="categorySelection"
+                                  value={subcategory.id}
+                                  onChange={() => handleSelectCategory(subcategory.id)}
+                                  className="w-4 h-4 text-green-600 bg-gray-100 border-gray-300 focus:ring-green-500 focus:ring-2"
+                                />
+                                
+                                {/* معلومات الفئة */}
+                                <div 
+                                  className="flex-1 cursor-pointer"
+                                  onClick={() => handleCategoryBodyClick(subcategory.id, hasSubcategories)}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                      <span 
+                                        className="w-4 h-4 rounded-full flex-shrink-0" 
+                                        style={{ backgroundColor: subcategory.color }}
+                                      ></span>
+                                      <span className="font-medium text-gray-800">{subcategory.name}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      {hasSubcategories ? (
+                                        <>
+                                          <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
+                                            {getSubcategories(subcategory.id).length} فرعية
+                                          </span>
+                                          <FaBox className="text-gray-400" />
+                                        </>
+                                      ) : (
+                                        <span className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded-full">
+                                          فئة نهائية
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              {/* تلميح للمستخدم */}
+                              <div className="mt-2 text-xs text-gray-500">
+                                {hasSubcategories ? (
+                                  <span>انقر على اسم الفئة لعرض الفئات الفرعية • أو استخدم الزر للتحديد المباشر</span>
+                                ) : (
+                                  <span>انقر على اسم الفئة للتحديد المباشر • أو استخدم الزر</span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="text-center text-gray-500 py-8">
+                          <FaBox className="mx-auto mb-2 text-gray-400" size={24} />
+                          <p>لا توجد فئات فرعية في هذا المستوى</p>
+                          {currentParentId && categoryPath.length > 1 && (
+                            <p className="text-sm mt-2">يمكنك اختيار الفئة الحالية أعلاه</p>
+                          )}
+                        </div>
+                      )}
+                      
+                      {/* شرح الاستخدام */}
+                      <div className="mt-4 p-3 bg-green-50 rounded-lg border border-green-200">
+                        <div className="flex items-start gap-2">
+                          <FaInfoCircle className="text-green-500 mt-0.5 flex-shrink-0" />
+                          <div className="text-sm text-green-800">
+                            <p className="font-medium mb-1">طريقة الاستخدام الجديدة:</p>
+                            <ul className="space-y-1 text-xs">
+                              <li>• <strong>Radio Button:</strong> اختر الفئة مباشرة</li>
+                              <li>• <strong>النقر على اسم الفئة:</strong></li>
+                              <li className="mr-4">- إذا كان بها فئات فرعية → عرض الفئات الفرعية</li>
+                              <li className="mr-4">- إذا كانت فئة نهائية → اختيارها مباشرة</li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   );
                 })()
@@ -1043,7 +1346,7 @@ const AddProduct = () => {
                   onClick={backToMainCategories}
                   className="w-full bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors text-sm font-semibold"
                 >
-                  العودة إلى الفئات الرئيسية
+                  {categoryPath.length > 1 ? 'العودة إلى المستوى السابق' : 'العودة إلى الفئات الرئيسية'}
                 </button>
               </div>
             )}
@@ -1245,6 +1548,86 @@ const AddProduct = () => {
                 className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors text-sm font-semibold"
               >
                 حفظ الأسعار
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal إضافة وحدة سريعة */}
+      {showQuickUnitModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10000] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full transform transition-all">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-green-500 to-green-600 p-4 rounded-t-2xl text-white relative">
+              <button
+                onClick={cancelQuickUnit}
+                className="absolute top-3 left-3 text-white hover:bg-white hover:bg-opacity-20 rounded-full p-1.5 transition-all"
+              >
+                <FaTimes size={16} />
+              </button>
+              <div className="flex items-center justify-center mb-3">
+                <div className="bg-white bg-opacity-20 rounded-full p-2.5">
+                  {quickUnitType === 'main' ? <FaCubes size={24} /> : <FaBox size={24} />}
+                </div>
+              </div>
+              <h2 className="text-lg font-bold text-center">
+                إضافة {quickUnitType === 'main' ? 'وحدة أساسية' : 'وحدة فرعية'} جديدة
+              </h2>
+            </div>
+
+            {/* Body */}
+            <div className="p-6">
+              <div className="text-center mb-4">
+                <div className="mb-4">
+                  <div className="mx-auto w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                    {quickUnitType === 'main' ? <FaCubes className="text-green-600" size={20} /> : <FaBox className="text-green-600" size={20} />}
+                  </div>
+                </div>
+                <p className="text-gray-700 text-lg font-medium mb-2">
+                  إضافة {quickUnitType === 'main' ? 'وحدة أساسية' : 'وحدة فرعية'} جديدة
+                </p>
+                <p className="text-sm text-gray-500">
+                  سيتم تحديد الوحدة المضافة تلقائياً في الحقل
+                </p>
+              </div>
+              
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
+                  اسم {quickUnitType === 'main' ? 'الوحدة الأساسية' : 'الوحدة الفرعية'}
+                </label>
+                <input
+                  type="text"
+                  value={quickUnitName}
+                  onChange={(e) => setQuickUnitName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      saveQuickUnit();
+                    } else if (e.key === 'Escape') {
+                      cancelQuickUnit();
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-right"
+                  placeholder={quickUnitType === 'main' ? 'مثل: كيس، صندوق، عبوة' : 'مثل: جرام، حبة، قطعة'}
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 bg-gray-50 rounded-b-2xl flex gap-3">
+              <button
+                onClick={cancelQuickUnit}
+                className="flex-1 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors text-sm font-semibold"
+              >
+                إلغاء
+              </button>
+              <button
+                onClick={saveQuickUnit}
+                className="flex-1 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors text-sm font-semibold"
+              >
+                إضافة وتحديد
               </button>
             </div>
           </div>
