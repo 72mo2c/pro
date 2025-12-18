@@ -6,7 +6,117 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useData } from '../../context/DataContext';
 import { useNotification } from '../../context/NotificationContextWithSound';
 import { useNavigate } from 'react-router-dom';
-import { FaBox, FaSave, FaCheckCircle, FaTimes, FaWarehouse, FaTags, FaDollarSign, FaCubes, FaBarcode, FaUndo, FaMoneyBillWave, FaPlus, FaTrash, FaInfoCircle } from 'react-icons/fa';
+import { FaBox, FaSave, FaCheckCircle, FaTimes, FaWarehouse, FaTags, FaDollarSign, FaCubes, FaBarcode, FaUndo, FaMoneyBillWave, FaPlus, FaTrash, FaInfoCircle, FaLayerGroup, FaMinus } from 'react-icons/fa';
+
+// مكون شجرة الفئات الفرعية
+const CategoryTreeNode = ({ categories, level, expandedNodes, onToggleExpansion, onAddSubcategory, onUpdateCategory, onRemoveCategory }) => {
+  return (
+    <div className="space-y-1">
+      {categories.length === 0 ? (
+        <div className="text-center py-4 text-gray-500">
+          <FaLayerGroup className="mx-auto mb-2 text-gray-400" size={20} />
+          <p className="text-xs">لا توجد فئات فرعية</p>
+        </div>
+      ) : (
+        categories.map((category) => (
+          <CategoryNode
+            key={category.id}
+            category={category}
+            level={level}
+            expandedNodes={expandedNodes}
+            onToggleExpansion={onToggleExpansion}
+            onAddSubcategory={onAddSubcategory}
+            onUpdateCategory={onUpdateCategory}
+            onRemoveCategory={onRemoveCategory}
+          />
+        ))
+      )}
+    </div>
+  );
+};
+
+// مكون عقدة الفئة الواحدة
+const CategoryNode = ({ category, level, expandedNodes, onToggleExpansion, onAddSubcategory, onUpdateCategory, onRemoveCategory }) => {
+  const hasChildren = category.children && category.children.length > 0;
+  const isExpanded = expandedNodes.has(category.id);
+  
+  return (
+    <div className={`${level > 1 ? 'mr-4' : ''} bg-white rounded border border-gray-200`}>
+      <div className="p-2">
+        <div className="flex items-center gap-2 mb-2">
+          {/* Toggle button */}
+          {hasChildren && (
+            <button
+              onClick={() => onToggleExpansion(category.id)}
+              className="w-4 h-4 flex items-center justify-center text-gray-500 hover:text-gray-700"
+            >
+              {isExpanded ? (
+                <FaMinus className="text-xs" />
+              ) : (
+                <FaPlus className="text-xs" />
+              )}
+            </button>
+          )}
+          
+          {/* Level indicator */}
+          <span className="text-xs text-gray-500 w-4 text-center">
+            {level}
+          </span>
+          
+          {/* Category name input */}
+          <input
+            type="text"
+            value={category.name}
+            onChange={(e) => onUpdateCategory(category.id, 'name', e.target.value)}
+            className="flex-1 px-2 py-1 border border-gray-300 rounded text-right text-sm"
+            placeholder="اسم الفئة"
+          />
+          
+          {/* Color picker */}
+          <input
+            type="color"
+            value={category.color}
+            onChange={(e) => onUpdateCategory(category.id, 'color', e.target.value)}
+            className="w-6 h-6 border border-gray-300 rounded cursor-pointer"
+          />
+          
+          {/* Add subcategory button */}
+          <button
+            onClick={() => onAddSubcategory(category.id)}
+            className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-xs flex items-center gap-1"
+          >
+            <FaPlus size={10} />
+            إضافة
+          </button>
+          
+          {/* Remove category button */}
+          <button
+            onClick={() => onRemoveCategory(category.id)}
+            className="text-red-500 hover:text-red-700 p-1"
+            title="حذف"
+          >
+            <FaTrash size={12} />
+          </button>
+        </div>
+      </div>
+      
+      {/* Children */}
+      {hasChildren && isExpanded && (
+        <div className="border-t border-gray-200 pt-1">
+          <CategoryTreeNode
+            categories={category.children}
+            level={level + 1}
+            expandedNodes={expandedNodes}
+            onToggleExpansion={onToggleExpansion}
+            onAddSubcategory={onAddSubcategory}
+            onUpdateCategory={onUpdateCategory}
+            onRemoveCategory={onRemoveCategory}
+          />
+        </div>
+      )}
+    </div>
+  );
+};
 
 const AddProduct = () => {
   const navigate = useNavigate();
@@ -21,7 +131,9 @@ const AddProduct = () => {
     units,
     getMainUnits,
     getSubUnits,
-    addUnit
+    addUnit,
+    addSubcategory,
+    addCategoryWithSubcategories
   } = useData();
   const { showSuccess, showError } = useNotification();
   
@@ -72,6 +184,21 @@ const AddProduct = () => {
   const [quickUnitName, setQuickUnitName] = useState('');
   const [targetRowId, setTargetRowId] = useState(null);
   const [targetField, setTargetField] = useState(''); // 'mainUnitId' أو 'subUnitId'
+
+  // Modal إضافة فئة سريعة
+  const [showQuickCategoryModal, setShowQuickCategoryModal] = useState(false);
+  const [quickCategoryName, setQuickCategoryName] = useState('');
+  const [quickCategoryColor, setQuickCategoryColor] = useState('#3B82F6');
+  const [parentCategoryId, setParentCategoryId] = useState(null); // فئة الأم للفئة الجديدة
+
+  // حالة الفئة الشاملة متعددة المستويات
+  const [showComprehensiveCategoryModal, setShowComprehensiveCategoryModal] = useState(false);
+  const [mainCategoryData, setMainCategoryData] = useState({
+    name: '',
+    color: '#3B82F6'
+  });
+  const [comprehensiveSubcategories, setComprehensiveSubcategories] = useState([]);
+  const [expandedNodes, setExpandedNodes] = useState(new Set()); // nodes ممددة
 
   // نافذة الشرائح السعرية
   const [showPricesModal, setShowPricesModal] = useState(false);
@@ -209,6 +336,189 @@ const AddProduct = () => {
     setSelectedMainCategory(null);
     setCategoryPath([]); // إعادة تعيين مسار الفئة
     setCategorySearchTerm('');
+  };
+
+  // فتح نافذة إضافة فئة سريعة
+  const openQuickCategoryModal = (parentId = null) => {
+    setParentCategoryId(parentId);
+    setQuickCategoryName('');
+    setQuickCategoryColor('#3B82F6');
+    setShowQuickCategoryModal(true);
+  };
+
+  // حفظ فئة سريعة
+  const saveQuickCategory = () => {
+    if (!quickCategoryName.trim()) {
+      showError('يرجى إدخال اسم الفئة');
+      return;
+    }
+
+    try {
+      // التحقق من عدم وجود فئة بنفس الاسم
+      const existingCategory = categories.find(cat => 
+        cat.name.toLowerCase().trim() === quickCategoryName.toLowerCase().trim() &&
+        cat.parentId === parentCategoryId
+      );
+
+      if (existingCategory) {
+        showError('يوجد فئة بنفس الاسم في هذا المستوى');
+        return;
+      }
+
+      // إضافة الفئة الجديدة
+      const newCategory = addSubcategory(parentCategoryId, {
+        name: quickCategoryName.trim(),
+        color: quickCategoryColor
+      });
+
+      showSuccess(`تم إضافة فئة "${quickCategoryName}" بنجاح`);
+      setShowQuickCategoryModal(false);
+      
+    } catch (error) {
+      console.error('خطأ في إضافة الفئة:', error);
+      showError('حدث خطأ أثناء إضافة الفئة');
+    }
+  };
+
+  // إلغاء إضافة فئة سريعة
+  const cancelQuickCategory = () => {
+    setShowQuickCategoryModal(false);
+    setQuickCategoryName('');
+    setQuickCategoryColor('#3B82F6');
+    setParentCategoryId(null);
+  };
+
+  // فتح نافذة إضافة فئة شاملة
+  const openComprehensiveCategoryModal = () => {
+    setMainCategoryData({ name: '', color: '#3B82F6' });
+    setComprehensiveSubcategories([]);
+    setExpandedNodes(new Set()); // reset expanded nodes
+    setShowComprehensiveCategoryModal(true);
+  };
+
+  // إضافة فئة فرعية جديدة (مستوى مسطح)
+  const addSubcategoryLevel = () => {
+    const newSubcategory = {
+      name: '',
+      color: '#10B981',
+      children: [],
+      id: Date.now() + Math.random()
+    };
+    
+    setComprehensiveSubcategories([...comprehensiveSubcategories, newSubcategory]);
+  };
+
+  // إضافة فئة فرعية داخل فئة موجودة
+  const addNestedSubcategory = (parentId) => {
+    const addChildrenRecursive = (categories) => {
+      return categories.map(cat => {
+        if (cat.id === parentId) {
+          const newChild = {
+            name: '',
+            color: '#6366F1',
+            children: [],
+            id: Date.now() + Math.random()
+          };
+          return {
+            ...cat,
+            children: [...cat.children, newChild]
+          };
+        }
+        return {
+          ...cat,
+          children: addChildrenRecursive(cat.children)
+        };
+      });
+    };
+    
+    setComprehensiveSubcategories(addChildrenRecursive(comprehensiveSubcategories));
+    // فتح الnode تلقائياً
+    setExpandedNodes(new Set([...expandedNodes, parentId]));
+  };
+
+  // تبديل حالة التوسيع للـ node
+  const toggleNodeExpansion = (nodeId) => {
+    const newExpanded = new Set(expandedNodes);
+    if (newExpanded.has(nodeId)) {
+      newExpanded.delete(nodeId);
+    } else {
+      newExpanded.add(nodeId);
+    }
+    setExpandedNodes(newExpanded);
+  };
+
+  // تحديث بيانات الفئة الفرعية (recursive)
+  const updateSubcategory = (id, field, value) => {
+    const updateRecursive = (categories) => {
+      return categories.map(cat => {
+        if (cat.id === id) {
+          return { ...cat, [field]: value };
+        }
+        return {
+          ...cat,
+          children: updateRecursive(cat.children || [])
+        };
+      });
+    };
+    
+    setComprehensiveSubcategories(updateRecursive(comprehensiveSubcategories));
+  };
+
+  // حذف فئة فرعية (recursive)
+  const removeSubcategory = (id) => {
+    const removeRecursive = (categories) => {
+      return categories.filter(cat => cat.id !== id).map(cat => ({
+        ...cat,
+        children: removeRecursive(cat.children || [])
+      }));
+    };
+    
+    setComprehensiveSubcategories(removeRecursive(comprehensiveSubcategories));
+  };
+
+  // حفظ الفئة الشاملة
+  const saveComprehensiveCategory = () => {
+    if (!mainCategoryData.name.trim()) {
+      showError('يرجى إدخال اسم الفئة الرئيسية');
+      return;
+    }
+
+    try {
+      // تحويل البيانات إلى الصيغة المطلوبة (recursive)
+      const convertToTreeData = (categories) => {
+        return categories
+          .filter(sub => sub.name.trim())
+          .map(sub => ({
+            name: sub.name.trim(),
+            color: sub.color,
+            children: convertToTreeData(sub.children || [])
+          }));
+      };
+
+      const subcategoriesData = convertToTreeData(comprehensiveSubcategories);
+
+      // إنشاء الفئة الشاملة
+      addCategoryWithSubcategories({
+        name: mainCategoryData.name.trim(),
+        color: mainCategoryData.color
+      }, subcategoriesData);
+
+      const totalSubcategories = comprehensiveSubcategories.filter(sub => sub.name.trim()).length;
+      showSuccess(`تم إنشاء فئة "${mainCategoryData.name}" مع ${totalSubcategories} فئات فرعية`);
+      setShowComprehensiveCategoryModal(false);
+      
+    } catch (error) {
+      console.error('خطأ في إضافة الفئة الشاملة:', error);
+      showError('حدث خطأ أثناء إضافة الفئة الشاملة');
+    }
+  };
+
+  // إلغاء إضافة فئة شاملة
+  const cancelComprehensiveCategory = () => {
+    setShowComprehensiveCategoryModal(false);
+    setMainCategoryData({ name: '', color: '#3B82F6' });
+    setComprehensiveSubcategories([]);
+    setExpandedNodes(new Set());
   };
 
   // اختيار فئة رئيسية
@@ -1137,11 +1447,34 @@ const AddProduct = () => {
               >
                 <FaTimes />
               </button>
-              <h3 className="text-lg font-semibold text-center">
-                {categorySelectionStep === 'main' ? 'اختر الفئة' : 
-                 categoryPath.length > 0 ? `فئات فرعية في "${categoryPath[categoryPath.length - 1].name}"` :
-                 `فئات فرعية في "${mainCategories.find(c => c.id === selectedMainCategory)?.name}"`}
-              </h3>
+              <div className="flex items-center justify-between">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => openQuickCategoryModal(categorySelectionStep === 'main' ? null : (categoryPath.length > 0 ? categoryPath[categoryPath.length - 1].id : selectedMainCategory))}
+                    className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-3 py-1.5 rounded-lg transition-all text-sm font-medium flex items-center gap-2"
+                    title="إضافة فئة سريعة"
+                  >
+                    <FaLayerGroup size={14} />
+                    إضافة فئة
+                  </button>
+                  {categorySelectionStep === 'main' && (
+                    <button
+                      onClick={openComprehensiveCategoryModal}
+                      className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1.5 rounded-lg transition-all text-sm font-medium flex items-center gap-2"
+                      title="إضافة فئة شاملة متعددة المستويات"
+                    >
+                      <FaLayerGroup size={14} />
+                      فئة شاملة
+                    </button>
+                  )}
+                </div>
+                <h3 className="text-lg font-semibold text-center flex-1">
+                  {categorySelectionStep === 'main' ? 'اختر الفئة' : 
+                   categoryPath.length > 0 ? `فئات فرعية في "${categoryPath[categoryPath.length - 1].name}"` :
+                   `فئات فرعية في "${mainCategories.find(c => c.id === selectedMainCategory)?.name}"`}
+                </h3>
+                <div className="w-20"></div> {/* Spacer للتوازن */}
+              </div>
             </div>
 
             {/* Content */}
@@ -1341,15 +1674,307 @@ const AddProduct = () => {
 
             {/* Footer */}
             {categorySelectionStep === 'sub' && (
-              <div className="p-4 bg-gray-50 rounded-b-2xl">
+              <div className="p-4 bg-gray-50 rounded-b-2xl flex gap-2">
+                <button
+                  onClick={() => openQuickCategoryModal(categoryPath.length > 0 ? categoryPath[categoryPath.length - 1].id : selectedMainCategory)}
+                  className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors text-sm font-semibold"
+                  title="إضافة فئة فرعية جديدة"
+                >
+                  <FaLayerGroup size={14} />
+                  إضافة فئة فرعية
+                </button>
                 <button
                   onClick={backToMainCategories}
-                  className="w-full bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors text-sm font-semibold"
+                  className="flex-1 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors text-sm font-semibold"
                 >
                   {categoryPath.length > 1 ? 'العودة إلى المستوى السابق' : 'العودة إلى الفئات الرئيسية'}
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal إضافة فئة سريعة */}
+      {showQuickCategoryModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10001] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full transform transition-all">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-green-500 to-green-600 p-4 rounded-t-2xl text-white relative">
+              <button
+                onClick={cancelQuickCategory}
+                className="absolute top-3 left-3 text-white hover:bg-white hover:bg-opacity-20 rounded-full p-1.5 transition-all"
+              >
+                <FaTimes size={16} />
+              </button>
+              <div className="flex items-center justify-center mb-3">
+                <div className="bg-white bg-opacity-20 rounded-full p-2.5">
+                  <FaLayerGroup size={24} />
+                </div>
+              </div>
+              <h2 className="text-lg font-bold text-center">
+                إضافة فئة {parentCategoryId ? 'فرعية' : 'رئيسية'} جديدة
+              </h2>
+              {parentCategoryId && (
+                <div className="text-center mt-2">
+                  <span className="inline-block bg-white bg-opacity-20 px-3 py-1 rounded-full text-sm">
+                    تحت: {categories.find(c => c.id === parentCategoryId)?.name}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Body */}
+            <div className="p-6">
+              <div className="text-center mb-4">
+                <div className="mb-4">
+                  <div className="mx-auto w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                    <FaLayerGroup className="text-green-600" size={20} />
+                  </div>
+                </div>
+                <p className="text-gray-700 text-lg font-medium mb-2">
+                  إضافة فئة {parentCategoryId ? 'فرعية' : 'رئيسية'} جديدة
+                </p>
+                <p className="text-sm text-gray-500">
+                  سيتم إضافة الفئة إلى النظام وستكون متاحة للاختيار
+                </p>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
+                    اسم الفئة {parentCategoryId ? 'الفرعية' : 'الرئيسية'}
+                  </label>
+                  <input
+                    type="text"
+                    value={quickCategoryName}
+                    onChange={(e) => setQuickCategoryName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        saveQuickCategory();
+                      } else if (e.key === 'Escape') {
+                        cancelQuickCategory();
+                      }
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-right"
+                    placeholder={parentCategoryId ? 'مثل: هواتف ذكية' : 'مثل: إلكترونيات'}
+                    autoFocus
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2 text-right">
+                    لون الفئة
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="color"
+                      value={quickCategoryColor}
+                      onChange={(e) => setQuickCategoryColor(e.target.value)}
+                      className="w-12 h-10 border border-gray-300 rounded cursor-pointer"
+                    />
+                    <div className="flex-1">
+                      <input
+                        type="text"
+                        value={quickCategoryColor}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          if (/^#[0-9A-F]{6}$/i.test(value)) {
+                            setQuickCategoryColor(value);
+                          }
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-center text-sm"
+                        placeholder="#3B82F6"
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className="text-xs text-gray-500">معاينة:</span>
+                    <span 
+                      className="inline-block w-4 h-4 rounded-full" 
+                      style={{ backgroundColor: quickCategoryColor }}
+                    ></span>
+                    <span className="text-xs text-gray-600">{quickCategoryName || 'اسم الفئة'}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 bg-gray-50 rounded-b-2xl flex gap-3">
+              <button
+                onClick={cancelQuickCategory}
+                className="flex-1 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors text-sm font-semibold"
+              >
+                إلغاء
+              </button>
+              <button
+                onClick={saveQuickCategory}
+                className="flex-1 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors text-sm font-semibold"
+              >
+                إضافة الفئة
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal إضافة فئة شاملة متعددة المستويات */}
+      {showComprehensiveCategoryModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10001] p-2">
+          <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[85vh] overflow-y-auto transform transition-all">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-yellow-500 to-orange-600 p-3 rounded-t-xl text-white relative">
+              <button
+                onClick={cancelComprehensiveCategory}
+                className="absolute top-2 left-2 text-white hover:bg-white hover:bg-opacity-20 rounded-full p-1.5 transition-all"
+              >
+                <FaTimes size={14} />
+              </button>
+              <div className="flex items-center justify-center">
+                <div className="bg-white bg-opacity-20 rounded-full p-2">
+                  <FaLayerGroup size={18} />
+                </div>
+              </div>
+              <h2 className="text-lg font-bold text-center mt-2">
+                إضافة فئة شاملة هرمية
+              </h2>
+            </div>
+
+            {/* Content */}
+            <div className="p-4">
+              {/* الفئة الرئيسية */}
+              <div className="bg-yellow-50 rounded-lg p-3 mb-4 border border-yellow-200">
+                <h3 className="text-sm font-bold text-gray-800 mb-2 flex items-center gap-2">
+                  <span className="w-4 h-4 bg-yellow-500 text-white rounded-full flex items-center justify-center text-xs font-bold">1</span>
+                  الفئة الرئيسية
+                </h3>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1 text-right">
+                      اسم الفئة
+                    </label>
+                    <input
+                      type="text"
+                      value={mainCategoryData.name}
+                      onChange={(e) => setMainCategoryData({...mainCategoryData, name: e.target.value})}
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-yellow-500 focus:border-yellow-500 text-right text-sm"
+                      placeholder="مثل: الإلكترونيات"
+                      autoFocus
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1 text-right">
+                      اللون
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={mainCategoryData.color}
+                        onChange={(e) => setMainCategoryData({...mainCategoryData, color: e.target.value})}
+                        className="w-8 h-6 border border-gray-300 rounded cursor-pointer"
+                      />
+                      <input
+                        type="text"
+                        value={mainCategoryData.color}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          if (/^#[0-9A-F]{6}$/i.test(value)) {
+                            setMainCategoryData({...mainCategoryData, color: value});
+                          }
+                        }}
+                        className="flex-1 px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-yellow-500 focus:border-yellow-500 text-left text-xs"
+                        placeholder="#3B82F6"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* الفئات الفرعية */}
+              <div className="bg-blue-50 rounded-lg p-3 mb-4 border border-blue-200">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
+                    <span className="w-4 h-4 bg-blue-500 text-white rounded-full flex items-center justify-center text-xs font-bold">2</span>
+                    الفئات الفرعية
+                  </h3>
+                  <button
+                    onClick={addSubcategoryLevel}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded transition-colors text-xs font-semibold flex items-center gap-1"
+                  >
+                    <FaPlus size={10} />
+                    إضافة
+                  </button>
+                </div>
+
+                {/* Category Tree Component */}
+                <CategoryTreeNode 
+                  categories={comprehensiveSubcategories}
+                  level={1}
+                  expandedNodes={expandedNodes}
+                  onToggleExpansion={toggleNodeExpansion}
+                  onAddSubcategory={addNestedSubcategory}
+                  onUpdateCategory={updateSubcategory}
+                  onRemoveCategory={removeSubcategory}
+                />
+              </div>
+
+              {/* ملخص الهيكل */}
+              {mainCategoryData.name && (
+                <div className="bg-green-50 rounded-lg p-3 mb-4 border border-green-200">
+                  <h4 className="font-semibold text-gray-800 mb-2 flex items-center gap-1">
+                    <FaInfoCircle className="text-green-600" size={12} />
+                    هيكل الفئات
+                  </h4>
+                  <div className="bg-white rounded p-2 border border-green-200 max-h-32 overflow-y-auto">
+                    <div className="flex items-center gap-2 mb-1">
+                      <div 
+                        className="w-3 h-3 rounded-full" 
+                        style={{ backgroundColor: mainCategoryData.color }}
+                      ></div>
+                      <span className="font-medium text-gray-800 text-sm">{mainCategoryData.name}</span>
+                    </div>
+                    {comprehensiveSubcategories.filter(sub => sub.name.trim()).length === 0 ? (
+                      <p className="text-xs text-gray-500 mr-4 italic">لا توجد فئات فرعية</p>
+                    ) : (
+                      comprehensiveSubcategories.filter(sub => sub.name.trim()).map((sub, index) => (
+                        <div key={sub.id} className="flex items-center gap-2 mr-6 mb-1">
+                          <div 
+                            className="w-2 h-2 rounded-full" 
+                            style={{ backgroundColor: sub.color }}
+                          ></div>
+                          <span className="text-xs text-gray-700">{sub.name}</span>
+                          {sub.children && sub.children.length > 0 && (
+                            <span className="text-xs text-blue-500">({sub.children.length})</span>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* أزرار التحكم */}
+              <div className="flex gap-2 pt-3 border-t border-gray-200">
+                <button
+                  onClick={cancelComprehensiveCategory}
+                  className="flex-1 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors text-sm font-semibold"
+                >
+                  إلغاء
+                </button>
+                <button
+                  onClick={saveComprehensiveCategory}
+                  disabled={!mainCategoryData.name.trim()}
+                  className="flex-1 bg-gradient-to-r from-yellow-500 to-orange-600 hover:from-yellow-600 hover:to-orange-700 text-white px-4 py-2 rounded-lg transition-colors text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  <FaLayerGroup size={14} />
+                  إنشاء
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

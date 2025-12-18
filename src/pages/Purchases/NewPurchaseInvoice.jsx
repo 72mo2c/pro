@@ -7,7 +7,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useData } from '../../context/DataContext';
 import { useNotification } from '../../context/NotificationContextWithSound';
 import { useTab } from '../../contexts/TabContext';
-import { FaSave, FaPrint, FaSearch, FaTrash, FaPercent, FaMoneyBillWave, FaExclamationTriangle, FaInfoCircle, FaList, FaUserPlus, FaTimes } from 'react-icons/fa';
+import { FaSave, FaPrint, FaSearch, FaTrash, FaPercent, FaMoneyBillWave, FaExclamationTriangle, FaInfoCircle, FaList, FaUserPlus, FaTimes, FaBarcode } from 'react-icons/fa';
 import { printInvoiceDirectly } from '../../utils/printUtils';
 
 const NewPurchaseInvoice = () => {
@@ -820,9 +820,15 @@ const NewPurchaseInvoice = () => {
 
   const getFilteredProducts = (index) => {
     const searchTerm = productSearches[index] || '';
-    return products.filter(p =>
-      p.name.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    return products.filter(p => {
+      // البحث في الاسم
+      const nameMatch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      // البحث في الباركود (إذا كان موجود)
+      const barcodeMatch = p.barcode && p.barcode.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      return nameMatch || barcodeMatch;
+    });
   };
 
   // تحديث فوري للعنصر (يستخدم مع onChange)
@@ -1413,14 +1419,15 @@ const NewPurchaseInvoice = () => {
                             handleEnterPress(index, 'product');
                           }
                         }}
-                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-                        placeholder="ابحث عن المنتج..."
+                        className="w-full px-8 py-1 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                        placeholder="ابحث عن المنتج (بالاسم أو الباركود)..."
                         onFocus={() => {
                           handleFieldFocus(index, 'product');
                           updateActiveField(index, 'product');
                         }}
                       />
                       <FaSearch className="absolute left-2 top-2 text-gray-400 text-xs" />
+                      <FaBarcode className="absolute right-2 top-2 text-gray-400 text-xs" />
                     </div>
                     {showProductSuggestions[index] && productSearches[index]?.trim().length > 0 && getFilteredProducts(index).length > 0 && (
                       <div className="absolute z-[9999] left-0 w-full mt-1 bg-white border-2 border-blue-400 rounded-lg shadow-2xl max-h-64 overflow-y-auto">
